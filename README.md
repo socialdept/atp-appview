@@ -33,6 +33,111 @@ It builds on [atp-client](https://github.com/socialdept/atp-client) for OAuth, s
 composer require socialdept/atp-appview
 ```
 
+## Frontend and backend mode
+
+Where the user's OAuth tokens live decides how records get written.
+
+| | Frontend mode (default) | Backend mode |
+|---|---|---|
+| Tokens | In the browser, with a non-extractable DPoP key | On the server |
+| Writing records | The browser calls `com.atproto.repo.*` on its own PDS | Default procedures, through the server's session |
+| Reaching the AppView | Through the PDS, with `atproto-proxy` and service auth | The session cookie, or service auth |
+| Seeing your own write | `sync_record`, or show it optimistically | Indexed as part of the write |
+
+Frontend mode is the default and the safer choice: the server stores no tokens, and it is how atproto apps such as Bluesky's own work. Choose backend mode only when the app must act for users while they are away, such as scheduled publishing. `atp-appview.auth.mode` records the choice.
+
+## Frontend sign-in
+
+In frontend mode the package ships both halves of sign-in: routes on the server and a browser library that holds the session. The browser keeps the OAuth tokens and a non-extractable DPoP key in IndexedDB, runs the authorization request, the token exchange and refreshes itself, and writes straight to its own PDS. The server never holds a token. It keeps the PKCE verifier between redirect and callback, signs short-lived client assertions so the app stays a confidential client, resolves accounts, and starts an ordinary session from a service auth token the user's own PDS signs.
+
+### Server
+
+The routes register in frontend mode. Set the method a service auth token must be bound to, under a domain you control:
+
+```dotenv
+ATP_APPVIEW_SESSION_METHOD=com.example.createSession
+ATP_SERVICE_AUTH_AUDIENCE=did:web:example.com
+```
+
+| Route | Name | Purpose |
+|---|---|---|
+| `POST /oauth/prepare` | `atp.oauth.prepare` | Start a sign-in from a provider, a handle, or a known DID |
+| `POST /oauth/client-assertion` | `atp.oauth.client-assertion` | Sign an assertion for the flow in progress or the user's own server |
+| `GET /oauth/callback` | `atp.oauth.callback` | Check `state` and `iss`, hold the code, redirect to `complete_route` |
+| `POST /oauth/flow` | `atp.oauth.flow` | Hand the browser the held flow, once |
+| `GET /oauth/account` | `atp.oauth.account` | Resolve an account's PDS, issuer and verified handle |
+| `POST /session` | `atp.session.store` | Start a session from a service auth token |
+| `DELETE /session` | `atp.session.destroy` | End the session |
+
+The app supplies two pages: the login page (`login_route`) and a page the callback redirects to (`complete_route`) that runs `handleCallback()`. Users are found or created by DID like the `atp` guard does, and `handle_column` is kept current. Share the browser's settings with every page:
+
+```php
+'atproto' => FrontendAuth::browserConfig(),
+```
+
+A published config file replaces the package's `auth` block as a whole, so copy the `frontend` block into it when upgrading.
+
+### Browser
+
+The library ships in `resources/js`. Alias it in Vite and TypeScript:
+
+```ts
+// vite.config.ts
+resolve: {
+    alias: {
+        '@socialdept/atp-appview': fileURLToPath(new URL('./vendor/socialdept/atp-appview/resources/js', import.meta.url)),
+    },
+},
+```
+
+```json
+"paths": { "@socialdept/atp-appview": ["./vendor/socialdept/atp-appview/resources/js/index.ts"] }
+```
+
+Configure it once with the package's routes, as Wayfinder helpers or anything with a `url()` method, then keep the two sessions in step on every page:
+
+```ts
+import { configureAtproto, reconcile, syncSessions } from '@socialdept/atp-appview';
+import * as oauth from '@/routes/atp/oauth';
+import * as session from '@/routes/atp/session';
+
+configureAtproto({
+    routes: {
+        prepare: oauth.prepare,
+        clientAssertion: oauth.clientAssertion,
+        flow: oauth.flow,
+        account: oauth.account,
+        startSession: session.store,
+        endSession: session.destroy,
+    },
+    ...page.props.atproto,
+});
+
+await reconcile(page.props.auth.user);
+```
+
+| Call | What it does |
+|---|---|
+| `signIn({ provider } \| { handle } \| { did }, returnTo?)` | Leave for the authorization server |
+| `signInPopup(did)` | Sign a known account back in through a popup, leaving the page as it is. Call it straight from a click |
+| `handleCallback()` | On the complete page: exchange the code, check the account, store the session, start a server session |
+| `pdsFetch(did, path, init)` | A request to the account's own PDS with DPoP, retried once after a rejected token |
+| `withSession(action)` | Run an action, and if the session turns out dead, wait for the user to sign back in and run it once more |
+| `reconcile(user)`, `syncSessions(options)` | Keep the server session in step with the browser's |
+| `reconnectState()`, `onReconnectChange(listener)` | Whether to offer or ask for a sign-in, for a banner or a dialog |
+| `signOut()` | Revoke the refresh token, forget the key and tokens, end the server session |
+
+### Keeping sessions in step
+
+The browser session is the source of truth. The server session can be rebuilt from it at any time, so the server never logs anyone out when tokens die.
+
+- **Refresh** runs under a per-account Web Lock and re-reads storage inside it. Refresh tokens are single use, so another tab may have refreshed first.
+- **Only a dead grant ends a session**: `invalid_grant`, `invalid_client`, `unauthorized_client`, a missing key, or a token the PDS rejects twice. Network failures, server errors and unknown answers leave it alone.
+- **A dead session keeps its account** without tokens, so its handle is at hand to sign back in, and every change is announced to the other tabs.
+- **A server session that ended** is rebuilt from the browser's while its access token still works. Otherwise the page offers to reconnect.
+- **An action that hits a dead session** is not lost. `withSession()` raises a dialog, the user signs back in through a popup, and the action runs again. It only retries a request that never took effect.
+- **Signing back in** prepares with the account's DID, and the browser refuses a sign-in that lands on another account.
+
 ## The atp guard
 
 The `atp` guard answers one question per request: which DID is the viewer, and how did they prove it. It returns your `User` model, so `auth()`, Gates and policies work unchanged.
@@ -77,7 +182,7 @@ $viewer->method;           // the NSID a service auth token was bound to
 $viewer->user();           // the local user, if any
 $viewer->isService();      // true for a did#serviceId issuer
 $viewer->canActOnRepo();   // true when the server holds a session for this DID
-$viewer->client();         // Atp::as($did), or null in frontend mode
+$viewer->client();         // Atp::as($did), or null when the server holds no session
 ```
 
 Write to the user's repo only when `canActOnRepo()` is true. In frontend mode the browser holds the tokens, writes to the repo itself, and the AppView changes only its own state.
@@ -367,6 +472,48 @@ The responses follow `com.atproto.repo.getRecord` and `listRecords`:
 - **Otherwise** it answers `{"records": [...], "cursor"}`, newest first by `sort_at`. `limit`, `cursor` and `reverse` page through the list, and `did` or `actor` (a handle the index knows) narrow it to one repo.
 
 Declare those parameters in the lexicon, whose `limit` default and maximum apply. The cursor is opaque and keyset based, so pages never skip or repeat a record while new ones arrive. Default queries are public (`Auth::None`), and a handler class for the same method takes precedence. Procedures still need a handler class.
+
+### Writing records
+
+**Frontend mode.** The browser writes to its own PDS, and Tap delivers the record within seconds. To show the author their record straight away, turn on the sync procedure and have the browser call it, through its PDS, right after writing:
+
+```php
+// config/atp-appview.php
+'xrpc' => [
+    'sync_record' => 'com.example.syncRecord',
+],
+```
+
+```
+POST /xrpc/com.example.syncRecord   {"uri": "at://did:plc:alice/com.example.thing/3abc"}
+→ {"uri": "at://did:plc:alice/com.example.thing/3abc", "indexed": true}
+```
+
+It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. Records a block rule covers answer `indexed: false`.
+
+**Backend mode.** Default procedures write one collection to the viewer's repo through the session the server holds, then index the record before answering:
+
+```php
+'xrpc' => [
+    'procedures' => [
+        'com.example.createThing' => ['collection' => 'com.example.thing', 'action' => 'create'],
+        'com.example.putThing' => ['collection' => 'com.example.thing', 'action' => 'put'],
+        'com.example.deleteThing' => ['collection' => 'com.example.thing', 'action' => 'delete'],
+    ],
+],
+```
+
+| Action | Input | Answers |
+|---|---|---|
+| `create` | `{record, rkey?}` | `{uri, cid}` |
+| `put` | `{rkey, record, swapRecord?}` | `{uri, cid}` |
+| `delete` | `{rkey, swapRecord?}` | nothing |
+
+- The viewer is required, and must be one the server holds a session for. Others get `BackendSessionRequired` (403), telling them to write to their PDS.
+- The record is given the collection's `$type`, and checked against the collection's lexicon when one is loaded, before anything reaches the PDS. The PDS is asked not to validate, since it refuses lexicons it does not know.
+- The record is indexed with the commit's revision, so the author sees it at once and Tap's later delivery changes nothing.
+- The PDS's own errors, such as `InvalidSwap`, come back as they were. Repos a block rule covers get `RepoBlocked` (403).
+- A lexicon for the procedure is optional. If one exists, it must be a procedure.
 
 ### Middleware
 

@@ -14,6 +14,6 @@ class ServiceProviderTest extends TestCase
 
     public function test_it_merges_the_package_config(): void
     {
-        $this->assertSame('backend', config('atp-appview.auth.mode'));
+        $this->assertSame('frontend', config('atp-appview.auth.mode'));
     }
 }

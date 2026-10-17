@@ -1,0 +1,30 @@
+name: JavaScript
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+
+    name: JavaScript (Node 22)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check types
+        run: npm run types
+
+      - name: Execute tests
+        run: npm test

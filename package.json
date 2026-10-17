@@ -1,0 +1,12 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "vitest run",
+        "types": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "typescript": "^5.9.0",
+        "vitest": "^4.1.0"
+    }
+}

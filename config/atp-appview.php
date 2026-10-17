@@ -16,12 +16,16 @@ return [
         | - 'frontend': the browser holds the tokens and reaches the AppView
         |               through its PDS, which signs a service auth token.
         |
+        | Frontend is the default and the safer choice: the server stores no
+        | tokens. Choose backend only when the app must act for users while
+        | they are away.
+        |
         | The guard accepts both kinds of credential either way, so switching
         | modes later does not change endpoint code.
         |
         */
 
-        'mode' => env('ATP_APPVIEW_AUTH_MODE', 'backend'),
+        'mode' => env('ATP_APPVIEW_AUTH_MODE', 'frontend'),
 
         // The guard the atp.viewer middleware resolves, configured in
         // config/auth.php with the "atp" driver.
@@ -40,6 +44,52 @@ return [
         // Services allowed to call with their own did#serviceId as issuer.
         // A service is never provisioned as a user.
         'trusted_services' => [],
+
+        /*
+        |----------------------------------------------------------------------
+        | Frontend Sign-in
+        |----------------------------------------------------------------------
+        |
+        | The server's half of frontend-mode OAuth. The browser holds a
+        | non-extractable DPoP key and runs the authorization request, the
+        | token exchange and refreshes itself. These routes keep the PKCE
+        | verifier between redirect and callback, sign short-lived client
+        | assertions so the app stays a confidential client, resolve accounts,
+        | and start a session from a service auth token. They never see an
+        | OAuth token. Registered in frontend mode only.
+        |
+        */
+
+        'frontend' => [
+
+            'routes' => env('ATP_APPVIEW_FRONTEND_ROUTES', true),
+
+            'prefix' => '',
+
+            'middleware' => ['web'],
+
+            // The method a service auth token must be bound to before it can
+            // start a session, such as "com.example.createSession". Pick an
+            // NSID under your own domain: it only ever travels between the
+            // user's PDS and this app.
+            'session_method' => env('ATP_APPVIEW_SESSION_METHOD'),
+
+            // Where the callback sends the browser to finish signing in, and
+            // where a failed sign-in goes back to. Both are route names.
+            'complete_route' => 'login.complete',
+            'login_route' => 'login',
+
+            'remember' => true,
+
+            // Updated from the verified handle on every sign-in. Null to skip.
+            'handle_column' => 'handle',
+
+            // Servers offered as buttons on the login page. Sign-in starts at
+            // the server, which asks for the account itself.
+            'providers' => [
+                ['key' => 'bluesky', 'name' => 'Bluesky', 'server' => 'https://bsky.social'],
+            ],
+        ],
     ],
 
     /*
@@ -153,6 +203,22 @@ return [
         //
         //     'com.example.listThings' => 'com.example.thing',
         'collections' => [],
+
+        // Backend mode only. Procedures that write one collection to the
+        // viewer's repo through the session the server holds for them, then
+        // index the record straight away. Action is create, put or delete,
+        // with inputs and outputs as in com.atproto.repo.
+        //
+        //     'com.example.createThing' => ['collection' => 'com.example.thing', 'action' => 'create'],
+        'procedures' => [],
+
+        // Frontend mode. A procedure the browser calls through its PDS after
+        // writing a record there itself, with {uri}: the record is fetched
+        // from the caller's PDS and indexed now rather than when Tap delivers
+        // it. Null leaves it off.
+        //
+        //     'sync_record' => 'com.example.syncRecord',
+        'sync_record' => null,
 
         // Classes carrying #[Xrpc] under this path are registered too.
         'discover' => [

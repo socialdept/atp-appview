@@ -1,0 +1,18 @@
+{
+  "lexicon": 1,
+  "id": "com.example.thing",
+  "defs": {
+    "main": {
+      "type": "record",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "maxLength": 100 },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}
