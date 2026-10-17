@@ -107,6 +107,24 @@ Tap's webhook mode sends one HTTP request per record, which buries a PHP applica
 
 Delivery is at least once and Tap keeps events for one repo in order, so handlers must apply a batch idempotently. Running several workers is fine: Tap shards events across connected clients.
 
+### Running the worker
+
+`appview:consume` is a long-running process, like `queue:work`, so run it under a supervisor that restarts it when it exits: an entry in `solo.yml` locally, and a daemon or background process in production.
+
+```bash
+php artisan appview:consume --max-time=3600 --memory=128
+```
+
+| Option | Default | Exits when |
+| --- | --- | --- |
+| `--max-time` | `0` (off) | it has run for this many seconds |
+| `--max-batches` | `0` (off) | it has handled this many batches |
+| `--memory` | `128` | its memory reaches this many megabytes |
+
+Run `php artisan appview:restart` at the end of a deploy, the same as `queue:restart`. Running workers notice within one `flush_ms` and exit, and their supervisor starts them on the new code. The worker also turns off the query log on every connection, which tools such as Telescope switch on.
+
+Exiting is always lossless. The batch in progress finishes first, and anything not yet acknowledged is redelivered by Tap when the worker comes back.
+
 ### Handlers
 
 ```php

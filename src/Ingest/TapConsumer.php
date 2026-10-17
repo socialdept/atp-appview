@@ -2,6 +2,8 @@
 
 namespace SocialDept\AtpAppview\Ingest;
 
+use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Ratchet\Client\Connector;
 use Ratchet\Client\WebSocket;
@@ -23,6 +25,10 @@ use SocialDept\AtpAppview\Ingest\Exceptions\InvalidTapEvent;
  *
  * On a failed batch or a dropped connection, everything unacknowledged is
  * discarded and the consumer reconnects. Tap redelivers it.
+ *
+ * Like queue:work, it can exit on a time, batch or memory limit, or when
+ * appview:restart is broadcast, and leave the restart to its supervisor.
+ * Stopping is lossless: anything unacknowledged is redelivered.
  */
 class TapConsumer
 {
@@ -35,6 +41,27 @@ class TapConsumer
     protected int $reconnectAttempts = 0;
 
     protected bool $stopping = false;
+
+    protected int $maxTime = 0;
+
+    protected int $maxBatches = 0;
+
+    protected int $memoryLimit = 0;
+
+    protected ?Cache $restartCache = null;
+
+    protected mixed $lastRestart = null;
+
+    protected int $startedAt = 0;
+
+    protected int $batchesHandled = 0;
+
+    protected ?string $stopReason = null;
+
+    /**
+     * The cache key appview:restart writes to signal running consumers.
+     */
+    public const RESTART_KEY = 'atp-appview:consume:restart';
 
     /**
      * @param  array<int, BatchHandler>  $handlers
@@ -54,13 +81,42 @@ class TapConsumer
     }
 
     /**
+     * Exit once a limit is reached. Zero disables a limit.
+     *
+     * @param  int  $maxTime  Seconds to run before exiting
+     * @param  int  $maxBatches  Batches to handle before exiting
+     * @param  int  $memory  Megabytes of memory to allow before exiting
+     */
+    public function withLimits(int $maxTime = 0, int $maxBatches = 0, int $memory = 0): static
+    {
+        $this->maxTime = max(0, $maxTime);
+        $this->maxBatches = max(0, $maxBatches);
+        $this->memoryLimit = max(0, $memory);
+
+        return $this;
+    }
+
+    /**
+     * Exit when appview:restart broadcasts a restart through this cache.
+     */
+    public function withRestartSignal(Cache $cache): static
+    {
+        $this->restartCache = $cache;
+
+        return $this;
+    }
+
+    /**
      * Connect and consume until stopped. Blocks.
      */
     public function run(): void
     {
-        $this->stopping = false;
+        $this->begin();
 
-        $this->loop->addPeriodicTimer($this->flushMs / 1000, fn () => $this->flush());
+        $this->loop->addPeriodicTimer($this->flushMs / 1000, function () {
+            $this->flush();
+            $this->stopIfLimitReached();
+        });
 
         // Signal handling needs ext-pcntl, which some PHP builds lack.
         if (function_exists('pcntl_signal')) {
@@ -77,8 +133,9 @@ class TapConsumer
      * Stop after the batch in progress. Anything still buffered stays
      * unacknowledged and is redelivered on the next run.
      */
-    public function stop(): void
+    public function stop(?string $reason = null): void
     {
+        $this->stopReason ??= $reason;
         $this->stopping = true;
         $this->buffer->clear();
         $this->connection?->close();
@@ -109,7 +166,30 @@ class TapConsumer
 
         if ($this->buffer->push($id, $event)) {
             $this->flush();
+            $this->stopIfLimitReached();
         }
+    }
+
+    /**
+     * The limit that is reached, if any, as a reason to stop.
+     */
+    public function limitReached(): ?string
+    {
+        return match (true) {
+            $this->maxBatches > 0 && $this->batchesHandled >= $this->maxBatches => "handled {$this->batchesHandled} batches",
+            $this->memoryLimit > 0 && $this->memoryUsage() >= $this->memoryLimit => "memory reached {$this->memoryUsage()} MB",
+            $this->maxTime > 0 && $this->now() - $this->startedAt >= $this->maxTime => "ran for {$this->maxTime} seconds",
+            $this->restartCache !== null && $this->restartCache->get(self::RESTART_KEY) != $this->lastRestart => 'restart signal received',
+            default => null,
+        };
+    }
+
+    /**
+     * Why the consumer stopped, when it stopped itself.
+     */
+    public function stopReason(): ?string
+    {
+        return $this->stopReason;
     }
 
     public function buffer(): IngestBuffer
@@ -120,7 +200,10 @@ class TapConsumer
     protected function flush(): void
     {
         try {
-            $this->buffer->flush();
+            if ($this->buffer->flush()) {
+                $this->batchesHandled++;
+                $this->disableQueryLogs();
+            }
         } catch (BatchFailed $e) {
             Log::error('[atp-appview] Batch failed, reconnecting so Tap redelivers it', ['error' => $e->getMessage()]);
             $this->buffer->clear();
@@ -166,6 +249,54 @@ class TapConsumer
         Log::warning('[atp-appview] Tap connection closed, reconnecting', ['delay' => $delay]);
 
         $this->loop->addTimer($delay, fn () => $this->connect());
+    }
+
+    /**
+     * Reset the run's counters and note the restart signal as it stands now.
+     */
+    protected function begin(): void
+    {
+        $this->stopping = false;
+        $this->stopReason = null;
+        $this->startedAt = $this->now();
+        $this->batchesHandled = 0;
+        $this->lastRestart = $this->restartCache?->get(self::RESTART_KEY);
+        $this->disableQueryLogs();
+    }
+
+    protected function stopIfLimitReached(): void
+    {
+        if (! $this->stopping && ($reason = $this->limitReached()) !== null) {
+            Log::info('[atp-appview] Stopping the consumer', ['reason' => $reason]);
+            $this->stop($reason);
+        }
+    }
+
+    /**
+     * Keep a long-running process from accumulating every query it runs. The
+     * log is off by default, but tools such as Telescope or Debugbar turn it
+     * on, and handlers may open connections after startup.
+     */
+    protected function disableQueryLogs(): void
+    {
+        if (! app()->bound('db')) {
+            return;
+        }
+
+        foreach (DB::getConnections() as $connection) {
+            $connection->disableQueryLog();
+            $connection->flushQueryLog();
+        }
+    }
+
+    protected function memoryUsage(): int
+    {
+        return (int) (memory_get_usage(true) / 1024 / 1024);
+    }
+
+    protected function now(): int
+    {
+        return time();
     }
 
     protected function ack(int $id): void

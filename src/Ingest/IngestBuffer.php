@@ -68,12 +68,14 @@ class IngestBuffer
     /**
      * Hand the buffered events to every handler, then acknowledge them.
      *
+     * @return bool Whether anything was flushed
+     *
      * @throws BatchFailed When the handlers still fail after the last attempt
      */
-    public function flush(): void
+    public function flush(): bool
     {
         if ($this->ids === []) {
-            return;
+            return false;
         }
 
         $ids = $this->ids;
@@ -87,6 +89,8 @@ class IngestBuffer
         foreach ($ids as $id) {
             ($this->ack)($id);
         }
+
+        return true;
     }
 
     /**
