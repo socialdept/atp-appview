@@ -18,6 +18,9 @@ final class ReconcileResult
         public readonly array $indexed = [],
         public readonly array $tombstoned = [],
         public readonly ?string $skipped = null,
+        // An account status the PDS reported (deleted, deactivated,
+        // takendown, suspended), or reactivated when it serves the repo again.
+        public readonly ?string $account = null,
     ) {
     }
 

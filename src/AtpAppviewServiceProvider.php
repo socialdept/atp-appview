@@ -16,6 +16,7 @@ use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
+use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
@@ -79,6 +80,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BlocksCommand::class,
                 ConsumeCommand::class,
                 DiscoverCommand::class,
+                PurgeInactiveCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
                 RestartCommand::class,

@@ -282,13 +282,14 @@ class ReconcilerTest extends TestCase
 
     public function test_the_command_records_a_failure_and_moves_on(): void
     {
-        $this->atp->stub('com.atproto.sync.getLatestCommit', FakeResponse::error('RepoNotFound', 'Could not find repo', 400));
+        $this->atp->stub('com.atproto.sync.getLatestCommit', FakeResponse::error('InternalServerError', 'The PDS fell over', 500));
 
         $this->artisan('appview:reconcile', ['did' => [self::DID]])->expectsOutputToContain('1 failed')->assertSuccessful();
 
         $alice = Identity::find(self::DID);
         $this->assertNotNull($alice->reconciled_at);
-        $this->assertStringContainsString('Could not find repo', $alice->reconcile_error);
+        $this->assertStringContainsString('The PDS fell over', $alice->reconcile_error);
+        $this->assertTrue($alice->active);
     }
 
     public function test_a_dry_run_command_remembers_nothing(): void

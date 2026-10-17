@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property \Illuminate\Support\Carbon|null $reconciled_at When appview:reconcile last checked the repo
  * @property string|null $reconciled_rev The revision it checked against
  * @property string|null $reconcile_error Why the last check failed
+ * @property \Illuminate\Support\Carbon|null $inactive_since When the account stopped being active
  */
 class Identity extends Model
 {
@@ -45,6 +46,7 @@ class Identity extends Model
             'updated_at' => 'datetime',
             'pds_resolved_at' => 'datetime',
             'reconciled_at' => 'datetime',
+            'inactive_since' => 'datetime',
         ];
     }
 

@@ -455,6 +455,22 @@ php artisan appview:reconcile did:plc:abc -v   # one repo, listing every change
 php artisan appview:reconcile --dry-run        # report without writing
 ```
 
+### Account status
+
+An account's status decides what happens to its records, whether Tap reports it as an account event or the PDS answers it during reconciliation.
+
+| Status | Records | Comes back |
+|---|---|---|
+| Deleted | Tombstoned, like any deleted record | Restored by `appview:reconcile` if the repo turns out to exist |
+| Deactivated, taken down, suspended | Hidden: queries skip them, and `withHidden()` brings them back | Shown again when the account is active |
+| Inactive past `index.inactive.purge_after_days` (180) | Tombstoned by `appview:purge-inactive` | Restored by `appview:reconcile` once the account is active |
+
+Tombstones keep each record's own revision, so a replayed older event still cannot bring a record back, but a listing from a repo that returns can. Before taking a repo its PDS cannot find as deleted, reconciliation resolves the DID again, since the account may have moved to another PDS. A takedown or suspension may be the relay's rather than the PDS's, so only Tap lifts those. Reconciliation checks deactivated and deleted repos, and skips taken down and suspended ones.
+
+```php
+Schedule::command('appview:purge-inactive')->daily();
+```
+
 ## XRPC
 
 Every class carrying the `#[Xrpc]` attribute becomes a route at `/xrpc/{nsid}`. Whether it is a query (GET) or a procedure (POST) comes from its lexicon, loaded through atp-schema from `resources/lexicons`.

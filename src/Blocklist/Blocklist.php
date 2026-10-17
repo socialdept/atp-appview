@@ -351,7 +351,7 @@ class Blocklist
      */
     protected function hostedRepos(Block $block, ?Closure $progress): array
     {
-        $dids = Record::withTrashed()->distinct()->pluck('did')->all();
+        $dids = Record::withTrashed()->withHidden()->distinct()->pluck('did')->all();
         $pds = [];
 
         foreach (array_chunk($dids, 1000) as $chunk) {
@@ -372,7 +372,7 @@ class Blocklist
      */
     protected function recordsCovered(Block $block, array $dids): Builder
     {
-        $query = Record::withTrashed()->whereIn('did', $dids);
+        $query = Record::withTrashed()->withHidden()->whereIn('did', $dids);
 
         if ($block->collection === Block::EVERY_COLLECTION) {
             return $query;
