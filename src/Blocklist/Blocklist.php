@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
@@ -33,6 +34,11 @@ use Throwable;
 class Blocklist
 {
     public const VERSION_KEY = 'atp-appview:blocklist:version';
+
+    /**
+     * Seconds between asking Tap to drop the same blocked repo again.
+     */
+    public const REMOVAL_INTERVAL = 600;
 
     protected mixed $loadedVersion = null;
 
@@ -163,8 +169,15 @@ class Blocklist
 
         $hits = [];
         $kept = [];
+        $returned = [];
 
         foreach ($batch->events as $event) {
+            // Any event from a repo under a blanket rule means Tap is
+            // following it again.
+            if ($this->blocksRepo($event->did, $pds[$event->did] ?? null)) {
+                $returned[$event->did] = true;
+            }
+
             $rule = $event instanceof RecordEvent ? $this->ruleFor($event->did, $event->collection, $pds[$event->did] ?? null) : null;
 
             if ($rule === null) {
@@ -173,6 +186,8 @@ class Blocklist
                 $hits[$rule->id] = ($hits[$rule->id] ?? 0) + 1;
             }
         }
+
+        $this->removeFromTapAgain(array_keys($returned));
 
         if ($hits === []) {
             return $batch;
@@ -348,6 +363,33 @@ class Blocklist
             // NSIDs never contain % or _, so the prefix needs no escaping.
             ? $query->where('collection', 'like', substr($block->collection, 0, -1).'%')
             : $query->where('collection', $block->collection);
+    }
+
+    /**
+     * Tap adds repos back by itself: on a firehose commit to its signal
+     * collection, and when its crawler enumerates. So a repo under a blanket
+     * rule can return after being removed. Each time one shows up again it
+     * is removed again, at most once per repo every REMOVAL_INTERVAL seconds.
+     * A failure is logged and never fails the batch.
+     *
+     * @param  array<int, string>  $dids
+     */
+    protected function removeFromTapAgain(array $dids): void
+    {
+        $due = array_values(array_filter(
+            $dids,
+            fn (string $did) => $this->cache->add('atp-appview:blocklist:removed:'.$did, true, self::REMOVAL_INTERVAL),
+        ));
+
+        if ($due === []) {
+            return;
+        }
+
+        try {
+            $this->chunked($due, fn (array $chunk) => $this->tap->removeRepos($chunk));
+        } catch (Throwable $e) {
+            Log::warning('[atp-appview] Could not remove blocked repos from Tap', ['dids' => $due, 'error' => $e->getMessage()]);
+        }
     }
 
     /**

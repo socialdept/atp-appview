@@ -159,6 +159,32 @@ class BlocklistTest extends TestCase
         $this->assertSame(['did:plc:spam1'], $outcome->removedFromTap);
     }
 
+    public function test_a_blocked_repo_tap_follows_again_is_removed_again(): void
+    {
+        $this->blocklist()->block('did:plc:bad');
+        $this->blocklist()->block('did:plc:part', 'app.example.like');
+        $before = count($this->sentTo(self::TAP.'/repos/remove'));
+
+        // Tap re-added the repo and is backfilling it.
+        $this->filter([new IdentityEvent(1, 'did:plc:bad', 'bad.test', true, null), $this->record('did:plc:bad', 'app.example.post')]);
+        $this->filter([$this->record('did:plc:bad', 'app.example.post')]);
+        $this->filter([$this->record('did:plc:part', 'app.example.like')]);
+
+        $removals = array_slice($this->sentTo(self::TAP.'/repos/remove'), $before);
+
+        $this->assertSame([['did:plc:bad']], array_map(fn (Request $r) => $r['dids'], $removals), 'Once per repo per interval, and never for a rule that covers only some collections.');
+    }
+
+    public function test_a_failed_removal_never_fails_the_batch(): void
+    {
+        $this->blocklist()->block('did:plc:bad');
+        $this->tapDown = true;
+
+        $batch = $this->filter([$this->record('did:plc:bad', 'app.example.post'), $this->record('did:plc:good', 'app.example.post')]);
+
+        $this->assertSame(['did:plc:good'], array_map(fn ($e) => $e->did, $batch->records()));
+    }
+
     public function test_a_tap_failure_keeps_the_rule(): void
     {
         $this->tapDown = true;
