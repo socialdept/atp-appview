@@ -115,6 +115,14 @@ return [
 
     'index' => [
         'connection' => env('ATP_APPVIEW_INDEX_CONNECTION'),
+
+        // The record fields that say when a record was made, tried in order,
+        // for sort_at. '*' applies to collections not listed. Run
+        // appview:resort after changing this, to recompute indexed records.
+        'sort_fields' => [
+            '*' => ['createdAt'],
+            // 'site.standard.document' => ['publishedAt', 'createdAt'],
+        ],
     ],
 
     /*

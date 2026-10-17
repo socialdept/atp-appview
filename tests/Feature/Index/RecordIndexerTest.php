@@ -193,6 +193,40 @@ class RecordIndexerTest extends TestCase
     /**
      * @param  array<string, mixed>|null  $body
      */
+    public function test_sort_at_uses_the_collections_configured_fields(): void
+    {
+        config()->set('atp-appview.index.sort_fields', ['*' => ['createdAt'], 'app.example.post' => ['publishedAt', 'createdAt']]);
+
+        $this->index(new RecordEvent(1, self::DID, 'app.example.post', 'self', RecordAction::Create, 'bafy', self::OLD, ['publishedAt' => '2016-05-01T00:00:00Z', 'createdAt' => '2024-01-01T00:00:00Z'], false));
+        $this->index(new RecordEvent(2, self::DID, 'app.example.like', 'self', RecordAction::Create, 'bafy', self::OLD, ['publishedAt' => '2016-05-01T00:00:00Z', 'createdAt' => '2024-01-01T00:00:00Z'], false));
+
+        $this->assertSame('2016-05-01', Record::find('at://did:plc:alice/app.example.post/self')->sort_at->format('Y-m-d'));
+        $this->assertSame('2024-01-01', Record::find('at://did:plc:alice/app.example.like/self')->sort_at->format('Y-m-d'));
+    }
+
+    public function test_nul_characters_are_replaced_in_keys_and_values(): void
+    {
+        $this->index($this->event(RecordAction::Create, self::OLD, ['url' => "https://example.com/\0x", "k\0" => ['deep' => "a\0b"], 'n' => 1]));
+
+        $this->assertSame(['url' => "https://example.com/\u{FFFD}x", "k\u{FFFD}" => ['deep' => "a\u{FFFD}b"], 'n' => 1], $this->find()->record);
+    }
+
+    public function test_resort_recomputes_sort_at_after_the_fields_change(): void
+    {
+        $this->index(new RecordEvent(1, self::DID, 'app.example.post', 'self', RecordAction::Create, 'bafy', self::OLD, ['publishedAt' => '2016-05-01T00:00:00Z'], false));
+        $this->index(new RecordEvent(2, self::DID, 'app.example.post', 'other', RecordAction::Create, 'bafy', self::OLD, ['createdAt' => '2024-01-01T00:00:00Z'], false));
+        $this->assertNotSame('2016-05-01', Record::find('at://did:plc:alice/app.example.post/self')->sort_at->format('Y-m-d'));
+
+        config()->set('atp-appview.index.sort_fields', ['app.example.post' => ['publishedAt', 'createdAt']]);
+
+        $this->artisan('appview:resort', ['collection' => ['app.example.post']])
+            ->expectsOutputToContain('1 records resorted')
+            ->assertSuccessful();
+
+        $this->assertSame('2016-05-01', Record::find('at://did:plc:alice/app.example.post/self')->sort_at->format('Y-m-d'));
+        $this->assertSame('2024-01-01', Record::find('at://did:plc:alice/app.example.post/other')->sort_at->format('Y-m-d'));
+    }
+
     protected function event(RecordAction $action, string $rev, ?array $body = null): RecordEvent
     {
         static $id = 0;
