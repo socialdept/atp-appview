@@ -213,6 +213,41 @@ Backfilled events all carry the repo's revision at the time Tap exported it, not
 
 When Tap resyncs a repo after losing track of it, it emits creates and updates for what the repo holds now, but no deletes for records removed in the meantime. A record deleted while Tap was out of sync for that repo stays in the index until something reconciles it against the repo. Reconciliation is planned.
 
+## XRPC
+
+Every class carrying the `#[Xrpc]` attribute becomes a route at `/xrpc/{nsid}`. Whether it is a query (GET) or a procedure (POST) comes from its lexicon, loaded through atp-schema from `resources/lexicons`.
+
+```php
+namespace App\Http\Xrpc;
+
+use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
+use SocialDept\AtpAppview\Xrpc\Auth;
+use SocialDept\AtpAppview\Xrpc\XrpcRequest;
+
+#[Xrpc('com.example.getTimeline', auth: Auth::Required)]
+class GetTimeline
+{
+    public function __invoke(XrpcRequest $request): array
+    {
+        $limit = $request->param('limit', 50);   // an int, as the lexicon declares
+        $viewer = $request->viewer();
+
+        return ['feed' => []];
+    }
+}
+```
+
+Handlers live in `app/Http/Xrpc` beside your controllers, since they handle incoming requests the same way, and are discovered there automatically. `atp-appview.xrpc.handlers` registers others, and `php artisan appview:routes` lists them.
+
+- **Auth.** `Auth::Required` refuses anonymous requests, `Auth::Optional` (the default) resolves the viewer when there is one, and `Auth::None` skips the guard. Required and optional routes bind service auth tokens to the method's NSID.
+- **Parameters** are read from the raw query string and cast to the lexicon's types, so `limit=25` arrives as `25` and a repeated `uris=a&uris=b` as an array. They are then validated against the lexicon's constraints.
+- **Input.** A procedure's JSON body is validated against its lexicon's input schema and available as `$request->input()`.
+- **Responses.** Return an array, `Arrayable`, `JsonSerializable`, `Responsable` or `Response`, or null for an empty 200. Throw `XrpcException` for an XRPC error such as `{"error": "NotFound", "message": "..."}`. Invalid parameters or input answer `InvalidRequest`.
+- **Injection.** Handlers are resolved from the container and can type-hint `XrpcRequest`, `Viewer`, `Request` or any service.
+- **Unknown methods** answer `MethodNotImplemented`, and a known method called with the wrong HTTP method answers `InvalidRequest` naming the right one. Your own routes under `/xrpc` still take precedence.
+
+Add `'web'` to `atp-appview.xrpc.middleware` so session viewers resolve in backend mode. A handler without a lexicon declares `type: 'query'` or `type: 'procedure'` on the attribute.
+
 ## License
 
 The MIT License (MIT). Please see [LICENSE](LICENSE) for more information.

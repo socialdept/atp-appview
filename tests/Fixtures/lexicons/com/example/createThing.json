@@ -1,0 +1,19 @@
+{
+  "lexicon": 1,
+  "id": "com.example.createThing",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "input": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["text"],
+          "properties": {
+            "text": { "type": "string", "maxLength": 20 }
+          }
+        }
+      }
+    }
+  }
+}

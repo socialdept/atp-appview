@@ -101,4 +101,37 @@ return [
         'connection' => env('ATP_APPVIEW_INDEX_CONNECTION'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | XRPC
+    |--------------------------------------------------------------------------
+    |
+    | Every class with an #[Xrpc] attribute becomes a route at
+    | /{prefix}/{nsid}: GET for a query, POST for a procedure, as its lexicon
+    | says. Lexicons load through atp-schema's sources, resources/lexicons by
+    | default. Parameters and input are validated against them.
+    |
+    */
+
+    'xrpc' => [
+        'prefix' => env('ATP_APPVIEW_XRPC_PREFIX', 'xrpc'),
+
+        // Applied to every XRPC route, before the atp.viewer guard. Add 'web'
+        // for session viewers in backend mode, or throttling.
+        'middleware' => [],
+
+        // Handler classes registered explicitly.
+        'handlers' => [],
+
+        // Classes carrying #[Xrpc] under this path are registered too.
+        'discover' => [
+            'path' => app_path('Http/Xrpc'),
+            'namespace' => 'App\\Http\\Xrpc',
+        ],
+
+        // Answer unknown methods with MethodNotImplemented, and known ones
+        // called with the wrong HTTP method with InvalidRequest.
+        'fallback' => true,
+    ],
+
 ];

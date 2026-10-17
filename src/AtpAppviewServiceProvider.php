@@ -12,9 +12,12 @@ use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
+use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
+use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 
 class AtpAppviewServiceProvider extends ServiceProvider
@@ -31,6 +34,8 @@ class AtpAppviewServiceProvider extends ServiceProvider
             flushMs: (int) config('atp-appview.ingest.flush_ms', 500),
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
         ));
+
+        $this->app->singleton(XrpcRegistry::class);
 
         $this->app->singleton(TapAdmin::class, fn () => new TapAdmin(
             config('atp-appview.ingest.admin_url'),
@@ -49,7 +54,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'atp-appview-migrations');
 
-            $this->commands([ConsumeCommand::class, DiscoverCommand::class, RestartCommand::class]);
+            $this->commands([ConsumeCommand::class, DiscoverCommand::class, RestartCommand::class, RoutesCommand::class]);
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
@@ -57,6 +62,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
         $this->registerGuard();
 
         $this->app->make(Router::class)->aliasMiddleware('atp.viewer', ResolveViewer::class);
+
+        if (! $this->app->routesAreCached()) {
+            $this->app->make(XrpcRoutes::class)->register();
+        }
 
         Request::macro('viewer', function (): ?Viewer {
             /** @var Request $this */
