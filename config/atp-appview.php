@@ -173,6 +173,24 @@ return [
             '*' => ['createdAt'],
             // 'site.standard.document' => ['publishedAt', 'createdAt'],
         ],
+
+        // appview:reconcile compares each repo with its own PDS and fixes
+        // what Tap never delivered. Tap's resync sends only records that
+        // changed and never a delete, so a record removed while Tap was not
+        // following the repo stays indexed until reconciled. Schedule the
+        // command every few minutes and it works through the active repos,
+        // least recently checked first, in ingest.collections.
+        'reconcile' => [
+            // Repos per run.
+            'batch' => (int) env('ATP_APPVIEW_RECONCILE_BATCH', 25),
+
+            // Hours before a repo is checked again.
+            'every_hours' => (int) env('ATP_APPVIEW_RECONCILE_EVERY_HOURS', 24),
+
+            // A collection holding more records than this is left alone and
+            // the repo is marked with an error, rather than listed for ever.
+            'max_records' => (int) env('ATP_APPVIEW_RECONCILE_MAX_RECORDS', 10000),
+        ],
     ],
 
     /*
