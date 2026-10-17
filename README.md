@@ -522,6 +522,28 @@ The responses follow `com.atproto.repo.getRecord` and `listRecords`:
 
 Declare those parameters in the lexicon, whose `limit` default and maximum apply. The cursor is opaque and keyset based, so pages never skip or repeat a record while new ones arrive. Default queries are public (`Auth::None`), and a handler class for the same method takes precedence. Procedures still need a handler class.
 
+### Reaching the AppView through a PDS
+
+In frontend mode the browser calls the AppView through its own PDS, naming it in the `atproto-proxy` header. The PDS resolves the AppView's DID to find where to send the request, then signs a service auth token for it. For a `did:web`, set the endpoint and the package serves the DID document:
+
+```dotenv
+ATP_SERVICE_AUTH_AUDIENCE="did:web:example.com#atproto_appview"
+ATP_APPVIEW_SERVICE_ENDPOINT=https://example.com
+```
+
+```
+GET /.well-known/did.json
+→ {"id": "did:web:example.com", "service": [{"id": "#atproto_appview", "type": "AtprotoAppView", "serviceEndpoint": "https://example.com"}]}
+```
+
+```ts
+await pdsFetch(did, '/xrpc/com.example.getThings', {
+    headers: { 'atproto-proxy': 'did:web:example.com#atproto_appview' },
+});
+```
+
+The endpoint must be reachable from the internet, since the PDS makes the call. Only `/.well-known/did.json` and the XRPC routes need to be.
+
 ### Writing records
 
 **Frontend mode.** The browser writes to its own PDS, and Tap delivers the record within seconds. To show the author their record straight away, turn on the sync procedure and have the browser call it, through its PDS, right after writing:
