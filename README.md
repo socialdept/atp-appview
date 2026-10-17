@@ -77,7 +77,7 @@ $viewer->method;           // the NSID a service auth token was bound to
 $viewer->user();           // the local user, if any
 $viewer->isService();      // true for a did#serviceId issuer
 $viewer->canActOnRepo();   // true when the server holds a session for this DID
-$viewer->client();         // Atp::as($did), or null in frontend mode
+$viewer->client();         // Atp::as($did), or null when the server holds no session
 ```
 
 Write to the user's repo only when `canActOnRepo()` is true. In frontend mode the browser holds the tokens, writes to the repo itself, and the AppView changes only its own state.
@@ -367,6 +367,48 @@ The responses follow `com.atproto.repo.getRecord` and `listRecords`:
 - **Otherwise** it answers `{"records": [...], "cursor"}`, newest first by `sort_at`. `limit`, `cursor` and `reverse` page through the list, and `did` or `actor` (a handle the index knows) narrow it to one repo.
 
 Declare those parameters in the lexicon, whose `limit` default and maximum apply. The cursor is opaque and keyset based, so pages never skip or repeat a record while new ones arrive. Default queries are public (`Auth::None`), and a handler class for the same method takes precedence. Procedures still need a handler class.
+
+### Writing records
+
+**Frontend mode.** The browser writes to its own PDS, and Tap delivers the record within seconds. To show the author their record straight away, turn on the sync procedure and have the browser call it, through its PDS, right after writing:
+
+```php
+// config/atp-appview.php
+'xrpc' => [
+    'sync_record' => 'com.example.syncRecord',
+],
+```
+
+```
+POST /xrpc/com.example.syncRecord   {"uri": "at://did:plc:alice/com.example.thing/3abc"}
+→ {"uri": "at://did:plc:alice/com.example.thing/3abc", "indexed": true}
+```
+
+It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. Records a block rule covers answer `indexed: false`.
+
+**Backend mode.** Default procedures write one collection to the viewer's repo through the session the server holds, then index the record before answering:
+
+```php
+'xrpc' => [
+    'procedures' => [
+        'com.example.createThing' => ['collection' => 'com.example.thing', 'action' => 'create'],
+        'com.example.putThing' => ['collection' => 'com.example.thing', 'action' => 'put'],
+        'com.example.deleteThing' => ['collection' => 'com.example.thing', 'action' => 'delete'],
+    ],
+],
+```
+
+| Action | Input | Answers |
+|---|---|---|
+| `create` | `{record, rkey?}` | `{uri, cid}` |
+| `put` | `{rkey, record, swapRecord?}` | `{uri, cid}` |
+| `delete` | `{rkey, swapRecord?}` | nothing |
+
+- The viewer is required, and must be one the server holds a session for. Others get `BackendSessionRequired` (403), telling them to write to their PDS.
+- The record is given the collection's `$type`, and checked against the collection's lexicon when one is loaded, before anything reaches the PDS. The PDS is asked not to validate, since it refuses lexicons it does not know.
+- The record is indexed with the commit's revision, so the author sees it at once and Tap's later delivery changes nothing.
+- The PDS's own errors, such as `InvalidSwap`, come back as they were. Repos a block rule covers get `RepoBlocked` (403).
+- A lexicon for the procedure is optional. If one exists, it must be a procedure.
 
 ### Middleware
 

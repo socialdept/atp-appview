@@ -7,7 +7,10 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
+use SocialDept\AtpAppview\Xrpc\Handlers\DefaultProcedureHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultQueryHandler;
+use SocialDept\AtpAppview\Xrpc\Handlers\SyncRecordHandler;
+use SocialDept\AtpSchema\Data\LexiconDocument;
 use SocialDept\AtpSchema\Facades\Schema;
 
 /**
@@ -23,7 +26,7 @@ class XrpcRegistry
     /**
      * Every method's NSID, handler and auth, read without loading lexicons.
      *
-     * @var array<string, array{handler: class-string, auth: Auth, collection: string|null, attribute: Xrpc|null}>|null
+     * @var array<string, array{handler: class-string, auth: Auth, collection: string|null, attribute: Xrpc|null, action?: string}>|null
      */
     protected ?array $routes = null;
 
@@ -78,9 +81,12 @@ class XrpcRegistry
             return null;
         }
 
-        return $this->methods[$nsid] = $route['collection'] !== null
-            ? $this->defaultMethodFor($nsid, $route['collection'])
-            : $this->methodFor($route['handler'], $route['attribute']);
+        return $this->methods[$nsid] = match (true) {
+            isset($route['action']) && $route['collection'] !== null => $this->defaultProcedureFor($nsid, $route['collection'], $route['action']),
+            $route['handler'] === SyncRecordHandler::class => $this->builtInProcedureFor($nsid, SyncRecordHandler::class),
+            $route['collection'] !== null => $this->defaultMethodFor($nsid, $route['collection']),
+            default => $this->methodFor($route['handler'], $route['attribute']),
+        };
     }
 
     /**
@@ -107,6 +113,23 @@ class XrpcRegistry
             }
         }
 
+        foreach ((array) config('atp-appview.xrpc.procedures', []) as $nsid => $procedure) {
+            $collection = $procedure['collection'] ?? null;
+            $action = $procedure['action'] ?? null;
+
+            if (! is_string($collection) || ! in_array($action, DefaultProcedureHandler::ACTIONS, true)) {
+                throw new InvalidArgumentException("atp-appview.xrpc.procedures.{$nsid} needs a collection and an action: ".implode(', ', DefaultProcedureHandler::ACTIONS).'.');
+            }
+
+            if (! isset($routes[$nsid])) {
+                $routes[(string) $nsid] = ['handler' => DefaultProcedureHandler::class, 'auth' => Auth::Required, 'collection' => $collection, 'attribute' => null, 'action' => $action];
+            }
+        }
+
+        if (is_string($sync = config('atp-appview.xrpc.sync_record')) && $sync !== '' && ! isset($routes[$sync])) {
+            $routes[$sync] = ['handler' => SyncRecordHandler::class, 'auth' => Auth::Required, 'collection' => null, 'attribute' => null];
+        }
+
         ksort($routes);
 
         return $routes;
@@ -121,6 +144,37 @@ class XrpcRegistry
         }
 
         return $attribute->newInstance();
+    }
+
+    /**
+     * A procedure that writes one collection through the viewer's server-held
+     * session. A lexicon is optional, since the record is validated against
+     * its collection's own lexicon, but one that exists must be a procedure.
+     */
+    protected function defaultProcedureFor(string $nsid, string $collection, string $action): XrpcMethod
+    {
+        $lexicon = $this->procedureLexicon($nsid);
+
+        return new XrpcMethod($nsid, DefaultProcedureHandler::class, 'procedure', Auth::Required, $lexicon, $collection, $action);
+    }
+
+    /**
+     * @param  class-string  $handler
+     */
+    protected function builtInProcedureFor(string $nsid, string $handler): XrpcMethod
+    {
+        return new XrpcMethod($nsid, $handler, 'procedure', Auth::Required, $this->procedureLexicon($nsid));
+    }
+
+    protected function procedureLexicon(string $nsid): ?LexiconDocument
+    {
+        $lexicon = Schema::find($nsid);
+
+        if ($lexicon !== null && ! $lexicon->isProcedure()) {
+            throw new InvalidArgumentException("{$nsid} is a {$lexicon->getLexiconType()}, but it is configured as a procedure.");
+        }
+
+        return $lexicon;
     }
 
     /**

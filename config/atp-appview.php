@@ -154,6 +154,22 @@ return [
         //     'com.example.listThings' => 'com.example.thing',
         'collections' => [],
 
+        // Backend mode only. Procedures that write one collection to the
+        // viewer's repo through the session the server holds for them, then
+        // index the record straight away. Action is create, put or delete,
+        // with inputs and outputs as in com.atproto.repo.
+        //
+        //     'com.example.createThing' => ['collection' => 'com.example.thing', 'action' => 'create'],
+        'procedures' => [],
+
+        // Frontend mode. A procedure the browser calls through its PDS after
+        // writing a record there itself, with {uri}: the record is fetched
+        // from the caller's PDS and indexed now rather than when Tap delivers
+        // it. Null leaves it off.
+        //
+        //     'sync_record' => 'com.example.syncRecord',
+        'sync_record' => null,
+
         // Classes carrying #[Xrpc] under this path are registered too.
         'discover' => [
             'path' => app_path('Http/Xrpc'),

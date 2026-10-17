@@ -17,6 +17,7 @@ final class XrpcMethod
         public readonly Auth $auth,
         public readonly ?LexiconDocument $lexicon = null,
         public readonly ?string $collection = null,
+        public readonly ?string $action = null,
     ) {
     }
 
