@@ -191,6 +191,15 @@ return [
             // the repo is marked with an error, rather than listed for ever.
             'max_records' => (int) env('ATP_APPVIEW_RECONCILE_MAX_RECORDS', 10000),
         ],
+
+        // An account that is deactivated, taken down or suspended may come
+        // back, so its records are hidden rather than deleted. After this many
+        // days inactive, appview:purge-inactive tombstones them. If the
+        // account returns later, appview:reconcile restores them from its
+        // PDS. A deleted account's records are tombstoned straight away.
+        'inactive' => [
+            'purge_after_days' => (int) env('ATP_APPVIEW_PURGE_INACTIVE_AFTER_DAYS', 180),
+        ],
     ],
 
     /*

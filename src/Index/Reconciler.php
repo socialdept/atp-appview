@@ -9,6 +9,8 @@ use SocialDept\AtpAppview\Blocklist\PdsLookup;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpClient\Exceptions\AtpResponseException;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpSupport\Facades\Resolver;
 
@@ -29,6 +31,11 @@ use SocialDept\AtpSupport\Facades\Resolver;
  * record created or deleted while the listing ran, is touched. A listing that
  * fails or runs past the record limit writes nothing, since a partial listing
  * would read as deletes.
+ *
+ * The PDS also says whether the account still exists. A repo it cannot find
+ * is a deleted account, whose records are tombstoned. A deactivated, taken
+ * down or suspended repo has its records hidden instead, and a deactivated
+ * account the PDS serves again is shown again. See AccountStatus.
  */
 class Reconciler
 {
@@ -45,6 +52,14 @@ class Reconciler
      */
     public function reconcile(string $did, bool $dryRun = false): ReconcileResult
     {
+        $identity = Identity::query()->find($did, ['did', 'active', 'status']);
+
+        // A takedown or suspension may be the relay's, which the PDS cannot
+        // see, so only Tap lifts it.
+        if ($identity !== null && ! $identity->active && ! in_array($identity->status, AccountStatus::LIFTED_BY_PDS, true)) {
+            return new ReconcileResult($did, skipped: $identity->status ?? 'inactive');
+        }
+
         $host = $this->pdsLookup->forDids([$did])[$did] ?? null;
 
         if ($this->blocklist->blocksRepo($did, $host)) {
@@ -60,11 +75,23 @@ class Reconciler
             return new ReconcileResult($did, skipped: 'no collections');
         }
 
-        $pds = Atp::public(Resolver::resolvePds($did) ?? throw new RuntimeException("{$did} has no PDS."));
-
         // The revision first: everything listed after it is at least that
         // new, and anything indexed past it is left alone.
-        $rev = $pds->atproto->sync->getLatestCommit($did)->rev;
+        ['pds' => $pds, 'rev' => $rev, 'status' => $status] = $this->latestCommit($did);
+
+        if ($status !== null) {
+            if (! $dryRun) {
+                $this->status()->set([$did => ['active' => false, 'status' => $status]]);
+            }
+
+            return new ReconcileResult($did, account: $status);
+        }
+
+        $reactivated = $identity !== null && ! $identity->active;
+
+        if ($reactivated && ! $dryRun) {
+            $this->status()->set([$did => ['active' => true, 'status' => 'active']]);
+        }
 
         // Only collections the repo has need listing. One it lacks holds
         // nothing, so whatever is indexed there is gone.
@@ -115,7 +142,46 @@ class Reconciler
             listed: array_sum(array_map('count', $listed)),
             indexed: $indexed,
             tombstoned: $tombstoned,
+            account: $reactivated ? 'reactivated' : null,
         );
+    }
+
+    /**
+     * The repo's PDS client and latest revision, or the account status the
+     * PDS answered instead.
+     *
+     * A repo its PDS cannot find may have moved, and the DID document cached
+     * here still names the old PDS, so the PDS is resolved again before the
+     * account is taken as deleted.
+     *
+     * @return array{pds: mixed, rev: string, status: null}|array{pds: null, rev: null, status: string}
+     */
+    protected function latestCommit(string $did, bool $fresh = false): array
+    {
+        $pds = Atp::public(Resolver::resolvePds($did, ! $fresh) ?? throw new RuntimeException("{$did} has no PDS."));
+
+        try {
+            return ['pds' => $pds, 'rev' => $pds->atproto->sync->getLatestCommit($did)->rev, 'status' => null];
+        } catch (AtpResponseException $e) {
+            $status = match ($e->errorCode) {
+                'RepoNotFound' => AccountStatus::DELETED,
+                'RepoDeactivated' => 'deactivated',
+                'RepoTakendown' => 'takendown',
+                'RepoSuspended' => 'suspended',
+                default => throw $e,
+            };
+
+            if ($status === AccountStatus::DELETED && ! $fresh) {
+                return $this->latestCommit($did, fresh: true);
+            }
+
+            return ['pds' => null, 'rev' => null, 'status' => $status];
+        }
+    }
+
+    protected function status(): AccountStatus
+    {
+        return new AccountStatus($this->db->connection(config('atp-appview.index.connection')));
     }
 
     /**

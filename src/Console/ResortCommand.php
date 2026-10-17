@@ -18,7 +18,7 @@ class ResortCommand extends Command
 
     public function handle(): int
     {
-        $query = Record::query()->whereNotNull('record');
+        $query = Record::withHidden()->whereNotNull('record');
 
         if ($collections = $this->argument('collection')) {
             $query->whereIn('collection', $collections);
@@ -30,7 +30,7 @@ class ResortCommand extends Command
         // By uri, so rows rewritten along the way are neither skipped nor seen twice.
         $query->select(['uri', 'collection', 'rkey', 'record', 'indexed_at', 'sort_at'])
             ->chunkById(max(1, (int) $this->option('chunk')), function ($records) use ($bar, &$changed) {
-                $connection = Record::query()->getConnection();
+                $connection = Record::withHidden()->getConnection();
 
                 $connection->transaction(function () use ($records, $connection, &$changed) {
                     foreach ($records as $record) {

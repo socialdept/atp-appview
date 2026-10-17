@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use SocialDept\AtpAppview\Index\AccountStatus;
 use SocialDept\AtpAppview\Index\Reconciler;
 use SocialDept\AtpAppview\Models\Identity;
 use Throwable;
@@ -43,7 +44,9 @@ class ReconcileCommand extends Command
 
             $this->components->twoColumnDetail($did, match (true) {
                 $result->skipped !== null => "<fg=gray>skipped, {$result->skipped}</>",
-                $result->changed() => count($result->indexed).' indexed, '.count($result->tombstoned).' tombstoned',
+                $result->account !== null && $result->rev === null => "<fg=yellow>account {$result->account}</>",
+                $result->changed() => count($result->indexed).' indexed, '.count($result->tombstoned).' tombstoned'.($result->account ? ", account {$result->account}" : ''),
+                $result->account !== null => "account {$result->account}",
                 default => '<fg=gray>in step</>',
             });
 
@@ -72,8 +75,8 @@ class ReconcileCommand extends Command
     }
 
     /**
-     * Active repos not checked within the interval, least recently checked
-     * first.
+     * Repos not checked within the interval, least recently checked first:
+     * active ones, and inactive ones whose PDS could lift the status.
      *
      * @return array<int, string>
      */
@@ -83,7 +86,7 @@ class ReconcileCommand extends Command
         $before = Carbon::now('UTC')->subHours(max(0, (int) config('atp-appview.index.reconcile.every_hours', 24)));
 
         return Identity::query()
-            ->where('active', true)
+            ->where(fn ($query) => $query->where('active', true)->orWhereIn('status', AccountStatus::LIFTED_BY_PDS))
             ->where(fn ($query) => $query->whereNull('reconciled_at')->orWhere('reconciled_at', '<', $before))
             ->orderByRaw('reconciled_at is not null')
             ->orderBy('reconciled_at')

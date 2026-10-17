@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
 
 /**
  * A record from the network, as the index last saw it.
@@ -12,6 +13,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * Deleted records stay as tombstones carrying the delete's revision, so an
  * older event replayed later cannot bring them back. Queries skip them unless
  * asked with withTrashed().
+ *
+ * Records of an account that is deactivated, taken down or suspended are
+ * hidden rather than deleted, since the account may come back. Queries skip
+ * them unless asked with withHidden().
  *
  * @property string $uri
  * @property string $did
@@ -23,9 +28,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property \Illuminate\Support\Carbon $indexed_at
  * @property \Illuminate\Support\Carbon|null $sort_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property \Illuminate\Support\Carbon|null $hidden_at
  *
  * @method static Builder<static> collection(string $nsid)
  * @method static Builder<static> by(string $did)
+ * @method static Builder<static> withHidden()
+ * @method static Builder<static> onlyHidden()
  */
 class Record extends Model
 {
@@ -48,6 +56,11 @@ class Record extends Model
         return config('atp-appview.index.connection') ?? parent::getConnectionName();
     }
 
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new HiddenScope());
+    }
+
     protected function casts(): array
     {
         return [
@@ -55,6 +68,7 @@ class Record extends Model
             'indexed_at' => 'datetime',
             'sort_at' => 'datetime',
             'deleted_at' => 'datetime',
+            'hidden_at' => 'datetime',
         ];
     }
 

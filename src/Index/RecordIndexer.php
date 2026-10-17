@@ -20,6 +20,9 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  *   create replayed during a backfill cannot bring the record back.
  * - Several events for one record in a batch collapse to the last, which Tap's
  *   per-repo ordering makes the newest.
+ *
+ * An account event changes its records too, through AccountStatus: a deleted
+ * account's records are tombstoned, an inactive account's hidden.
  */
 class RecordIndexer implements BatchHandler
 {
@@ -42,12 +45,23 @@ class RecordIndexer implements BatchHandler
         $connection = $this->db->connection(config('atp-appview.index.connection'));
 
         $connection->transaction(function () use ($connection, $records, $identities) {
+            $status = new AccountStatus($connection);
+
             if ($records !== []) {
                 (new RecordWriter($connection))->upsert($records);
             }
 
             if ($identities !== []) {
                 $connection->table('atp_identities')->upsert($identities, ['did'], ['handle', 'active', 'status', 'updated_at']);
+
+                $status->apply(array_column(array_map(fn (array $row) => [
+                    'did' => $row['did'],
+                    'account' => ['active' => (bool) $row['active'], 'status' => $row['status']],
+                ], $identities), 'account', 'did'));
+            }
+
+            if ($records !== []) {
+                $status->hideArrivals(array_column($records, 'did'));
             }
         });
     }
