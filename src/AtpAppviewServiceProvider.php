@@ -19,6 +19,7 @@ use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
+use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
@@ -39,7 +40,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
             flushMs: (int) config('atp-appview.ingest.flush_ms', 500),
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
             blocklist: $app->make(Blocklist::class),
+            stats: $app->make(IngestStats::class),
         ));
+
+        $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
 
         $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
             plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
