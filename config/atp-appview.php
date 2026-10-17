@@ -71,6 +71,15 @@ return [
         // Attempts per batch before giving up and letting Tap redeliver it.
         'max_attempts' => (int) env('ATP_APPVIEW_INGEST_MAX_ATTEMPTS', 3),
 
+        // Collections appview:discover finds repos for. Tap follows new repos
+        // live only for its own TAP_SIGNAL_COLLECTION, so schedule discovery
+        // to pick up repos that start using the others.
+        'collections' => [],
+
+        // Where appview:discover lists repos by collection: a relay, or
+        // Light Rail at https://lightrail.microcosm.blue.
+        'discovery_url' => env('ATP_APPVIEW_DISCOVERY_URL', 'https://relay1.us-east.bsky.network'),
+
         // Classes implementing BatchHandler, run in order for every batch.
         // RecordIndexer writes the records index.
         'handlers' => [

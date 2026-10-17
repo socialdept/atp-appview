@@ -148,6 +148,34 @@ class IndexPosts implements BatchHandler
 
 Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rather than one query per event.
 
+### Discovering repos
+
+Tap follows new repos live only for its one `TAP_SIGNAL_COLLECTION`. `appview:discover` finds every repo holding records in each of your collections and has Tap backfill and follow them, so an AppView can index several collections on plain Tap:
+
+```php
+// config/atp-appview.php
+'ingest' => [
+    'collections' => ['app.example.post', 'app.example.comment', 'app.example.like'],
+],
+```
+
+```bash
+php artisan appview:discover            # every configured collection
+php artisan appview:discover app.example.post --dry-run
+```
+
+It pages through `com.atproto.sync.listReposByCollection`, adds each repo once even when it holds several collections, and sends them to Tap 1,000 at a time. Collections must be exact NSIDs, since the endpoint takes no wildcards.
+
+The source defaults to `https://relay1.us-east.bsky.network`, the same relay Tap uses. [Light Rail](https://lightrail.microcosm.blue) answers the same method and works with `--source` or `ATP_APPVIEW_DISCOVERY_URL`, though it currently reports somewhat fewer repos than the relay.
+
+Repos that start using a collection later are only found on the next run, so schedule it:
+
+```php
+Schedule::command('appview:discover')->hourly();
+```
+
+Set `TAP_SIGNAL_COLLECTION` to whichever collection a new user creates first, and those repos are picked up live in between.
+
 ### Tap admin
 
 `TapAdmin` wraps Tap's admin API: `addRepos()` to backfill and follow specific repos, `removeRepos()`, `info($did)`, `stats('repo-count')` and `healthy()`.

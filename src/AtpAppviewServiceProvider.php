@@ -10,6 +10,7 @@ use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
+use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
@@ -48,7 +49,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'atp-appview-migrations');
 
-            $this->commands([ConsumeCommand::class, RestartCommand::class]);
+            $this->commands([ConsumeCommand::class, DiscoverCommand::class, RestartCommand::class]);
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
