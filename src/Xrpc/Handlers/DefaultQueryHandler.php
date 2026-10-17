@@ -132,6 +132,11 @@ class DefaultQueryHandler
         [$sortAt, $uri] = $parts;
         $operator = $reverse ? '>' : '<';
 
+        // Redundant with the OR below, but an index can seek to it. Without
+        // it the index matches only the collection, and a page deep in the
+        // list walks and discards every row before the cursor.
+        $query->where('sort_at', $operator.'=', $sortAt);
+
         $query->where(function (Builder $query) use ($sortAt, $uri, $operator) {
             $query->where('sort_at', $operator, $sortAt)
                 ->orWhere(fn (Builder $query) => $query->where('sort_at', $sortAt)->where('uri', $operator, $uri));

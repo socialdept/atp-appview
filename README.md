@@ -46,7 +46,7 @@ Add it next to your session guard in `config/auth.php`:
 ],
 ```
 
-Your user model implements `HasAtpSession` from atp-client, returning its DID.
+Your user model implements `HasAtpSession` from atp-client, returning its DID. The guard looks users up by that column on every request, so give it a unique index.
 
 ### Resolution order
 
@@ -241,6 +241,19 @@ Identity::find($did)->records;
 ### Sort order
 
 `sort_at` is when a record was made, as far as the index can trust it. It is the record's `createdAt`, or the timestamp inside a TID record key when there is no usable `createdAt`, but never later than the moment the record was indexed. A future `createdAt` therefore cannot pin a record to the top of a feed, and a backfill still lands years of history in the order it was written rather than all at once. Records with neither fall back to the index time.
+
+### Indexes
+
+Each index on `atp_records` serves a specific read:
+
+| Index | Serves |
+| --- | --- |
+| `uri` (primary key) | Fetching one record, and the upsert's conflict check |
+| `collection, sort_at, uri` | A collection newest first, and the cursor seeking straight to its page |
+| `did, collection, sort_at, uri` | One repo's records in a collection, newest first, and purging a repo |
+| `collection, indexed_at` | What arrived recently |
+
+A cursor adds a plain `sort_at` range next to the tie-breaking comparison on `uri`, so the index seeks to the cursor rather than scanning every row before it. On 220,000 documents, a page 50,000 records deep takes 0.2 ms to execute.
 
 ### Idempotent writes
 

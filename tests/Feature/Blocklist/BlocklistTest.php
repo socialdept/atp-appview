@@ -2,7 +2,9 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Blocklist;
 
+use Illuminate\Cache\Events\RetrievingKey;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -183,6 +185,24 @@ class BlocklistTest extends TestCase
         $batch = $this->filter([$this->record('did:plc:bad', 'app.example.post'), $this->record('did:plc:good', 'app.example.post')]);
 
         $this->assertSame(['did:plc:good'], array_map(fn ($e) => $e->did, $batch->records()));
+    }
+
+    public function test_a_batch_reads_the_rule_version_once_however_many_events_it_holds(): void
+    {
+        $this->blocklist()->block('did:plc:bad');
+        $this->blocklist()->block('*.spam.example', 'app.example.like');
+        $events = array_map(fn (int $i) => $this->record("did:plc:user{$i}", 'app.example.post'), range(1, 50));
+
+        $reads = 0;
+        Event::listen(RetrievingKey::class, function (RetrievingKey $event) use (&$reads) {
+            $reads += $event->key === Blocklist::VERSION_KEY ? 1 : 0;
+        });
+
+        $this->filter($events);
+        $this->blocklist()->withoutBlockedRepos(array_map(fn ($e) => $e->did, $events));
+
+        // With the database cache store, each read is a query.
+        $this->assertSame(2, $reads, 'One read per call, not one per event or DID.');
     }
 
     public function test_a_tap_failure_keeps_the_rule(): void
