@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Xrpc;
 
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -98,6 +99,22 @@ class DefaultQueryHandlerTest extends TestCase
         $this->assertSame(3, $pages);
         $this->assertCount(7, $seen);
         $this->assertSame(array_unique($seen), $seen);
+    }
+
+    public function test_a_cursor_gives_the_index_a_bound_to_seek_to(): void
+    {
+        $this->index(...array_map(fn (int $i) => $this->thing('did:plc:alice', "t{$i}", "2025-01-0{$i}T00:00:00Z"), range(1, 3)));
+        $cursor = $this->getJson('/xrpc/com.example.listThings?limit=1')->json('cursor');
+
+        DB::enableQueryLog();
+        $this->getJson('/xrpc/com.example.listThings?limit=1&cursor='.$cursor)->assertOk();
+        $this->getJson('/xrpc/com.example.listThings?limit=1&reverse=true&cursor='.$cursor)->assertOk();
+        $sql = implode("\n", array_column(DB::getQueryLog(), 'query'));
+
+        // Without a plain range on sort_at, the index matches only the
+        // collection and a deep page scans every row before the cursor.
+        $this->assertStringContainsString('"sort_at" <= ?', $sql);
+        $this->assertStringContainsString('"sort_at" >= ?', $sql);
     }
 
     public function test_the_last_page_carries_no_cursor(): void
