@@ -42,4 +42,37 @@ return [
         'trusted_services' => [],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Ingest
+    |--------------------------------------------------------------------------
+    |
+    | appview:consume reads Tap's acknowledged websocket channel in batches
+    | and hands each batch to the handlers below. Tab, the Tap fork, speaks the
+    | same protocol. Never point this at Tap's webhook mode: one request per
+    | record floods the application during a backfill.
+    |
+    */
+
+    'ingest' => [
+        'url' => env('ATP_APPVIEW_TAP_URL', 'ws://localhost:2480/channel'),
+
+        // Tap's admin API, for adding and removing repos and reading progress.
+        'admin_url' => env('ATP_APPVIEW_TAP_ADMIN_URL', 'http://localhost:2480'),
+
+        // TAP_ADMIN_PASSWORD, when Tap is configured with one.
+        'password' => env('ATP_APPVIEW_TAP_PASSWORD'),
+
+        // A batch is handled when it reaches batch_size events or flush_ms
+        // milliseconds pass, whichever comes first.
+        'batch_size' => (int) env('ATP_APPVIEW_INGEST_BATCH_SIZE', 200),
+        'flush_ms' => (int) env('ATP_APPVIEW_INGEST_FLUSH_MS', 500),
+
+        // Attempts per batch before giving up and letting Tap redeliver it.
+        'max_attempts' => (int) env('ATP_APPVIEW_INGEST_MAX_ATTEMPTS', 3),
+
+        // Classes implementing BatchHandler, run in order for every batch.
+        'handlers' => [],
+    ],
+
 ];
