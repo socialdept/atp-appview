@@ -73,13 +73,27 @@ class RecordIndexer implements BatchHandler
                 'cid' => $deleted ? null : $event->cid,
                 'record' => $deleted || $event->record === null ? null : json_encode($event->record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'indexed_at' => $now,
-                'sort_at' => SortAt::for($deleted ? null : $event->record, $event->rkey, $clock),
+                'sort_at' => SortAt::for($deleted ? null : $event->record, $event->rkey, $clock, self::sortFields($event->collection)),
                 'deleted_at' => $deleted ? $now : null,
                 'rev' => $event->rev,
             ];
         }
 
         return array_values($rows);
+    }
+
+    /**
+     * The record fields that say when a record in this collection was made,
+     * in order: atp-appview.index.sort_fields, else createdAt.
+     *
+     * @return array<int, string>
+     */
+    public static function sortFields(string $collection): array
+    {
+        // Read whole: NSIDs contain dots, which config() would take as nesting.
+        $map = (array) config('atp-appview.index.sort_fields', []);
+
+        return array_values((array) ($map[$collection] ?? $map['*'] ?? ['createdAt']));
     }
 
     /**

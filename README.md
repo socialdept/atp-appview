@@ -259,7 +259,28 @@ Identity::find($did)->records;
 
 ### Sort order
 
-`sort_at` is when a record was made, as far as the index can trust it. It is the record's `createdAt`, or the timestamp inside a TID record key when there is no usable `createdAt`, but never later than the moment the record was indexed. A future `createdAt` therefore cannot pin a record to the top of a feed, and a backfill still lands years of history in the order it was written rather than all at once. Records with neither fall back to the index time.
+`sort_at` is when a record was made, as far as the index can trust it: the first usable date among the collection's time fields, else the timestamp inside a TID record key, else the moment the record was indexed. It is never later than the moment the record was indexed, so a future date cannot pin a record to the top of a feed, and a backfill still lands years of history in the order it was written rather than all at once.
+
+The time fields default to `createdAt`. Collections that name their date differently list their own, tried in order:
+
+```php
+// config/atp-appview.php
+'index' => [
+    'sort_fields' => [
+        '*' => ['createdAt'],
+        'site.standard.document' => ['publishedAt', 'createdAt'],
+    ],
+],
+```
+
+```bash
+php artisan appview:resort                          # recompute every indexed record
+php artisan appview:resort site.standard.document   # or some collections
+```
+
+Run `appview:resort` after changing the fields: new records use them straight away, existing ones keep their old `sort_at` until recomputed. It writes only rows whose value changes.
+
+Dates are read as records actually write them: ISO 8601, a space in place of the `T`, or the date alone when the time part is unreadable. Dates that do not exist, and anything before 1970, count as missing. Record keys minted from an old date, as importers do, are trusted back to 1970 too.
 
 ### Indexes
 
