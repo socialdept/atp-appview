@@ -32,6 +32,11 @@ class XrpcController
         try {
             $method = $this->registry->find($nsid) ?? throw XrpcException::methodNotImplemented($nsid);
 
+            // Routes accept both verbs, since the lexicon decides which.
+            if (! in_array($request->method(), $method->isQuery() ? ['GET', 'HEAD'] : ['POST'], true)) {
+                throw $this->wrongVerb($method);
+            }
+
             return $this->respond(app()->call([app($method->handler), '__invoke'], [
                 XrpcRequest::class => $this->xrpcRequest($method, $request),
                 Viewer::class => $request->attributes->get(Viewer::class),
@@ -50,9 +55,12 @@ class XrpcController
     {
         $method = $this->registry->find($nsid);
 
-        return $this->error($method === null
-            ? XrpcException::methodNotImplemented($nsid)
-            : XrpcException::invalidRequest("{$nsid} is a {$method->type}, call it with {$method->httpMethod()}."));
+        return $this->error($method === null ? XrpcException::methodNotImplemented($nsid) : $this->wrongVerb($method));
+    }
+
+    protected function wrongVerb(XrpcMethod $method): XrpcException
+    {
+        return XrpcException::invalidRequest("{$method->nsid} is a {$method->type}, call it with {$method->httpMethod()}.");
     }
 
     protected function xrpcRequest(XrpcMethod $method, Request $http): XrpcRequest
