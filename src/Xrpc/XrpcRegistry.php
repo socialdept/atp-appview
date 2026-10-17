@@ -21,50 +21,106 @@ use SocialDept\AtpSchema\Facades\Schema;
 class XrpcRegistry
 {
     /**
-     * @var array<string, XrpcMethod>|null
+     * Every method's NSID, handler and auth, read without loading lexicons.
+     *
+     * @var array<string, array{handler: class-string, auth: Auth, collection: string|null, attribute: Xrpc|null}>|null
      */
-    protected ?array $methods = null;
+    protected ?array $routes = null;
 
     /**
+     * Methods resolved so far, lexicon included.
+     *
+     * @var array<string, XrpcMethod>
+     */
+    protected array $methods = [];
+
+    /**
+     * What a route needs: the NSID, its handler and its auth. Nothing here
+     * loads a lexicon, so registering routes at boot never reads the cache.
+     * Loading lexicons at boot cost a cache read per method on every request,
+     * and on a fresh install it failed before the cache table existed.
+     *
+     * @return array<string, array{handler: class-string, auth: Auth, collection: string|null, attribute: Xrpc|null}>
+     */
+    public function routes(): array
+    {
+        return $this->routes ??= $this->buildRoutes();
+    }
+
+    /**
+     * Every method, each with its lexicon. Loads every lexicon.
+     *
      * @return array<string, XrpcMethod>
      */
     public function all(): array
     {
-        return $this->methods ??= $this->build();
-    }
+        foreach (array_keys($this->routes()) as $nsid) {
+            $this->find($nsid);
+        }
 
-    public function find(string $nsid): ?XrpcMethod
-    {
-        return $this->all()[$nsid] ?? null;
+        ksort($this->methods);
+
+        return $this->methods;
     }
 
     /**
-     * @return array<string, XrpcMethod>
+     * One method with its lexicon, loaded the first time it is asked for.
      */
-    protected function build(): array
+    public function find(string $nsid): ?XrpcMethod
     {
-        $methods = [];
+        if (isset($this->methods[$nsid])) {
+            return $this->methods[$nsid];
+        }
+
+        $route = $this->routes()[$nsid] ?? null;
+
+        if ($route === null) {
+            return null;
+        }
+
+        return $this->methods[$nsid] = $route['collection'] !== null
+            ? $this->defaultMethodFor($nsid, $route['collection'])
+            : $this->methodFor($route['handler'], $route['attribute']);
+    }
+
+    /**
+     * @return array<string, array{handler: class-string, auth: Auth, collection: string|null, attribute: Xrpc|null}>
+     */
+    protected function buildRoutes(): array
+    {
+        $routes = [];
 
         foreach (array_unique([...config('atp-appview.xrpc.handlers', []), ...$this->discover()]) as $handler) {
-            $method = $this->methodFor($handler);
+            $attribute = $this->attributeOf($handler);
 
-            if (isset($methods[$method->nsid])) {
-                throw new InvalidArgumentException("Two handlers serve {$method->nsid}: {$methods[$method->nsid]->handler} and {$handler}.");
+            if (isset($routes[$attribute->nsid])) {
+                throw new InvalidArgumentException("Two handlers serve {$attribute->nsid}: {$routes[$attribute->nsid]['handler']} and {$handler}.");
             }
 
-            $methods[$method->nsid] = $method;
+            $routes[$attribute->nsid] = ['handler' => $handler, 'auth' => $attribute->auth, 'collection' => null, 'attribute' => $attribute];
         }
 
         foreach ((array) config('atp-appview.xrpc.collections', []) as $nsid => $collection) {
             // A handler class written for the method takes precedence.
-            if (! isset($methods[$nsid])) {
-                $methods[$nsid] = $this->defaultMethodFor((string) $nsid, (string) $collection);
+            if (! isset($routes[$nsid])) {
+                $routes[(string) $nsid] = ['handler' => DefaultQueryHandler::class, 'auth' => Auth::None, 'collection' => (string) $collection, 'attribute' => null];
             }
         }
 
-        ksort($methods);
+        ksort($routes);
 
-        return $methods;
+        return $routes;
+    }
+
+    protected function attributeOf(string $handler): Xrpc
+    {
+        $attribute = (new ReflectionClass($handler))->getAttributes(Xrpc::class)[0] ?? null;
+
+        if ($attribute === null) {
+            throw new InvalidArgumentException("{$handler} has no #[Xrpc] attribute.");
+        }
+
+        return $attribute->newInstance();
     }
 
     /**
@@ -82,16 +138,8 @@ class XrpcRegistry
         return new XrpcMethod($nsid, DefaultQueryHandler::class, 'query', Auth::None, $lexicon, $collection);
     }
 
-    protected function methodFor(string $handler): XrpcMethod
+    protected function methodFor(string $handler, Xrpc $xrpc): XrpcMethod
     {
-        $attribute = (new ReflectionClass($handler))->getAttributes(Xrpc::class)[0] ?? null;
-
-        if ($attribute === null) {
-            throw new InvalidArgumentException("{$handler} has no #[Xrpc] attribute.");
-        }
-
-        /** @var Xrpc $xrpc */
-        $xrpc = $attribute->newInstance();
         $lexicon = Schema::find($xrpc->nsid);
 
         $type = match (true) {

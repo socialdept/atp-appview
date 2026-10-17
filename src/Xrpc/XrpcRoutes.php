@@ -23,12 +23,15 @@ class XrpcRoutes
         $prefix = trim((string) config('atp-appview.xrpc.prefix', 'xrpc'), '/');
         $middleware = (array) config('atp-appview.xrpc.middleware', []);
 
-        foreach ($this->registry->all() as $method) {
+        // Both verbs, because which one a method takes comes from its lexicon,
+        // and lexicons are not loaded at boot. The controller refuses the
+        // wrong one.
+        foreach ($this->registry->routes() as $nsid => $route) {
             $this->router
-                ->match([$method->httpMethod()], "{$prefix}/{$method->nsid}", [XrpcController::class, 'handle'])
-                ->defaults('nsid', $method->nsid)
-                ->middleware([...$middleware, ...$this->authMiddleware($method)])
-                ->name("atp-appview.xrpc.{$method->nsid}");
+                ->match(['GET', 'POST'], "{$prefix}/{$nsid}", [XrpcController::class, 'handle'])
+                ->defaults('nsid', $nsid)
+                ->middleware([...$middleware, ...$this->authMiddleware($nsid, $route['auth'])])
+                ->name("atp-appview.xrpc.{$nsid}");
         }
 
         if (config('atp-appview.xrpc.fallback', true)) {
@@ -46,8 +49,8 @@ class XrpcRoutes
     /**
      * @return array<int, string>
      */
-    protected function authMiddleware(XrpcMethod $method): array
+    protected function authMiddleware(string $nsid, Auth $auth): array
     {
-        return $method->auth === Auth::None ? [] : ["atp.viewer:{$method->auth->value},{$method->nsid}"];
+        return $auth === Auth::None ? [] : ["atp.viewer:{$auth->value},{$nsid}"];
     }
 }
