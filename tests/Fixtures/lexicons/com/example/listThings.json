@@ -1,0 +1,21 @@
+{
+  "lexicon": 1,
+  "id": "com.example.listThings",
+  "defs": {
+    "main": {
+      "type": "query",
+      "parameters": {
+        "type": "params",
+        "properties": {
+          "uri": { "type": "string", "format": "at-uri" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 5, "default": 2 },
+          "cursor": { "type": "string" },
+          "reverse": { "type": "boolean" },
+          "did": { "type": "string" },
+          "actor": { "type": "string" }
+        }
+      },
+      "output": { "encoding": "application/json" }
+    }
+  }
+}

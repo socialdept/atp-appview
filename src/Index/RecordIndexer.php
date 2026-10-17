@@ -30,8 +30,9 @@ class RecordIndexer implements BatchHandler
 
     public function handle(Batch $batch): void
     {
-        $now = Carbon::now('UTC')->format('Y-m-d H:i:s');
-        $records = $this->recordRows($batch->records(), $now);
+        $clock = Carbon::now('UTC');
+        $now = $clock->format('Y-m-d H:i:s');
+        $records = $this->recordRows($batch->records(), $now, $clock);
         $identities = $this->identityRows($batch->identities(), $now);
 
         if ($records === [] && $identities === []) {
@@ -55,7 +56,7 @@ class RecordIndexer implements BatchHandler
      * @param  array<int, RecordEvent>  $events
      * @return array<int, array<string, mixed>>
      */
-    protected function recordRows(array $events, string $now): array
+    protected function recordRows(array $events, string $now, Carbon $clock): array
     {
         $rows = [];
 
@@ -72,6 +73,7 @@ class RecordIndexer implements BatchHandler
                 'cid' => $deleted ? null : $event->cid,
                 'record' => $deleted || $event->record === null ? null : json_encode($event->record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'indexed_at' => $now,
+                'sort_at' => SortAt::for($deleted ? null : $event->record, $event->rkey, $clock),
                 'deleted_at' => $deleted ? $now : null,
                 'rev' => $event->rev,
             ];

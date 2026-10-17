@@ -5,7 +5,8 @@ namespace SocialDept\AtpAppview\Xrpc;
 use SocialDept\AtpSchema\Data\LexiconDocument;
 
 /**
- * One registered XRPC method: its handler, how it is called and its lexicon.
+ * One registered XRPC method: its handler, how it is called, its lexicon and,
+ * for a default handler, the record collection it serves.
  */
 final class XrpcMethod
 {
@@ -15,6 +16,7 @@ final class XrpcMethod
         public readonly string $type,
         public readonly Auth $auth,
         public readonly ?LexiconDocument $lexicon = null,
+        public readonly ?string $collection = null,
     ) {
     }
 

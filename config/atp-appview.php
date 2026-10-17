@@ -123,6 +123,13 @@ return [
         // Handler classes registered explicitly.
         'handlers' => [],
 
+        // Queries served straight from the index, mapped to the record
+        // collection they read, in the shapes getRecord and listRecords use.
+        // A handler class for the same method takes precedence.
+        //
+        //     'com.example.listThings' => 'com.example.thing',
+        'collections' => [],
+
         // Classes carrying #[Xrpc] under this path are registered too.
         'discover' => [
             'path' => app_path('Http/Xrpc'),

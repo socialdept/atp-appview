@@ -7,13 +7,16 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
+use SocialDept\AtpAppview\Xrpc\Handlers\DefaultQueryHandler;
 use SocialDept\AtpSchema\Facades\Schema;
 
 /**
  * Every XRPC method the application serves, keyed by NSID.
  *
  * Handlers come from atp-appview.xrpc.handlers and from classes carrying the
- * #[Xrpc] attribute in the discovery directory.
+ * #[Xrpc] attribute in the discovery directory. Queries mapped to a collection
+ * in atp-appview.xrpc.collections, without a handler of their own, are served
+ * by DefaultQueryHandler.
  */
 class XrpcRegistry
 {
@@ -52,9 +55,31 @@ class XrpcRegistry
             $methods[$method->nsid] = $method;
         }
 
+        foreach ((array) config('atp-appview.xrpc.collections', []) as $nsid => $collection) {
+            // A handler class written for the method takes precedence.
+            if (! isset($methods[$nsid])) {
+                $methods[$nsid] = $this->defaultMethodFor((string) $nsid, (string) $collection);
+            }
+        }
+
         ksort($methods);
 
         return $methods;
+    }
+
+    /**
+     * A query served straight from the index for one collection.
+     */
+    protected function defaultMethodFor(string $nsid, string $collection): XrpcMethod
+    {
+        $lexicon = Schema::find($nsid)
+            ?? throw new InvalidArgumentException("No lexicon found for {$nsid}, which atp-appview.xrpc.collections maps to {$collection}.");
+
+        if (! $lexicon->isQuery()) {
+            throw new InvalidArgumentException("{$nsid} is a {$lexicon->getLexiconType()}. Default handlers only serve queries, so write a handler class for it.");
+        }
+
+        return new XrpcMethod($nsid, DefaultQueryHandler::class, 'query', Auth::None, $lexicon, $collection);
     }
 
     protected function methodFor(string $handler): XrpcMethod

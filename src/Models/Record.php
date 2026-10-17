@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $rev
  * @property array<string, mixed>|null $record
  * @property \Illuminate\Support\Carbon $indexed_at
+ * @property \Illuminate\Support\Carbon|null $sort_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  *
  * @method static Builder<static> collection(string $nsid)
@@ -52,6 +53,7 @@ class Record extends Model
         return [
             'record' => 'array',
             'indexed_at' => 'datetime',
+            'sort_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
     }
