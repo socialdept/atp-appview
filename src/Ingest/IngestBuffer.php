@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Ingest;
 
 use Closure;
 use Illuminate\Support\Facades\Log;
+use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
@@ -37,6 +38,7 @@ class IngestBuffer
      * @param  array<int, BatchHandler>  $handlers
      * @param  Closure(int): void  $ack  Sends one acknowledgement to Tap
      * @param  Closure(int): void|null  $sleep  Waits the given milliseconds between attempts
+     * @param  Blocklist|null  $blocklist  Drops blocked records before the handlers see them
      */
     public function __construct(
         protected array $handlers,
@@ -44,6 +46,7 @@ class IngestBuffer
         protected int $batchSize = 200,
         protected int $maxAttempts = 3,
         protected ?Closure $sleep = null,
+        protected ?Blocklist $blocklist = null,
     ) {
     }
 
@@ -111,8 +114,16 @@ class IngestBuffer
     {
         for ($attempt = 1; ; $attempt++) {
             try {
+                // Inside the retries, since loading rules or looking up a PDS
+                // can fail like any other database or network call.
+                $allowed = $this->blocklist?->filter($batch) ?? $batch;
+
+                if ($allowed->isEmpty()) {
+                    return;
+                }
+
                 foreach ($this->handlers as $handler) {
-                    $handler->handle($batch);
+                    $handler->handle($allowed);
                 }
 
                 return;

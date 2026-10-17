@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $handle
  * @property bool $active
  * @property string|null $status
+ * @property string|null $pds The repo's PDS, resolved for host block rules
+ * @property \Illuminate\Support\Carbon|null $pds_resolved_at
  * @property \Illuminate\Support\Carbon $updated_at
  */
 class Identity extends Model
@@ -38,6 +40,7 @@ class Identity extends Model
         return [
             'active' => 'boolean',
             'updated_at' => 'datetime',
+            'pds_resolved_at' => 'datetime',
         ];
     }
 

@@ -23,6 +23,15 @@ class DiscoverCommandTest extends TestCase
     {
         $app['config']->set('atp-appview.ingest.discovery_url', self::RELAY);
         $app['config']->set('atp-appview.ingest.admin_url', self::TAP);
+        $app['config']->set('database.default', 'testing');
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Discovery leaves out repos the blocklist keeps out.
+        $this->artisan('migrate')->run();
     }
 
     public function test_it_pages_through_every_collection_and_adds_unique_repos_to_tap(): void

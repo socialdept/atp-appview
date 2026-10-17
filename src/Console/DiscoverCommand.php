@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
+use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use Throwable;
@@ -19,7 +20,7 @@ class DiscoverCommand extends Command
 
     protected const NSID = '/^[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+(\.[a-zA-Z][a-zA-Z0-9]*)$/';
 
-    public function handle(TapAdmin $tap): int
+    public function handle(TapAdmin $tap, Blocklist $blocklist): int
     {
         $collections = $this->argument('collection') ?: (array) config('atp-appview.ingest.collections', []);
 
@@ -45,6 +46,7 @@ class DiscoverCommand extends Command
         /** @var array<string, true> $seen */
         $seen = [];
         $pending = [];
+        $skipped = 0;
 
         try {
             foreach ($collections as $collection) {
@@ -61,8 +63,8 @@ class DiscoverCommand extends Command
                     $seen[$did] = true;
                     $pending[] = $did;
 
-                    if (! $dryRun && count($pending) >= $chunk) {
-                        $tap->addRepos($pending);
+                    if (count($pending) >= $chunk) {
+                        $skipped += $this->send($tap, $blocklist, $pending, $dryRun);
                         $pending = [];
                     }
                 }
@@ -70,8 +72,8 @@ class DiscoverCommand extends Command
                 $this->components->twoColumnDetail($collection, number_format($found).' repos');
             }
 
-            if (! $dryRun && $pending !== []) {
-                $tap->addRepos($pending);
+            if ($pending !== []) {
+                $skipped += $this->send($tap, $blocklist, $pending, $dryRun);
             }
         } catch (Throwable $e) {
             $this->components->error("Discovery stopped: {$e->getMessage()}");
@@ -79,12 +81,33 @@ class DiscoverCommand extends Command
             return self::FAILURE;
         }
 
-        $total = number_format(count($seen));
+        $total = number_format(count($seen) - $skipped);
+
+        if ($skipped > 0) {
+            $this->components->twoColumnDetail('Left out by the blocklist', number_format($skipped).' repos');
+        }
 
         $dryRun
             ? $this->components->info("{$total} unique repos found on {$source}. Nothing was added to Tap.")
             : $this->components->info("{$total} unique repos sent to Tap, which backfills each one and then follows it live.");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Send one chunk to Tap, leaving out repos a blanket rule blocks.
+     *
+     * @param  array<int, string>  $dids
+     * @return int How many were left out
+     */
+    protected function send(TapAdmin $tap, Blocklist $blocklist, array $dids, bool $dryRun): int
+    {
+        $allowed = $blocklist->withoutBlockedRepos($dids);
+
+        if (! $dryRun && $allowed !== []) {
+            $tap->addRepos($allowed);
+        }
+
+        return count($dids) - count($allowed);
     }
 }
