@@ -8,6 +8,7 @@ use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
+use SocialDept\AtpAppview\Auth\FrontendAuth;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Blocklist\PdsLookup;
@@ -92,6 +93,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         if (! $this->app->routesAreCached()) {
             $this->app->make(XrpcRoutes::class)->register();
+
+            if (FrontendAuth::enabled()) {
+                $this->app->make(FrontendAuth::class)->register();
+            }
         }
 
         Request::macro('viewer', function (): ?Viewer {
