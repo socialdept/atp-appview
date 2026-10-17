@@ -431,9 +431,29 @@ Each batch is written with one statement per 500 records, inside a single transa
 
 Backfilled events all carry the repo's revision at the time Tap exported it, not the revision of the commit that last changed each record. Anything Tap delivers live afterwards has a newer revision, so the guard orders them correctly.
 
-### Known limitation
+### Reconciliation
 
-When Tap resyncs a repo after losing track of it, it emits creates and updates for what the repo holds now, but no deletes for records removed in the meantime. A record deleted while Tap was out of sync for that repo stays in the index until something reconciles it against the repo. Reconciliation is planned.
+When Tap resyncs a repo after losing track of it, it sends only the records whose CID it has not seen, and never a delete. A record removed while Tap was not following the repo would stay indexed, and a resync that only found deletions sends nothing at all, so the index cannot tell one happened.
+
+`appview:reconcile` compares each repo with its own PDS instead. It reads the repo's latest revision, lists every collection in `ingest.collections` that the repo has, and then:
+
+- tombstones an indexed record the PDS no longer has
+- indexes a record the PDS has but the index lacks, or holds at another CID
+
+Every write carries the revision read before listing, so nothing indexed at a newer revision, such as a record created or deleted while the listing ran, is touched. A listing that fails, or a collection past `index.reconcile.max_records`, writes nothing, since a partial listing would read as deletes. Blocked repos and collections are left alone.
+
+Schedule it and it works through the active repos, least recently checked first, `index.reconcile.batch` per run, checking each again after `index.reconcile.every_hours`:
+
+```php
+Schedule::command('appview:reconcile')->everyMinute()->withoutOverlapping();
+```
+
+Expect about two seconds a repo, nearly all of it waiting on the PDS. Each repo's last check is kept on `atp_identities`: `reconciled_at`, the `reconciled_rev` it compared against, and `reconcile_error` when the PDS could not be read.
+
+```bash
+php artisan appview:reconcile did:plc:abc -v   # one repo, listing every change
+php artisan appview:reconcile --dry-run        # report without writing
+```
 
 ## XRPC
 
