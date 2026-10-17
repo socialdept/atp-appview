@@ -190,12 +190,16 @@ Set `TAP_SIGNAL_COLLECTION` to whichever collection a new user creates first, an
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
 
-Record::collection('app.example.post')->by($did)->latest('indexed_at')->get();
+Record::collection('app.example.post')->by($did)->latest('sort_at')->get();
 
 $record->record;              // the record body as an array
 $record->identity->handle;    // the author, when the index has seen their identity
 Identity::find($did)->records;
 ```
+
+### Sort order
+
+`sort_at` is when a record was made, as far as the index can trust it. It is the record's `createdAt`, or the timestamp inside a TID record key when there is no usable `createdAt`, but never later than the moment the record was indexed. A future `createdAt` therefore cannot pin a record to the top of a feed, and a backfill still lands years of history in the order it was written rather than all at once. Records with neither fall back to the index time.
 
 ### Idempotent writes
 
@@ -245,6 +249,25 @@ Handlers live in `app/Http/Xrpc` beside your controllers, since they handle inco
 - **Responses.** Return an array, `Arrayable`, `JsonSerializable`, `Responsable` or `Response`, or null for an empty 200. Throw `XrpcException` for an XRPC error such as `{"error": "NotFound", "message": "..."}`. Invalid parameters or input answer `InvalidRequest`.
 - **Injection.** Handlers are resolved from the container and can type-hint `XrpcRequest`, `Viewer`, `Request` or any service.
 - **Unknown methods** answer `MethodNotImplemented`, and a known method called with the wrong HTTP method answers `InvalidRequest` naming the right one. Your own routes under `/xrpc` still take precedence.
+
+### Default queries
+
+A query that only lists or fetches one collection needs no handler class. Map it to the collection in `atp-appview.xrpc.collections`, give it a lexicon, and it is served straight from the index:
+
+```php
+'collections' => [
+    'com.example.listThings' => 'com.example.thing',
+],
+```
+
+The responses follow `com.atproto.repo.getRecord` and `listRecords`:
+
+- **With `uri`**, it answers `{"uri", "cid", "value"}` for that record, or `RecordNotFound` when the index does not hold it in this collection.
+- **Otherwise** it answers `{"records": [...], "cursor"}`, newest first by `sort_at`. `limit`, `cursor` and `reverse` page through the list, and `did` or `actor` (a handle the index knows) narrow it to one repo.
+
+Declare those parameters in the lexicon, whose `limit` default and maximum apply. The cursor is opaque and keyset based, so pages never skip or repeat a record while new ones arrive. Default queries are public (`Auth::None`), and a handler class for the same method takes precedence. Procedures still need a handler class.
+
+### Middleware
 
 Add `'web'` to `atp-appview.xrpc.middleware` so session viewers resolve in backend mode. A handler without a lexicon declares `type: 'query'` or `type: 'procedure'` on the attribute.
 

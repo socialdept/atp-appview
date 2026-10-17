@@ -24,7 +24,7 @@ class RecordWriter
      * Columns in the order every row supplies them. rev stays last: on MySQL
      * each assignment reads the stored rev, so it must change after them.
      */
-    public const COLUMNS = ['uri', 'did', 'collection', 'rkey', 'cid', 'record', 'indexed_at', 'deleted_at', 'rev'];
+    public const COLUMNS = ['uri', 'did', 'collection', 'rkey', 'cid', 'record', 'indexed_at', 'sort_at', 'deleted_at', 'rev'];
 
     /**
      * Rows per statement, well under every driver's bound parameter limit.
