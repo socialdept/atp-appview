@@ -15,8 +15,6 @@ use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpAppview\Xrpc\XrpcRequest;
 use SocialDept\AtpSchema\Exceptions\SchemaException;
 use SocialDept\AtpSchema\Facades\Schema;
-use SocialDept\AtpSchema\Parser\SchemaLoader;
-use SocialDept\AtpSchema\Parser\TypeParser;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -77,7 +75,7 @@ class XrpcController
         if ($method->lexicon !== null) {
             try {
                 $method->isQuery()
-                    ? $this->validateParams($method, $definition['parameters'] ?? null, $params)
+                    ? Schema::getValidator()->validateQuery($method->lexicon, $params)
                     : $this->validateInput($method, $definition['input'] ?? null, $input, $http);
             } catch (SchemaException $e) {
                 throw XrpcException::invalidRequest($e->getMessage());
@@ -88,53 +86,18 @@ class XrpcController
     }
 
     /**
-     * Validate query parameters against the lexicon's params block.
-     *
-     * A params block has the shape of an object schema, properties and
-     * required, so it is validated as one.
-     *
-     * @param  array<string, mixed>|null  $declared  The lexicon's parameters object
-     * @param  array<string, mixed>  $params
-     */
-    protected function validateParams(XrpcMethod $method, ?array $declared, array $params): void
-    {
-        if ($declared === null || ! is_array($declared['properties'] ?? null)) {
-            return;
-        }
-
-        $this->typeParser()
-            ->parse(['type' => 'object'] + array_diff_key($declared, ['type' => true]), $method->lexicon)
-            ->validate($params, '$');
-    }
-
-    /**
      * Validate a procedure body against its lexicon's input schema.
-     *
-     * The schema sits under input.schema, beside input.encoding, so it is
-     * parsed and checked directly rather than handing the whole input object
-     * to the validator.
      *
      * @param  array<string, mixed>|null  $declared  The lexicon's input object
      * @param  array<string, mixed>|null  $input
      */
     protected function validateInput(XrpcMethod $method, ?array $declared, ?array $input, Request $http): void
     {
-        if ($declared === null || ($declared['encoding'] ?? null) !== 'application/json' || ! is_array($declared['schema'] ?? null)) {
-            return;
-        }
-
-        if ($http->getContent() !== '' && ! $http->isJson()) {
+        if (($declared['encoding'] ?? null) === 'application/json' && $http->getContent() !== '' && ! $http->isJson()) {
             throw XrpcException::invalidRequest("{$method->nsid} expects an application/json body.");
         }
 
-        $this->typeParser()
-            ->parse($declared['schema'], $method->lexicon)
-            ->validate($input ?? [], '$');
-    }
-
-    protected function typeParser(): TypeParser
-    {
-        return new TypeParser(schemaLoader: app(SchemaLoader::class));
+        Schema::getValidator()->validateProcedure($method->lexicon, $input ?? []);
     }
 
     protected function respond(mixed $result, Request $request): Response
