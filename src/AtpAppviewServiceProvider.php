@@ -44,8 +44,14 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 __DIR__.'/../config/atp-appview.php' => config_path('atp-appview.php'),
             ], 'atp-appview-config');
 
+            $this->publishes([
+                __DIR__.'/../database/migrations' => database_path('migrations'),
+            ], 'atp-appview-migrations');
+
             $this->commands([ConsumeCommand::class, RestartCommand::class]);
         }
+
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
         $this->registerGuard();
 

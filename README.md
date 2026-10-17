@@ -154,6 +154,37 @@ Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rat
 
 [Tab](https://tangled.org/pds.dad/tab), a Tap fork that adds multiple signal collections, speaks the same protocol and works unchanged.
 
+## Index
+
+`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own.
+
+```php
+use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpAppview\Models\Record;
+
+Record::collection('app.example.post')->by($did)->latest('indexed_at')->get();
+
+$record->record;              // the record body as an array
+$record->identity->handle;    // the author, when the index has seen their identity
+Identity::find($did)->records;
+```
+
+### Idempotent writes
+
+Tap delivers at least once, so every write can safely happen twice:
+
+- A record is only overwritten by an event with the same or a newer revision. The revision is the repo commit's `rev`, a TID that the repository spec requires to increase within a repo. TIDs are 13 characters from an alphabet in ASCII order, so the `rev` column's binary collation compares them in time order. Every comparison is between versions of the same record, so it never crosses repos.
+- A delete becomes a tombstone that keeps the delete's revision and clears the body. An older create replayed during a backfill cannot bring the record back, and queries skip tombstones unless you call `withTrashed()`.
+- Several events for one record in a batch collapse to the last, which Tap's per-repo ordering makes the newest.
+
+Each batch is written with one statement per 500 records, inside a single transaction.
+
+Backfilled events all carry the repo's revision at the time Tap exported it, not the revision of the commit that last changed each record. Anything Tap delivers live afterwards has a newer revision, so the guard orders them correctly.
+
+### Known limitation
+
+When Tap resyncs a repo after losing track of it, it emits creates and updates for what the repo holds now, but no deletes for records removed in the meantime. A record deleted while Tap was out of sync for that repo stays in the index until something reconciles it against the repo. Reconciliation is planned.
+
 ## License
 
 The MIT License (MIT). Please see [LICENSE](LICENSE) for more information.

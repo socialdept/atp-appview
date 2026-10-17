@@ -72,7 +72,24 @@ return [
         'max_attempts' => (int) env('ATP_APPVIEW_INGEST_MAX_ATTEMPTS', 3),
 
         // Classes implementing BatchHandler, run in order for every batch.
-        'handlers' => [],
+        // RecordIndexer writes the records index.
+        'handlers' => [
+            \SocialDept\AtpAppview\Index\RecordIndexer::class,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Index
+    |--------------------------------------------------------------------------
+    |
+    | Where atp_records and atp_identities live. Null uses the default
+    | connection. Postgres, MySQL, MariaDB and SQLite are supported.
+    |
+    */
+
+    'index' => [
+        'connection' => env('ATP_APPVIEW_INDEX_CONNECTION'),
     ],
 
 ];
