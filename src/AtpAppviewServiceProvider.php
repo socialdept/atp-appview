@@ -96,6 +96,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
             if (FrontendAuth::enabled()) {
                 $this->app->make(FrontendAuth::class)->register();
+                $this->app->booted(fn () => $this->app->make(FrontendAuth::class)->registerViews());
             }
         }
 

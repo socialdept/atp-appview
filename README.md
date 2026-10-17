@@ -69,7 +69,20 @@ ATP_SERVICE_AUTH_AUDIENCE=did:web:example.com
 | `POST /session` | `atp.session.store` | Start a session from a service auth token |
 | `DELETE /session` | `atp.session.destroy` | End the session |
 
-The app supplies two pages: the login page (`login_route`) and a page the callback redirects to (`complete_route`) that runs `handleCallback()`. Users are found or created by DID like the `atp` guard does, and `handle_column` is kept current. Share the browser's settings with every page:
+Two pages sit around sign-in: the login page and the page the callback finishes on, which runs `handleCallback()`. Give the package a callback for each and it serves them as `login` (guests only) and `login/complete`, returning whatever the callback returns. The package needs no view layer, so Inertia stays your dependency, not this package's:
+
+```php
+// AppServiceProvider::boot()
+FrontendAuth::loginView(fn () => Inertia::render('auth/Login', [
+    'providers' => FrontendAuth::providers(),
+]));
+
+FrontendAuth::completeView(fn () => Inertia::render('auth/Callback'));
+```
+
+A Blade view works the same way. Without a callback the package registers no page, and your own routes named by `login_route` and `complete_route` take over.
+
+Users are found or created by DID like the `atp` guard does, and `handle_column` is kept current. Share the browser's settings with every page:
 
 ```php
 'atproto' => FrontendAuth::browserConfig(),
