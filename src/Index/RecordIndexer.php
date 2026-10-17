@@ -71,7 +71,7 @@ class RecordIndexer implements BatchHandler
                 'collection' => $event->collection,
                 'rkey' => $event->rkey,
                 'cid' => $deleted ? null : $event->cid,
-                'record' => $deleted || $event->record === null ? null : json_encode($event->record, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'record' => $deleted || $event->record === null ? null : json_encode(self::withoutNullCharacters($event->record), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'indexed_at' => $now,
                 'sort_at' => SortAt::for($deleted ? null : $event->record, $event->rkey, $clock, self::sortFields($event->collection)),
                 'deleted_at' => $deleted ? $now : null,
@@ -94,6 +94,33 @@ class RecordIndexer implements BatchHandler
         $map = (array) config('atp-appview.index.sort_fields', []);
 
         return array_values((array) ($map[$collection] ?? $map['*'] ?? ['createdAt']));
+    }
+
+    /**
+     * The record with every NUL character, in keys and string values,
+     * replaced with U+FFFD. Postgres cannot extract a field from a json value
+     * holding an escaped NUL, nor store one as jsonb, so one such record would
+     * break queries across the table or fail its batch forever. The stored
+     * value then no longer matches the record's CID, for those few records.
+     *
+     * @param  array<array-key, mixed>  $value
+     * @return array<array-key, mixed>
+     */
+    public static function withoutNullCharacters(array $value): array
+    {
+        $clean = [];
+
+        foreach ($value as $key => $item) {
+            $key = is_string($key) ? str_replace("\0", "\u{FFFD}", $key) : $key;
+
+            $clean[$key] = match (true) {
+                is_string($item) => str_replace("\0", "\u{FFFD}", $item),
+                is_array($item) => self::withoutNullCharacters($item),
+                default => $item,
+            };
+        }
+
+        return $clean;
     }
 
     /**

@@ -282,6 +282,12 @@ Run `appview:resort` after changing the fields: new records use them straight aw
 
 Dates are read as records actually write them: ISO 8601, a space in place of the `T`, or the date alone when the time part is unreadable. Dates that do not exist, and anything before 1970, count as missing. Record keys minted from an old date, as importers do, are trusted back to 1970 too.
 
+### Stored values
+
+- **Postgres** stores `record` as `jsonb`, so fields can be read and indexed without re-parsing each document.
+- **NUL characters** in a record's keys and strings are stored as U+FFFD. Postgres cannot read a field from json holding an escaped NUL, nor store one as jsonb, so a single such record would otherwise break queries across the table or fail its batch forever. For those rare records the stored value no longer matches the record's CID.
+- **MySQL and MariaDB** store the index's dates as `DATETIME`, not `TIMESTAMP`, which holds only 1970 to 2038 and converts through the session timezone.
+
 ### Indexes
 
 Each index on `atp_records` serves a specific read:

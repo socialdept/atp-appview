@@ -204,6 +204,13 @@ class RecordIndexerTest extends TestCase
         $this->assertSame('2024-01-01', Record::find('at://did:plc:alice/app.example.like/self')->sort_at->format('Y-m-d'));
     }
 
+    public function test_nul_characters_are_replaced_in_keys_and_values(): void
+    {
+        $this->index($this->event(RecordAction::Create, self::OLD, ['url' => "https://example.com/\0x", "k\0" => ['deep' => "a\0b"], 'n' => 1]));
+
+        $this->assertSame(['url' => "https://example.com/\u{FFFD}x", "k\u{FFFD}" => ['deep' => "a\u{FFFD}b"], 'n' => 1], $this->find()->record);
+    }
+
     public function test_resort_recomputes_sort_at_after_the_fields_change(): void
     {
         $this->index(new RecordEvent(1, self::DID, 'app.example.post', 'self', RecordAction::Create, 'bafy', self::OLD, ['publishedAt' => '2016-05-01T00:00:00Z'], false));
