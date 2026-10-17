@@ -6,28 +6,19 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
-use Mockery;
-use Mockery\MockInterface;
 use Orchestra\Testbench\TestCase;
-use ReflectionClass;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
-use SocialDept\AtpClient\AtpClient;
 use SocialDept\AtpClient\AtpClientServiceProvider;
-use SocialDept\AtpClient\Client\AtprotoClient;
-use SocialDept\AtpClient\Client\Requests\Atproto\RepoRequestClient;
 use SocialDept\AtpClient\Contracts\CredentialProvider;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
 use SocialDept\AtpClient\Data\Credentials;
-use SocialDept\AtpClient\Data\Responses\Atproto\Repo\CreateRecordResponse;
-use SocialDept\AtpClient\Data\Responses\Atproto\Repo\DeleteRecordResponse;
-use SocialDept\AtpClient\Data\Responses\Atproto\Repo\PutRecordResponse;
-use SocialDept\AtpClient\Exceptions\AtpResponseException;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeAtpManager;
 use SocialDept\AtpClient\Testing\FakeResponse;
+use SocialDept\AtpClient\Testing\RecordedRequest;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 use SocialDept\AtpSupport\Facades\Resolver;
@@ -94,29 +85,10 @@ class ProceduresTest extends TestCase
         $this->app->instance(CredentialProvider::class, $credentials);
     }
 
-    /**
-     * The repo client the viewer's session writes through. atp-client's fake
-     * cannot fake repo writes yet, since they read the repo from a session
-     * the fake does not have, so writes use a double.
-     */
-    protected function repo(): MockInterface
-    {
-        $repo = Mockery::mock(RepoRequestClient::class);
-        $atproto = (new ReflectionClass(AtprotoClient::class))->newInstanceWithoutConstructor();
-        $atproto->repo = $repo;
-        $client = (new ReflectionClass(AtpClient::class))->newInstanceWithoutConstructor();
-        $client->atproto = $atproto;
-
-        Atp::shouldReceive('as')->with(self::DID)->andReturn($client);
-
-        return $repo;
-    }
-
     public function test_create_writes_through_the_viewers_session_and_indexes_straight_away(): void
     {
-        $this->repo()->shouldReceive('createRecord')->once()
-            ->with(self::COLLECTION, ['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z', '$type' => self::COLLECTION], null, false)
-            ->andReturn(CreateRecordResponse::fromArray(['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab', 'cid' => 'bafynew', 'commit' => ['cid' => 'bafycommit', 'rev' => self::REV]]));
+        $this->atp = Atp::fake();
+        $this->atp->stub('com.atproto.repo.createRecord', ['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab', 'cid' => 'bafynew', 'commit' => ['cid' => 'bafycommit', 'rev' => self::REV]]);
 
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.makeThing', ['record' => ['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z']])
@@ -127,15 +99,19 @@ class ProceduresTest extends TestCase
         $this->assertSame(['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z', '$type' => self::COLLECTION], $record->record);
         $this->assertSame(self::REV, $record->rev);
         $this->assertSame('bafynew', $record->cid);
+
+        $this->atp->assertCalledAuthenticated('com.atproto.repo.createRecord', self::DID);
+        $this->atp->assertCalled('com.atproto.repo.createRecord', fn (RecordedRequest $request) => $request->body['repo'] === self::DID
+            && $request->body['collection'] === self::COLLECTION
+            && $request->body['record'] === ['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z', '$type' => self::COLLECTION]
+            && ($request->body['validate'] ?? null) === false);
     }
 
     public function test_put_and_delete_write_and_index_too(): void
     {
-        $repo = $this->repo();
-        $repo->shouldReceive('putRecord')->once()->with(self::COLLECTION, 'self', ['text' => 'v2', '$type' => self::COLLECTION], false, 'bafyold')
-            ->andReturn(PutRecordResponse::fromArray(['uri' => 'at://did:plc:alice/com.example.thing/self', 'cid' => 'bafyput', 'commit' => ['cid' => 'c', 'rev' => self::REV]]));
-        $repo->shouldReceive('deleteRecord')->once()->with(self::COLLECTION, 'self', null)
-            ->andReturn(DeleteRecordResponse::fromArray(['commit' => ['cid' => 'c', 'rev' => '3m2zzzzzzzzzz']]));
+        $this->atp = Atp::fake();
+        $this->atp->stub('com.atproto.repo.putRecord', ['uri' => 'at://did:plc:alice/com.example.thing/self', 'cid' => 'bafyput', 'commit' => ['cid' => 'c', 'rev' => self::REV]]);
+        $this->atp->stub('com.atproto.repo.deleteRecord', ['commit' => ['cid' => 'c', 'rev' => self::REV]]);
 
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.replaceThing', ['rkey' => 'self', 'record' => ['text' => 'v2'], 'swapRecord' => 'bafyold'])
@@ -146,11 +122,17 @@ class ProceduresTest extends TestCase
         $this->actingAs($this->user, 'web')->postJson('/xrpc/com.example.removeThing', ['rkey' => 'self'])->assertOk();
         $this->assertNull(Record::find('at://did:plc:alice/com.example.thing/self'));
         $this->assertNotNull(Record::withTrashed()->find('at://did:plc:alice/com.example.thing/self')->deleted_at);
+
+        $this->atp->assertCalled('com.atproto.repo.putRecord', fn (RecordedRequest $request) => $request->body['rkey'] === 'self'
+            && $request->body['record'] === ['text' => 'v2', '$type' => self::COLLECTION]
+            && $request->body['swapRecord'] === 'bafyold');
+        $this->atp->assertCalled('com.atproto.repo.deleteRecord', fn (RecordedRequest $request) => $request->body['rkey'] === 'self'
+            && $request->body['collection'] === self::COLLECTION);
     }
 
     public function test_a_record_its_lexicon_refuses_never_reaches_the_pds(): void
     {
-        $this->repo()->shouldNotReceive('createRecord');
+        $this->atp = Atp::fake();
 
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.makeThing', ['record' => ['createdAt' => '2026-10-01T00:00:00Z']])
@@ -160,6 +142,8 @@ class ProceduresTest extends TestCase
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.makeThing', ['record' => ['$type' => 'com.example.other', 'text' => 'x']])
             ->assertStatus(400);
+
+        $this->atp->assertNothingCalled();
     }
 
     public function test_a_frontend_mode_account_is_told_to_write_to_its_pds(): void
@@ -177,17 +161,20 @@ class ProceduresTest extends TestCase
     public function test_a_blocked_repo_cannot_write_through_the_server(): void
     {
         app(Blocklist::class)->block(self::DID, self::COLLECTION);
-        $this->repo()->shouldNotReceive('createRecord');
+        $this->atp = Atp::fake();
 
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.makeThing', ['record' => ['text' => 'hello']])
             ->assertStatus(403)
             ->assertJson(['error' => 'RepoBlocked']);
+
+        $this->atp->assertNothingCalled();
     }
 
     public function test_the_pdss_own_error_comes_back_as_it_was(): void
     {
-        $this->repo()->shouldReceive('putRecord')->andThrow(new AtpResponseException('InvalidSwap', 'Record was at bafyother', 400, 'com.atproto.repo.putRecord', []));
+        $this->atp = Atp::fake();
+        $this->atp->stub('com.atproto.repo.putRecord', FakeResponse::error('InvalidSwap', 'Record was at bafyother', 400));
 
         $this->actingAs($this->user, 'web')
             ->postJson('/xrpc/com.example.replaceThing', ['rkey' => 'self', 'record' => ['text' => 'v2'], 'swapRecord' => 'bafyold'])
