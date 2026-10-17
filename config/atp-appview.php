@@ -16,12 +16,16 @@ return [
         | - 'frontend': the browser holds the tokens and reaches the AppView
         |               through its PDS, which signs a service auth token.
         |
+        | Frontend is the default and the safer choice: the server stores no
+        | tokens. Choose backend only when the app must act for users while
+        | they are away.
+        |
         | The guard accepts both kinds of credential either way, so switching
         | modes later does not change endpoint code.
         |
         */
 
-        'mode' => env('ATP_APPVIEW_AUTH_MODE', 'backend'),
+        'mode' => env('ATP_APPVIEW_AUTH_MODE', 'frontend'),
 
         // The guard the atp.viewer middleware resolves, configured in
         // config/auth.php with the "atp" driver.

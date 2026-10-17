@@ -33,6 +33,19 @@ It builds on [atp-client](https://github.com/socialdept/atp-client) for OAuth, s
 composer require socialdept/atp-appview
 ```
 
+## Frontend and backend mode
+
+Where the user's OAuth tokens live decides how records get written.
+
+| | Frontend mode (default) | Backend mode |
+|---|---|---|
+| Tokens | In the browser, with a non-extractable DPoP key | On the server |
+| Writing records | The browser calls `com.atproto.repo.*` on its own PDS | Default procedures, through the server's session |
+| Reaching the AppView | Through the PDS, with `atproto-proxy` and service auth | The session cookie, or service auth |
+| Seeing your own write | `sync_record`, or show it optimistically | Indexed as part of the write |
+
+Frontend mode is the default and the safer choice: the server stores no tokens, and it is how atproto apps such as Bluesky's own work. Choose backend mode only when the app must act for users while they are away, such as scheduled publishing. `atp-appview.auth.mode` records the choice.
+
 ## The atp guard
 
 The `atp` guard answers one question per request: which DID is the viewer, and how did they prove it. It returns your `User` model, so `auth()`, Gates and policies work unchanged.
