@@ -113,7 +113,8 @@ class Blocklist
 
         // Repos still under another blanket rule stay out of Tap.
         $repos = $this->reposUnder($block);
-        $dids = array_values(array_filter(array_keys($repos), fn (string $did) => ! $this->blocksRepo($did, $repos[$did])));
+        $this->refresh();
+        $dids = array_values(array_filter(array_keys($repos), fn (string $did) => ! $this->matchesRepo($did, $repos[$did])));
 
         try {
             if ($block->isBlanket()) {
@@ -174,11 +175,11 @@ class Blocklist
         foreach ($batch->events as $event) {
             // Any event from a repo under a blanket rule means Tap is
             // following it again.
-            if ($this->blocksRepo($event->did, $pds[$event->did] ?? null)) {
+            if ($this->matchesRepo($event->did, $pds[$event->did] ?? null)) {
                 $returned[$event->did] = true;
             }
 
-            $rule = $event instanceof RecordEvent ? $this->ruleFor($event->did, $event->collection, $pds[$event->did] ?? null) : null;
+            $rule = $event instanceof RecordEvent ? $this->matchRule($event->did, $event->collection, $pds[$event->did] ?? null) : null;
 
             if ($rule === null) {
                 $kept[] = $event;
@@ -205,6 +206,27 @@ class Blocklist
     {
         $this->refresh();
 
+        return $this->matchRule($did, $collection, $pds);
+    }
+
+    /**
+     * Whether a blanket rule keeps this repo out entirely, judged by its DID
+     * and its PDS as last resolved.
+     */
+    public function blocksRepo(string $did, ?string $pds = null): bool
+    {
+        $this->refresh();
+
+        return $this->matchesRepo($did, $pds);
+    }
+
+    /**
+     * ruleFor() against the rules already loaded. Callers looping over a
+     * batch refresh once first, since each refresh reads the cache, and with
+     * the database store that is a query per call.
+     */
+    protected function matchRule(string $did, string $collection, ?string $pds): ?Block
+    {
         foreach ($this->didRules[$did] ?? [] as $rule) {
             if ($rule->coversCollection($collection)) {
                 return $rule;
@@ -221,13 +243,10 @@ class Blocklist
     }
 
     /**
-     * Whether a blanket rule keeps this repo out entirely, judged by its DID
-     * and its PDS as last resolved.
+     * blocksRepo() against the rules already loaded.
      */
-    public function blocksRepo(string $did, ?string $pds = null): bool
+    protected function matchesRepo(string $did, ?string $pds): bool
     {
-        $this->refresh();
-
         foreach ($this->didRules[$did] ?? [] as $rule) {
             if ($rule->isBlanket()) {
                 return true;
@@ -266,7 +285,7 @@ class Blocklist
             }
         }
 
-        return array_values(array_filter($dids, fn (string $did) => ! $this->blocksRepo($did, $pds[$did] ?? null)));
+        return array_values(array_filter($dids, fn (string $did) => ! $this->matchesRepo($did, $pds[$did] ?? null)));
     }
 
     /**
