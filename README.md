@@ -148,6 +148,25 @@ class IndexPosts implements BatchHandler
 
 Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rather than one query per event.
 
+### Backfill status
+
+Tap marks each record event: `live` false while it backfills a repo, true for commits arriving in real time. It exposes no count of repos still waiting, so `IngestStats` reads the stream instead. A backfill is running while backfill events keep arriving.
+
+```php
+use SocialDept\AtpAppview\Ingest\IngestStats;
+
+$stats = app(IngestStats::class);
+
+$stats->backfilling();      // a backfill event arrived in the last minute
+$stats->lastBackfillAt();   // when the last one arrived
+$stats->lastLiveAt();
+$stats->perMinute();        // ['backfill' => …, 'live' => …, 'identity' => …] over five minutes
+```
+
+That covers every backfill, including later ones such as repos `appview:discover` adds. Events are counted as Tap delivered them, before the blocklist, so a backfill of blocked repos still counts. The consumer writes its counts to the cache at most every five seconds, in per-minute buckets several consumers can share. A stopped consumer reads as not backfilling, so pair this with Tap's outbox size, which stays above zero while events wait for a consumer.
+
+`TapAdmin::stats('resync-buffer')` is not a queue of repos. It counts live events Tap holds back for repos that are mid-backfill.
+
 ### Discovering repos
 
 Tap follows new repos live only for its one `TAP_SIGNAL_COLLECTION`. `appview:discover` finds every repo holding records in each of your collections and has Tap backfill and follow them, so an AppView can index several collections on plain Tap:

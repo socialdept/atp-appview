@@ -39,6 +39,7 @@ class IngestBuffer
      * @param  Closure(int): void  $ack  Sends one acknowledgement to Tap
      * @param  Closure(int): void|null  $sleep  Waits the given milliseconds between attempts
      * @param  Blocklist|null  $blocklist  Drops blocked records before the handlers see them
+     * @param  IngestStats|null  $stats  Counts what Tap delivered, blocked or not
      */
     public function __construct(
         protected array $handlers,
@@ -47,6 +48,7 @@ class IngestBuffer
         protected int $maxAttempts = 3,
         protected ?Closure $sleep = null,
         protected ?Blocklist $blocklist = null,
+        protected ?IngestStats $stats = null,
     ) {
     }
 
@@ -87,6 +89,7 @@ class IngestBuffer
 
         if (! $batch->isEmpty()) {
             $this->handleWithRetries($batch);
+            $this->stats?->record($batch);
         }
 
         foreach ($ids as $id) {

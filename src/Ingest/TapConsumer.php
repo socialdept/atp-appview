@@ -77,9 +77,10 @@ class TapConsumer
         protected int $maxReconnectDelay = 60,
         ?LoopInterface $loop = null,
         ?Blocklist $blocklist = null,
+        protected ?IngestStats $stats = null,
     ) {
         $this->loop = $loop ?? Loop::get();
-        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts, blocklist: $blocklist);
+        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts, blocklist: $blocklist, stats: $stats);
     }
 
     /**
@@ -139,6 +140,7 @@ class TapConsumer
     {
         $this->stopReason ??= $reason;
         $this->stopping = true;
+        $this->stats?->flush();
         $this->buffer->clear();
         $this->connection?->close();
         $this->loop->stop();
