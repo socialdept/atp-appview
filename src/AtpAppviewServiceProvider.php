@@ -9,7 +9,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
 use SocialDept\AtpAppview\Auth\Viewer;
+use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
+use SocialDept\AtpAppview\Ingest\TapAdmin;
+use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 
 class AtpAppviewServiceProvider extends ServiceProvider
@@ -17,6 +20,20 @@ class AtpAppviewServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/atp-appview.php', 'atp-appview');
+
+        $this->app->singleton(TapConsumer::class, fn (Application $app) => new TapConsumer(
+            handlers: array_map(fn (string $class) => $app->make($class), config('atp-appview.ingest.handlers', [])),
+            url: config('atp-appview.ingest.url'),
+            password: config('atp-appview.ingest.password'),
+            batchSize: (int) config('atp-appview.ingest.batch_size', 200),
+            flushMs: (int) config('atp-appview.ingest.flush_ms', 500),
+            maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
+        ));
+
+        $this->app->singleton(TapAdmin::class, fn () => new TapAdmin(
+            config('atp-appview.ingest.admin_url'),
+            config('atp-appview.ingest.password'),
+        ));
     }
 
     public function boot(): void
@@ -25,6 +42,8 @@ class AtpAppviewServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/atp-appview.php' => config_path('atp-appview.php'),
             ], 'atp-appview-config');
+
+            $this->commands([ConsumeCommand::class]);
         }
 
         $this->registerGuard();

@@ -87,6 +87,54 @@ Write to the user's repo only when `canActOnRepo()` is true. In frontend mode th
 A verified DID with no local user gets one keyed by `did_column` when `provision` is `create`, the default. Users are only ever created from a verified credential, never from a DID in a request body. Set `provision` to `none` to leave the viewer without a user instead.
 
 An issuer with a fragment, such as `did:web:feed.example#bsky_fg`, is a service rather than a person. It is only accepted when listed in `auth.trusted_services`, and is never provisioned.
+## Ingest
+
+`php artisan appview:consume` reads [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap)'s acknowledged websocket channel in batches and hands each batch to your handlers. Tap does the network work: crawling, fetching repos, verifying commits and ordering events per repo. The worker only writes what arrives.
+
+```env
+ATP_APPVIEW_TAP_URL=ws://localhost:2480/channel
+ATP_APPVIEW_TAP_ADMIN_URL=http://localhost:2480
+```
+
+### Why it does not flood
+
+Tap's webhook mode sends one HTTP request per record, which buries a PHP application during a backfill. The websocket channel is acknowledged instead: Tap stops sending once its outbox of unacknowledged events is full, and the worker acknowledges a batch only after every handler has committed it. While a batch is being handled the worker reads nothing, so the database sets the pace.
+
+1. Events are buffered until `batch_size` arrive (200) or `flush_ms` passes (500).
+2. Every handler receives the batch, in order.
+3. Each event is acknowledged.
+4. A failing batch is retried `max_attempts` times (3) with backoff. After that the worker reconnects without acknowledging it, and Tap redelivers it.
+
+Delivery is at least once and Tap keeps events for one repo in order, so handlers must apply a batch idempotently. Running several workers is fine: Tap shards events across connected clients.
+
+### Handlers
+
+```php
+use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
+
+class IndexPosts implements BatchHandler
+{
+    public function handle(Batch $batch): void
+    {
+        foreach ($batch->records() as $event) {
+            // $event->uri(), $event->action, $event->record, $event->isBackfill()
+        }
+
+        foreach ($batch->identities() as $event) {
+            // $event->did, $event->handle, $event->active
+        }
+    }
+}
+```
+
+Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rather than one query per event.
+
+### Tap admin
+
+`TapAdmin` wraps Tap's admin API: `addRepos()` to backfill and follow specific repos, `removeRepos()`, `info($did)`, `stats('repo-count')` and `healthy()`.
+
+[Tab](https://tangled.org/pds.dad/tab), a Tap fork that adds multiple signal collections, speaks the same protocol and works unchanged.
 
 ## License
 

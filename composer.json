@@ -12,7 +12,12 @@
     "require": {
         "php": "^8.3",
         "ext-json": "*",
+        "guzzlehttp/guzzle": "^7.5",
+        "illuminate/console": "^11.0|^12.0|^13.0",
+        "illuminate/http": "^11.0|^12.0|^13.0",
         "illuminate/support": "^11.0|^12.0|^13.0",
+        "ratchet/pawl": "^0.4",
+        "react/event-loop": "^1.5",
         "socialdept/atp-client": "^0.3.8",
         "socialdept/atp-support": "^0.3.2"
     },
