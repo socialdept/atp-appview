@@ -10,6 +10,7 @@ use Ratchet\Client\WebSocket;
 use Ratchet\RFC6455\Messaging\MessageInterface;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
+use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\TapEvents;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
@@ -75,9 +76,10 @@ class TapConsumer
         protected int $maxAttempts = 3,
         protected int $maxReconnectDelay = 60,
         ?LoopInterface $loop = null,
+        ?Blocklist $blocklist = null,
     ) {
         $this->loop = $loop ?? Loop::get();
-        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts);
+        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts, blocklist: $blocklist);
     }
 
     /**

@@ -9,10 +9,15 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
 use SocialDept\AtpAppview\Auth\Viewer;
+use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Blocklist\PdsLookup;
+use SocialDept\AtpAppview\Console\BlockCommand;
+use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
+use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -33,7 +38,15 @@ class AtpAppviewServiceProvider extends ServiceProvider
             batchSize: (int) config('atp-appview.ingest.batch_size', 200),
             flushMs: (int) config('atp-appview.ingest.flush_ms', 500),
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
+            blocklist: $app->make(Blocklist::class),
         ));
+
+        $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
+            plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
+            ttl: (int) config('atp-appview.blocklist.pds_ttl', 86400),
+        ));
+
+        $this->app->singleton(Blocklist::class);
 
         $this->app->singleton(XrpcRegistry::class);
 
@@ -54,7 +67,15 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => database_path('migrations'),
             ], 'atp-appview-migrations');
 
-            $this->commands([ConsumeCommand::class, DiscoverCommand::class, RestartCommand::class, RoutesCommand::class]);
+            $this->commands([
+                BlockCommand::class,
+                BlocksCommand::class,
+                ConsumeCommand::class,
+                DiscoverCommand::class,
+                RestartCommand::class,
+                RoutesCommand::class,
+                UnblockCommand::class,
+            ]);
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
