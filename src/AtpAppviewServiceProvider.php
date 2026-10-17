@@ -10,6 +10,7 @@ use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
+use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -43,7 +44,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 __DIR__.'/../config/atp-appview.php' => config_path('atp-appview.php'),
             ], 'atp-appview-config');
 
-            $this->commands([ConsumeCommand::class]);
+            $this->commands([ConsumeCommand::class, RestartCommand::class]);
         }
 
         $this->registerGuard();
