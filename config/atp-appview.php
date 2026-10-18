@@ -121,10 +121,12 @@ return [
         // Attempts per batch before giving up and letting Tap redeliver it.
         'max_attempts' => (int) env('ATP_APPVIEW_INGEST_MAX_ATTEMPTS', 3),
 
-        // Collections appview:discover finds repos for. Tap follows new repos
-        // live only for its own TAP_SIGNAL_COLLECTION, so schedule discovery
-        // to pick up repos that start using the others.
-        'collections' => [],
+        // Collections the index ingests, comma separated in the environment.
+        // Pass the same variable to Tap as its collection filters, so the two
+        // never disagree. appview:backfill:work backfills a collection added
+        // here, once Tap has been restarted with it. appview:discover finds
+        // repos for them too.
+        'collections' => array_values(array_filter(array_map('trim', explode(',', (string) env('ATP_APPVIEW_COLLECTIONS', ''))))),
 
         // Where appview:discover lists repos by collection: a relay, or
         // Light Rail at https://lightrail.microcosm.blue.
@@ -135,7 +137,31 @@ return [
         'handlers' => [
             \SocialDept\AtpAppview\Index\RecordIndexer::class,
             \SocialDept\AtpAppview\Lexicons\FollowedLexiconsHandler::class,
+            // Marks repos delivered as a running backfill's records arrive.
+            \SocialDept\AtpAppview\Backfill\BackfillTracker::class,
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Backfill
+    |--------------------------------------------------------------------------
+    |
+    | appview:backfill, and appview:backfill:work on a schedule, have Tap
+    | backfill collections the index starts ingesting. A Tap with resync
+    | routes, such as the socialde.pt/tap fork, keeps what it already sent;
+    | on any other Tap, repos are removed and added again.
+    |
+    */
+
+    'backfill' => [
+        // Repos handed to Tap per request.
+        'chunk' => (int) env('ATP_APPVIEW_BACKFILL_CHUNK', 500),
+
+        // How long Tap may go without delivering a repo before a backfill is
+        // ended anyway. The repos left had nothing in the collection, or Tap
+        // could not fetch them.
+        'quiet_minutes' => (int) env('ATP_APPVIEW_BACKFILL_QUIET_MINUTES', 10),
     ],
 
     /*

@@ -12,6 +12,8 @@ use SocialDept\AtpAppview\Auth\FrontendAuth;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Blocklist\PdsLookup;
+use SocialDept\AtpAppview\Console\BackfillCommand;
+use SocialDept\AtpAppview\Console\BackfillWorkCommand;
 use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
@@ -89,6 +91,8 @@ class AtpAppviewServiceProvider extends ServiceProvider
             ], 'atp-appview-migrations');
 
             $this->commands([
+                BackfillCommand::class,
+                BackfillWorkCommand::class,
                 BlockCommand::class,
                 BlocksCommand::class,
                 ConsumeCommand::class,
