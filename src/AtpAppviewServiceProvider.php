@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview;
 
+use CoInfra\Image\UrlBuilder;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
@@ -23,6 +24,7 @@ use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
+use SocialDept\AtpAppview\Console\RefsCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
@@ -31,10 +33,15 @@ use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
 use SocialDept\AtpAppview\Http\Controllers\TapWebhookController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
+use SocialDept\AtpAppview\Images\BlobUrls;
+use SocialDept\AtpAppview\Images\InfraCoopBlobUrls;
+use SocialDept\AtpAppview\Images\PdsBlobUrls;
+use SocialDept\AtpAppview\Index\Refs;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
+use SocialDept\AtpAppview\Profiles\Profiles;
 use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
@@ -67,6 +74,15 @@ class AtpAppviewServiceProvider extends ServiceProvider
         $this->app->singleton(Blocklist::class);
 
         $this->app->singleton(XrpcRegistry::class);
+
+        $this->app->singleton(Refs::class);
+
+        // One list of profile sources, so fluent changes at boot stick.
+        $this->app->singleton(Profiles::class);
+
+        $this->app->singleton(BlobUrls::class, fn () => config('atp-appview.images.driver') === 'pds'
+            ? new PdsBlobUrls()
+            : new InfraCoopBlobUrls(new UrlBuilder((string) config('atp-appview.images.url', UrlBuilder::DEFAULT_BASE))));
 
         $this->app->singleton(TapAdmin::class, fn () => new TapAdmin(
             config('atp-appview.ingest.admin_url'),
@@ -102,6 +118,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsCommand::class,
                 LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
+                RefsCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
                 RestartCommand::class,

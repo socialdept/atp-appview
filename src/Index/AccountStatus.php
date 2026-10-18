@@ -135,8 +135,16 @@ class AccountStatus
         foreach (array_chunk($dids, 500) as $chunk) {
             // Most account events are for active accounts, so touch only rows
             // that change.
-            $this->connection->table('atp_identities')->whereIn('did', $chunk)->whereNotNull('inactive_since')->update(['inactive_since' => null]);
-            $this->connection->table('atp_records')->whereIn('did', $chunk)->whereNotNull('hidden_at')->update(['hidden_at' => null]);
+            // Only accounts that were inactive have anything hidden.
+            $returning = $this->connection->table('atp_identities')->whereIn('did', $chunk)->whereNotNull('inactive_since')->pluck('did')->all();
+
+            if ($returning === []) {
+                continue;
+            }
+
+            $this->connection->table('atp_identities')->whereIn('did', $returning)->update(['inactive_since' => null]);
+            $this->connection->table('atp_records')->whereIn('did', $returning)->whereNotNull('hidden_at')->update(['hidden_at' => null]);
+            Refs::hide($this->connection, $returning, false);
         }
     }
 
@@ -162,6 +170,7 @@ class AccountStatus
 
         foreach (array_chunk($dids, 500) as $chunk) {
             $this->live($chunk)->whereNull('hidden_at')->update(['hidden_at' => $now]);
+            Refs::hide($this->connection, $chunk);
         }
     }
 
@@ -187,6 +196,7 @@ class AccountStatus
 
         foreach (array_chunk($dids, 500) as $chunk) {
             $count += $this->live($chunk)->update(['deleted_at' => $now, 'record' => null, 'cid' => null, 'hidden_at' => null]);
+            Refs::drop($this->connection, $chunk);
         }
 
         return $count;

@@ -18,6 +18,8 @@ final class XrpcMethod
         public readonly ?LexiconDocument $lexicon = null,
         public readonly ?string $collection = null,
         public readonly ?string $action = null,
+        // For a default view query, the View class it hydrates records into.
+        public readonly ?string $view = null,
     ) {
     }
 

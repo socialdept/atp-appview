@@ -772,6 +772,105 @@ Add `'web'` to `atp-appview.xrpc.middleware` so session viewers resolve in backe
 
 **CSRF.** The web group's CSRF check would refuse every procedure a PDS calls on a user's behalf, since those carry a service auth bearer token and no CSRF token. So XRPC routes take that check off and run their own: requests with a bearer token, or with no session cookie, pass, since nothing the browser attaches on its own is involved. A request riding on a session cookie still runs your application's own CSRF middleware, with its exceptions, and a failure answers `{"error": "CsrfTokenMismatch"}` with status 419. Browser code calling procedures with the session sends the token as usual, as Inertia and axios do.
 
+## Hydrated views
+
+Default queries answer with records as stored. A view answers with what an app actually shows: the record, who wrote it, the records it points at, how many records point back at it, and what the viewer has done with it.
+
+```php
+use SocialDept\AtpAppview\Views\Parts\{Author, Count, Embed, ViewerRef};
+use SocialDept\AtpAppview\Views\View;
+
+class PostView extends View
+{
+    public function collection(): string
+    {
+        return 'com.example.post';
+    }
+
+    public function parts(): array
+    {
+        return [
+            'author' => new Author(),
+            'quote' => new Embed('quote.uri', PostView::class),
+            'likeCount' => new Count('com.example.like', 'subject.uri'),
+            'replyCount' => new Count('com.example.post', 'reply.parent.uri'),
+            'viewer' => [
+                'like' => new ViewerRef('com.example.like', 'subject.uri'),
+            ],
+        ];
+    }
+}
+```
+
+Serve it by mapping a query to it, with a lexicon for the method:
+
+```php
+// config/atp-appview.php
+'xrpc' => [
+    'views' => [
+        'com.example.getPosts' => \App\Views\PostView::class,
+    ],
+],
+```
+
+It pages, filters by `did` or `actor` and looks up one `uri` exactly as a default query does, answering `{posts: [...], cursor}` or one view. The key is the collection's last segment, plural, or whatever `key()` returns. Auth is optional, so a viewer signed in by session or by service auth through their PDS gets `viewer` state. That needs the `atp` guard configured, as any method with auth does. A view used from a handler class instead goes in `atp-appview.views`, and `Hydrator::hydrate($view, $records, $viewerDid)` builds it.
+
+| Part | Gives | Costs per page |
+| --- | --- | --- |
+| `Author` | `did`, `handle`, `displayName`, `avatar` from [profiles](#profiles) | one query per profile source, by primary key |
+| `Embed($path, $view)` | the record a field points at, in that view's `summary()` | one query by primary key |
+| `Count($collection, $path)` | how many visible records point here through that field | every count in the view shares one query |
+| `ViewerRef($collection, $path)` | the uri of the viewer's own record pointing here, or null | every viewer field shares one query, none without a viewer |
+
+So a page costs the same number of queries whatever its size, and adding a count to a view adds no query. Paths are dot paths, and a field may hold one at-uri or a list. Override `summary()` to embed a short form, and `base()` to change the fields every view starts with.
+
+### References
+
+Counts and viewer state read `atp_record_refs`, which records which indexed record points at which through which field. Its fields come from the views' `Count` and `ViewerRef` parts, plus any in `index.refs`. It is kept as records are indexed: a batch rewrites only the references of records it actually changed, from the records already in memory, and writes only what differs, so a resync of unchanged records writes nothing. A tombstoned record has no references, and a hidden account's are marked hidden, so a count reads one index and never touches `atp_records`.
+
+A field added later is built for records already indexed by `appview:refs`, which also drops a removed one. Schedule it:
+
+```php
+Schedule::command('appview:refs')->everyFiveMinutes()->withoutOverlapping();
+```
+
+### Profiles
+
+`Profiles` turns accounts into profiles for `Author` and anything else that shows people. Sources are tried in order, and the first with a record for the account is its profile, empty fields and all, so one app's profile never borrows another's bio. Set `profiles.merge` to `field` to fill each standard field from the first source that has it instead.
+
+```php
+// config/atp-appview.php
+'profiles' => [
+    'sources' => [
+        ['collection' => 'com.example.actor.profile', 'fields' => ['pronouns']],
+        ['collection' => 'app.bsky.actor.profile'],
+    ],
+],
+```
+
+Every profile has `displayName`, `description`, `avatar` and `banner`. A source's extra `fields` are passed through, and only when that source is the one used. A lexicon that names the standard fields differently maps them with `aliases`, and a field can be computed, fluently at boot:
+
+```php
+Profiles::source('com.example.actor.profile')
+    ->aliases(['displayName' => 'name'])
+    ->map('tagline', fn (array $record) => $record['bio'] ?? null);
+```
+
+An account with no profile anywhere is its `did` and `handle`, with `displayName` null for clients to fall back to the handle. A deactivated account shows only those two.
+
+Profiles come from the index for collections it ingests. List them as [companion collections](#companion-collections), so the profiles of followed repos are indexed without following every account that has one. An account the index does not know, or whose profile collection is still being backfilled, is fetched from Slingshot instead, every account on a page at once, and cached for an hour, a missing profile included.
+
+### Images
+
+Blobs such as avatars are served through [img.infra.coop](https://img.infra.coop), a free image CDN for atproto that resizes and caches them, so browsers are never handed full-size originals. Each use maps to one of its [presets](https://img.infra.coop/presets): `avatar-sm` for an embedded author or icon, `avatar` and `banner` on a profile. The public instance asks for a small credit linking to [infra.coop](https://infra.coop).
+
+```dotenv
+ATP_APPVIEW_IMAGES=infra                         # or pds, for the original from the account's PDS
+ATP_APPVIEW_IMAGES_URL=https://img.infra.coop    # or a private deployment
+```
+
+`Blobs::url($blob, $did, 'icon')` builds one in a view's `summary()`.
+
 ## License
 
 The MIT License (MIT). Please see [LICENSE](LICENSE) for more information.

@@ -256,6 +256,80 @@ return [
         'inactive' => [
             'purge_after_days' => (int) env('ATP_APPVIEW_PURGE_INACTIVE_AFTER_DAYS', 180),
         ],
+
+        // Reference fields kept in atp_record_refs beyond those the views'
+        // Count and ViewerRef parts already name, by collection, as dot
+        // paths. appview:refs builds a field added here for records already
+        // indexed.
+        //
+        //     'com.example.like' => ['subject.uri'],
+        'refs' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Views
+    |--------------------------------------------------------------------------
+    |
+    | Hydrated views: a record with its author, the records it embeds, counts
+    | of records pointing at it and the viewer's own. Views served from
+    | atp-appview.xrpc.views are registered there. List any others here, used
+    | from handler classes, so the references their parts count are kept.
+    |
+    */
+
+    'views' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Profiles
+    |--------------------------------------------------------------------------
+    |
+    | Where an account's profile comes from, in order. The first source with
+    | a record for the account is its profile, empty fields and all, unless
+    | merge is `field`, where each standard field takes the first source that
+    | has it. Every profile has displayName, description, avatar and banner. A
+    | source can add `fields` passed through as they are, and `aliases` for a
+    | lexicon naming the standard fields differently, or be set fluently:
+    | Profiles::source('com.example.profile')->fields(['pronouns']).
+    |
+    | Profiles come from the index for collections it ingests, usually as
+    | companion collections, and are fetched from Slingshot otherwise.
+    |
+    */
+
+    'profiles' => [
+        'merge' => env('ATP_APPVIEW_PROFILES_MERGE', 'record'),
+        'sources' => [
+            ['collection' => 'app.bsky.actor.profile', 'fields' => ['pronouns', 'website']],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Images
+    |--------------------------------------------------------------------------
+    |
+    | Where views point browsers for blobs such as avatars. `infra` resizes
+    | them through img.infra.coop (https://img.infra.coop/presets), a free
+    | image CDN for atproto that asks for a small credit linking to
+    | infra.coop, or a private deployment at `url`. `pds` links the original
+    | blob on the account's PDS. Each use maps to an img.infra.coop preset.
+    |
+    */
+
+    'images' => [
+        'driver' => env('ATP_APPVIEW_IMAGES', 'infra'),
+        'url' => env('ATP_APPVIEW_IMAGES_URL', 'https://img.infra.coop'),
+        'presets' => [
+            // An author embedded in another view.
+            'author' => 'avatar-sm',
+            // The avatar on a profile view.
+            'avatar' => 'avatar',
+            'banner' => 'banner',
+            // A small square image embedded in another view, such as an icon.
+            'icon' => 'avatar-sm',
+        ],
     ],
 
     /*
@@ -332,6 +406,13 @@ return [
         //
         //     'com.example.listThings' => 'com.example.thing',
         'collections' => [],
+
+        // Queries that hydrate one collection's records into a view, with the
+        // same paging, repo filter and lookup by uri, answering a page of
+        // views under the view's key, such as {things: [...], cursor}.
+        //
+        //     'com.example.getThings' => \App\Views\ThingView::class,
+        'views' => [],
 
         // Backend mode only. Procedures that write one collection to the
         // viewer's repo through the session the server holds for them, then

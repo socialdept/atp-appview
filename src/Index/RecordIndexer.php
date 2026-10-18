@@ -49,7 +49,7 @@ class RecordIndexer implements BatchHandler
 
         $connection = $this->db->connection(config('atp-appview.index.connection'));
 
-        $connection->transaction(function () use ($connection, $records, $identities) {
+        $connection->transaction(function () use ($connection, $records, $identities, $now) {
             $status = new AccountStatus($connection);
 
             if ($records !== []) {
@@ -67,6 +67,8 @@ class RecordIndexer implements BatchHandler
 
             if ($records !== []) {
                 $status->hideArrivals(array_column($records, 'did'));
+                // After hiding, so new references of an inactive account are hidden too.
+                app(Refs::class)->rewrite($connection, $records, $now);
             }
         });
     }

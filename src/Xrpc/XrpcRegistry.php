@@ -6,10 +6,12 @@ use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use SocialDept\AtpAppview\Views\View;
 use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultProcedureHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultQueryHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\SyncRecordHandler;
+use SocialDept\AtpAppview\Xrpc\Handlers\ViewQueryHandler;
 use SocialDept\AtpSchema\Data\LexiconDocument;
 use SocialDept\AtpSchema\Facades\Schema;
 
@@ -82,6 +84,7 @@ class XrpcRegistry
         }
 
         return $this->methods[$nsid] = match (true) {
+            isset($route['view']) => $this->viewMethodFor($nsid, $route['view']),
             isset($route['action']) && $route['collection'] !== null => $this->defaultProcedureFor($nsid, $route['collection'], $route['action']),
             $route['handler'] === SyncRecordHandler::class => $this->builtInProcedureFor($nsid, SyncRecordHandler::class),
             $route['collection'] !== null => $this->defaultMethodFor($nsid, $route['collection']),
@@ -110,6 +113,13 @@ class XrpcRegistry
             // A handler class written for the method takes precedence.
             if (! isset($routes[$nsid])) {
                 $routes[(string) $nsid] = ['handler' => DefaultQueryHandler::class, 'auth' => Auth::None, 'collection' => (string) $collection, 'attribute' => null];
+            }
+        }
+
+        foreach ((array) config('atp-appview.xrpc.views', []) as $nsid => $view) {
+            // A handler class written for the method takes precedence.
+            if (! isset($routes[$nsid])) {
+                $routes[(string) $nsid] = ['handler' => ViewQueryHandler::class, 'auth' => Auth::Optional, 'collection' => null, 'attribute' => null, 'view' => (string) $view];
             }
         }
 
@@ -190,6 +200,29 @@ class XrpcRegistry
         }
 
         return new XrpcMethod($nsid, DefaultQueryHandler::class, 'query', Auth::None, $lexicon, $collection);
+    }
+
+    /**
+     * A query that hydrates one collection's records into a view, mapped in
+     * atp-appview.xrpc.views. Auth is optional, so a signed-in viewer gets
+     * viewer state.
+     *
+     * @param  class-string<View>  $view
+     */
+    protected function viewMethodFor(string $nsid, string $view): XrpcMethod
+    {
+        if (! is_subclass_of($view, View::class)) {
+            throw new InvalidArgumentException("atp-appview.xrpc.views maps {$nsid} to {$view}, which does not extend ".View::class.'.');
+        }
+
+        $lexicon = Schema::find($nsid)
+            ?? throw new InvalidArgumentException("No lexicon found for {$nsid}, which atp-appview.xrpc.views maps to {$view}.");
+
+        if (! $lexicon->isQuery()) {
+            throw new InvalidArgumentException("{$nsid} is a {$lexicon->getLexiconType()}. Views are served by queries.");
+        }
+
+        return new XrpcMethod($nsid, ViewQueryHandler::class, 'query', Auth::Optional, $lexicon, app($view)->collection(), view: $view);
     }
 
     protected function methodFor(string $handler, Xrpc $xrpc): XrpcMethod
