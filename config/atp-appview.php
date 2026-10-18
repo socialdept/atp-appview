@@ -97,26 +97,28 @@ return [
     | Ingest
     |--------------------------------------------------------------------------
     |
-    | appview:consume reads Tap's acknowledged websocket channel in batches
-    | and hands each batch to the handlers below. Tab, the Tap fork, speaks the
-    | same protocol. Without a long-running process, Tap can deliver by
-    | webhook instead, see ingest.webhook below, but only with batched
-    | webhooks: one request per record floods the application during a
-    | backfill.
+    | Tap delivers events in batches to the webhook below, and each batch goes
+    | to the handlers. This needs batched webhooks, which the socialde.pt/tap
+    | fork adds: stock Tap sends one request per event, which floods the
+    | application during a backfill. With stock Tap, run appview:consume,
+    | which reads Tap's acknowledged websocket channel instead.
     |
     */
 
     'ingest' => [
+        // Tap's websocket channel, for appview:consume.
         'url' => env('ATP_APPVIEW_TAP_URL', 'ws://localhost:2480/channel'),
 
         // Tap's admin API, for adding and removing repos and reading progress.
         'admin_url' => env('ATP_APPVIEW_TAP_ADMIN_URL', 'http://localhost:2480'),
 
-        // TAP_ADMIN_PASSWORD, when Tap is configured with one.
+        // Tap's admin password. Tap signs webhook requests with it, so the
+        // webhook refuses everything until it is set.
         'password' => env('ATP_APPVIEW_TAP_PASSWORD'),
 
-        // A batch is handled when it reaches batch_size events or flush_ms
-        // milliseconds pass, whichever comes first.
+        // appview:consume handles a batch when it reaches batch_size events or
+        // flush_ms milliseconds pass, whichever comes first. A webhook batch
+        // is sized by Tap's TAB_WEBHOOK_BATCH_SIZE instead.
         'batch_size' => (int) env('ATP_APPVIEW_INGEST_BATCH_SIZE', 200),
         'flush_ms' => (int) env('ATP_APPVIEW_INGEST_FLUSH_MS', 500),
 
@@ -134,13 +136,11 @@ return [
         // Light Rail at https://lightrail.microcosm.blue.
         'discovery_url' => env('ATP_APPVIEW_DISCOVERY_URL', 'https://relay1.us-east.bsky.network'),
 
-        // Receiving events by webhook instead of running appview:consume. Point
-        // Tap's webhook URL at this path, and give it batched webhooks (the
-        // socialde.pt/tap fork's TAB_WEBHOOK_BATCH_SIZE), or it sends one
-        // request per event. Tap signs requests with its admin password, so
-        // ingest.password must be set.
+        // Where Tap delivers events. Point Tap's TAB_WEBHOOK_URL at this path
+        // and set TAB_WEBHOOK_BATCH_SIZE. Turn it off when running
+        // appview:consume instead.
         'webhook' => [
-            'enabled' => (bool) env('ATP_APPVIEW_TAP_WEBHOOK', false),
+            'enabled' => (bool) env('ATP_APPVIEW_TAP_WEBHOOK', true),
             'path' => env('ATP_APPVIEW_TAP_WEBHOOK_PATH', 'atp-appview/tap'),
             'middleware' => [],
         ],
