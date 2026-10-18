@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Tests\Unit\Ingest;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
@@ -85,6 +86,42 @@ class IngestStatsTest extends TestCase
         $buffer->flush();
 
         $this->assertTrue($stats->backfilling());
+    }
+
+    public function test_a_cache_that_cannot_be_written_never_stops_ingest_and_loses_nothing(): void
+    {
+        $store = new class () extends ArrayStore {
+            public int $failures = 1;
+
+            public function increment($key, $value = 1)
+            {
+                if ($this->failures-- > 0) {
+                    throw new RuntimeException('database is locked');
+                }
+
+                return parent::increment($key, $value);
+            }
+        };
+        $this->cache = new Repository($store);
+        $stats = $this->stats();
+        $acked = [];
+        $buffer = new IngestBuffer([new class () implements BatchHandler {
+            public function handle(Batch $batch): void
+            {
+            }
+        }], function (int $id) use (&$acked) {
+            $acked[] = $id;
+        }, stats: $stats);
+
+        $buffer->push(1, $this->record(false));
+        $buffer->push(2, $this->record(false));
+        $buffer->flush();
+
+        $this->assertSame([1, 2], $acked, 'The batch is acknowledged even though its counts were not written.');
+
+        $this->now += 60;
+        $stats->flush();
+        $this->assertSame(2.0, $this->stats()->perMinute(1)['backfill'], 'The counts are written by the next flush, once.');
     }
 
     protected function stats(): IngestStats

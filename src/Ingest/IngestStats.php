@@ -7,6 +7,7 @@ use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Carbon;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use Throwable;
 
 /**
  * What the consumer has been receiving from Tap, for telling whether a
@@ -86,24 +87,34 @@ class IngestStats
     /**
      * Write what has built up. The consumer calls this as it stops, so
      * nothing counted is lost.
+     *
+     * Counts are only figures for a status page, so a cache that cannot be
+     * written is reported and never stops ingest. What was not written stays
+     * pending for the next flush, and what was is not written twice.
      */
     public function flush(): void
     {
-        foreach ($this->pending as $kind => $minutes) {
-            foreach ($minutes as $minute => $count) {
-                $key = $this->bucketKey($kind, $minute);
-                $this->cache->add($key, 0, self::BUCKET_TTL);
-                $this->cache->increment($key, $count);
-            }
-        }
-
-        foreach ($this->latest as $kind => $time) {
-            $this->cache->put(self::PREFIX."last:{$kind}", $time, self::BUCKET_TTL * 24);
-        }
-
-        $this->pending = [];
-        $this->latest = [];
         $this->lastFlush = $this->now();
+
+        try {
+            foreach ($this->pending as $kind => $minutes) {
+                foreach ($minutes as $minute => $count) {
+                    $key = $this->bucketKey($kind, $minute);
+                    $this->cache->add($key, 0, self::BUCKET_TTL);
+                    $this->cache->increment($key, $count);
+                    unset($this->pending[$kind][$minute]);
+                }
+
+                unset($this->pending[$kind]);
+            }
+
+            foreach ($this->latest as $kind => $time) {
+                $this->cache->put(self::PREFIX."last:{$kind}", $time, self::BUCKET_TTL * 24);
+                unset($this->latest[$kind]);
+            }
+        } catch (Throwable $e) {
+            $this->report($e);
+        }
     }
 
     /**
@@ -152,6 +163,15 @@ class IngestStats
         $time = $this->cache->get(self::PREFIX."last:{$kind}");
 
         return $time === null ? null : Carbon::createFromTimestamp((int) $time);
+    }
+
+    protected function report(Throwable $e): void
+    {
+        try {
+            report($e);
+        } catch (Throwable) {
+            // No exception handler outside an application.
+        }
     }
 
     protected function bucketKey(string $kind, int $minute): string
