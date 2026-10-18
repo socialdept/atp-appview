@@ -79,6 +79,41 @@ class RecordIndexerTest extends TestCase
         $this->assertSame(['text' => 'hello'], $this->find()->record);
     }
 
+    public function test_an_unchanged_record_sent_again_keeps_its_row_as_it_was(): void
+    {
+        // No date field and an rkey that is not a TID, so sort_at falls back
+        // to the time it was indexed.
+        $this->travelTo('2026-01-01 00:00:00');
+        $this->index($this->event(RecordAction::Create, self::OLD, ['text' => 'hello']));
+        $before = $this->find();
+
+        // Tap resyncing the repo sends the same record at the same rev.
+        $this->travelTo('2026-03-01 00:00:00');
+        $this->index($this->event(RecordAction::Create, self::OLD, ['text' => 'hello']));
+        $after = $this->find();
+
+        $this->assertEquals($before->indexed_at, $after->indexed_at);
+        $this->assertEquals($before->sort_at, $after->sort_at);
+    }
+
+    public function test_a_changed_record_at_the_same_rev_is_written(): void
+    {
+        $this->index($this->event(RecordAction::Create, self::OLD, ['text' => 'first']));
+        $this->index(new RecordEvent(99, self::DID, 'app.example.post', '3abc', RecordAction::Update, 'bafy-changed', self::OLD, ['text' => 'changed'], false));
+
+        $this->assertSame(['text' => 'changed'], $this->find()->record);
+        $this->assertSame('bafy-changed', $this->find()->cid);
+    }
+
+    public function test_a_delete_at_the_same_rev_still_leaves_a_tombstone(): void
+    {
+        $this->index($this->event(RecordAction::Create, self::OLD, ['text' => 'hello']));
+        $this->index($this->event(RecordAction::Delete, self::OLD));
+
+        $this->assertNull(Record::find('at://did:plc:alice/app.example.post/3abc'));
+        $this->assertNotNull(Record::withTrashed()->find('at://did:plc:alice/app.example.post/3abc')->deleted_at);
+    }
+
     public function test_a_delete_leaves_a_tombstone_that_queries_skip(): void
     {
         $this->index($this->event(RecordAction::Create, self::OLD, ['text' => 'hello']));
