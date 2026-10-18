@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use SocialDept\AtpAppview\Index\AccountStatus;
@@ -88,11 +89,23 @@ class ReconcileCommand extends Command
         return Identity::query()
             ->where(fn ($query) => $query->where('active', true)->orWhereIn('status', AccountStatus::LIFTED_BY_PDS))
             ->where(fn ($query) => $query->whereNull('reconciled_at')->orWhere('reconciled_at', '<', $before))
-            ->orderByRaw('reconciled_at is not null')
-            ->orderBy('reconciled_at')
+            ->tap(fn ($query) => self::neverCheckedFirst($query))
             ->limit(max(1, $limit))
             ->pluck('did')
             ->all();
+    }
+
+    /**
+     * Repos never checked first, then the least recently checked, in an order
+     * the reconciled_at index can serve. Postgres sorts nulls last unless
+     * told otherwise, and the index is built to match. The other databases
+     * sort nulls first already.
+     */
+    public static function neverCheckedFirst(Builder $query): Builder
+    {
+        return $query->getConnection()->getDriverName() === 'pgsql'
+            ? $query->orderByRaw('reconciled_at asc nulls first')
+            : $query->orderBy('reconciled_at');
     }
 
     protected function remember(string $did, ?string $rev, ?string $error): void

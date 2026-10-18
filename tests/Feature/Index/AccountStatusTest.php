@@ -213,8 +213,11 @@ class AccountStatusTest extends TestCase
 
     public function test_upgrading_applies_the_status_of_accounts_already_inactive(): void
     {
-        // Back to before the account status migration, which a later one follows.
-        $this->artisan('migrate:rollback', ['--step' => 2])->run();
+        // Back to before the account status migration, however many follow it.
+        $migrations = array_map('basename', glob(__DIR__.'/../../../database/migrations/*.php'));
+        sort($migrations);
+        $step = count($migrations) - array_search('2026_10_17_000008_add_account_status_to_atp_records_and_identities.php', $migrations, true);
+        $this->artisan('migrate:rollback', ['--step' => $step])->run();
         Identity::query()->insert([
             ['did' => 'did:plc:gone', 'handle' => null, 'active' => false, 'status' => 'deleted', 'updated_at' => '2026-01-01 00:00:00'],
             ['did' => 'did:plc:away', 'handle' => null, 'active' => false, 'status' => 'deactivated', 'updated_at' => '2026-02-01 00:00:00'],

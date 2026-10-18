@@ -461,8 +461,36 @@ Each index on `atp_records` serves a specific read:
 | `collection, sort_at, uri` | A collection newest first, and the cursor seeking straight to its page |
 | `did, collection, sort_at, uri` | One repo's records in a collection, newest first, and purging a repo |
 | `collection, indexed_at` | What arrived recently |
+| `collection, sort_at, uri` where hidden | A collection's hidden records, newest first (Postgres and SQLite) |
+| `collection, sort_at, uri` where tombstoned | A collection's tombstones, newest first (Postgres and SQLite) |
+
+Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so there those lists stay slow.
+
+On `atp_identities`, `reconciled_at` serves `appview:reconcile` picking the repos due a check. Postgres builds it nulls first, since the run starts with repos never checked.
 
 A cursor adds a plain `sort_at` range next to the tie-breaking comparison on `uri`, so the index seeks to the cursor rather than scanning every row before it. On 220,000 documents, a page 50,000 records deep takes 0.2 ms to execute.
+
+### Counts
+
+`IndexStats` reports how many records, hidden records and tombstones each collection holds, and how many repos hold at least one record anyone can see:
+
+```php
+use SocialDept\AtpAppview\Index\IndexStats;
+
+$stats = app(IndexStats::class);
+
+$stats->collections(); // ['app.example.post' => ['records' => 229150, 'hidden' => 19, 'tombstones' => 45, 'repos' => 4763], ...]
+$stats->totals();      // the same across every collection, each repo counted once
+$stats->countedAt();   // when, or null before the first count
+```
+
+Counting repos reads every record, so the counts are taken by `appview:stats` and stored in `atp_index_stats` rather than worked out per request. Schedule it:
+
+```php
+Schedule::command('appview:stats')->everyFiveMinutes()->withoutOverlapping();
+```
+
+It makes one pass over the index, about 0.4 s for 265,000 records on Postgres, and prints what it counted. Counting on every write instead would have to follow each way a record changes state, and drift whenever one was missed. A recount cannot drift.
 
 ### Idempotent writes
 

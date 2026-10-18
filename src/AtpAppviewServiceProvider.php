@@ -24,6 +24,7 @@ use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
+use SocialDept\AtpAppview\Console\StatsCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
@@ -100,6 +101,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 ResortCommand::class,
                 RestartCommand::class,
                 RoutesCommand::class,
+                StatsCommand::class,
                 UnblockCommand::class,
             ]);
         }
