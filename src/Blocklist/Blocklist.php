@@ -6,8 +6,10 @@ use Closure;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use SocialDept\AtpAppview\Index\Refs;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
@@ -148,6 +150,7 @@ class Blocklist
 
         foreach (array_chunk($dids, 500) as $chunk) {
             $purged += $this->recordsCovered($block, $chunk)->forceDelete();
+            Refs::dropOrphans(DB::connection(config('atp-appview.index.connection')), $chunk);
         }
 
         return $purged;

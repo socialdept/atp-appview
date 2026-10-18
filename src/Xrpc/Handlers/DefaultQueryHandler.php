@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Xrpc\Handlers;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
@@ -46,7 +47,7 @@ class DefaultQueryHandler
         $record = Record::collection($collection)->find($uri)
             ?? throw XrpcException::notFound('RecordNotFound', "Could not locate record: {$uri}");
 
-        return $this->present($record);
+        return $this->presentOne($record);
     }
 
     /**
@@ -76,7 +77,7 @@ class DefaultQueryHandler
         $page = $rows->take($limit);
 
         return array_filter([
-            'records' => $page->map(fn (Record $record) => $this->present($record))->values()->all(),
+            $this->listKey() => $this->presentPage($page->values()),
             'cursor' => $rows->count() > $limit ? $this->cursorFor($page->last()) : null,
         ], fn ($value) => $value !== null);
     }
@@ -149,6 +150,35 @@ class DefaultQueryHandler
         $position = $record->getRawOriginal('sort_at').'|'.$record->uri;
 
         return rtrim(strtr(base64_encode($position), '+/', '-_'), '=');
+    }
+
+    /**
+     * The key a page of records goes under.
+     */
+    protected function listKey(): string
+    {
+        return 'records';
+    }
+
+    /**
+     * A page of records, as the response lists them.
+     *
+     * @param  Collection<int, Record>  $records
+     * @return array<int, array<string, mixed>>
+     */
+    protected function presentPage(Collection $records): array
+    {
+        return $records->map(fn (Record $record) => $this->present($record))->all();
+    }
+
+    /**
+     * One record looked up by uri, as the response gives it.
+     *
+     * @return array<string, mixed>
+     */
+    protected function presentOne(Record $record): array
+    {
+        return $this->present($record);
     }
 
     /**

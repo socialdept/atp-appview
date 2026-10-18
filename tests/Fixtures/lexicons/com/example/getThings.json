@@ -1,0 +1,54 @@
+{
+    "lexicon": 1,
+    "id": "com.example.getThings",
+    "defs": {
+        "main": {
+            "type": "query",
+            "parameters": {
+                "type": "params",
+                "properties": {
+                    "uri": {
+                        "type": "string",
+                        "format": "at-uri"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 25
+                    },
+                    "cursor": {
+                        "type": "string"
+                    },
+                    "reverse": {
+                        "type": "boolean"
+                    },
+                    "did": {
+                        "type": "string"
+                    },
+                    "actor": {
+                        "type": "string"
+                    }
+                }
+            },
+            "output": {
+                "encoding": "application/json",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "things": {
+                            "type": "array",
+                            "items": {
+                                "type": "unknown"
+                            }
+                        },
+                        "cursor": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "description": "Things as hydrated views."
+        }
+    }
+}
