@@ -126,11 +126,16 @@ return [
         'max_attempts' => (int) env('ATP_APPVIEW_INGEST_MAX_ATTEMPTS', 3),
 
         // Collections the index ingests, comma separated in the environment.
-        // Pass the same variable to Tap as its collection filters, so the two
-        // never disagree. appview:backfill:work backfills a collection added
-        // here, once Tap has been restarted with it. appview:discover finds
-        // repos for them too.
+        // A repo holding one is followed: appview:discover finds them, and
+        // appview:backfill:work backfills a collection added here once Tap has
+        // been restarted with it.
         'collections' => array_values(array_filter(array_map('trim', explode(',', (string) env('ATP_APPVIEW_COLLECTIONS', ''))))),
+
+        // Collections indexed only for repos already followed, such as
+        // profiles, which nearly every account has. They are never discovered,
+        // and adding one backfills the repos the index already knows. Tap's
+        // collection filters are both lists.
+        'companions' => array_values(array_filter(array_map('trim', explode(',', (string) env('ATP_APPVIEW_COMPANION_COLLECTIONS', ''))))),
 
         // Where appview:discover lists repos by collection: a relay, or
         // Light Rail at https://lightrail.microcosm.blue.
@@ -230,7 +235,7 @@ return [
         // changed and never a delete, so a record removed while Tap was not
         // following the repo stays indexed until reconciled. Schedule the
         // command every few minutes and it works through the active repos,
-        // least recently checked first, in ingest.collections.
+        // least recently checked first, in every ingested collection.
         'reconcile' => [
             // Repos per run.
             'batch' => (int) env('ATP_APPVIEW_RECONCILE_BATCH', 25),

@@ -9,6 +9,7 @@ use RuntimeException;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Blocklist\PdsLookup;
 use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Identity;
@@ -92,7 +93,7 @@ class Reconciler
         }
 
         $collections = array_values(array_filter(
-            (array) config('atp-appview.ingest.collections', []),
+            Collections::all(),
             fn (string $collection) => $this->blocklist->ruleFor($did, $collection, $host) === null,
         ));
 

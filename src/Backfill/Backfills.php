@@ -12,11 +12,13 @@ use RuntimeException;
 use SocialDept\AtpAppview\Backfill\Events\BackfillFinished;
 use SocialDept\AtpAppview\Backfill\Events\BackfillStarted;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
+use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
 use Throwable;
 
@@ -39,6 +41,11 @@ class Backfills
 
     protected const RUNNING = 'atp-appview:backfills:running';
 
+    /**
+     * The source recorded for a companion collection's backfill.
+     */
+    public const FOLLOWED_REPOS = 'followed repos';
+
     protected ?bool $stillBackfilling = null;
 
     public function __construct(
@@ -50,10 +57,11 @@ class Backfills
     }
 
     /**
-     * Find every repo holding the collection and have Tap backfill it. The
-     * collection must already be in Tap's filters, or Tap backfills the repos
-     * without it, and the backfill fails once Tap goes quiet having
-     * delivered nothing.
+     * Find every repo holding the collection and have Tap backfill it. For a
+     * companion collection, the repos are the active ones the index already
+     * knows, and only those Tap follows are resynced. The collection must
+     * already be in Tap's filters, or Tap backfills the repos without it, and
+     * the backfill fails once Tap goes quiet having delivered nothing.
      *
      * @param  (Closure(int $found): void)|null  $progress  Called every thousand repos discovered
      *
@@ -65,14 +73,22 @@ class Backfills
             throw new RuntimeException("A backfill of {$collection} is already running.");
         }
 
-        $source ??= (string) config('atp-appview.ingest.discovery_url');
+        $companion = Collections::isCompanion($collection);
         $dids = [];
 
-        foreach ((new RepoDiscovery($source))->dids($collection) as $did) {
-            $dids[$did] = true;
+        if ($companion) {
+            // Never discovered: the repos already followed, as the index knows them.
+            $source = self::FOLLOWED_REPOS;
+            $dids = array_fill_keys(Identity::query()->where('active', true)->pluck('did')->all(), true);
+        } else {
+            $source ??= (string) config('atp-appview.ingest.discovery_url');
 
-            if ($progress !== null && count($dids) % 1000 === 0) {
-                $progress(count($dids));
+            foreach ((new RepoDiscovery($source))->dids($collection) as $did) {
+                $dids[$did] = true;
+
+                if ($progress !== null && count($dids) % 1000 === 0) {
+                    $progress(count($dids));
+                }
             }
         }
 
@@ -85,7 +101,7 @@ class Backfills
             foreach (array_chunk($dids, $this->chunk()) as $chunk) {
                 BackfillRepo::query()->insert(array_map(fn (string $did) => ['backfill_id' => $backfill->id, 'did' => $did], $chunk));
                 $this->alreadyIndexed($backfill, $chunk);
-                $resync ? $this->resync($backfill, $chunk) : $this->readd($backfill, $chunk);
+                $resync ? $this->resync($backfill, $chunk, addUntracked: ! $companion) : $this->readd($backfill, $chunk);
             }
         } catch (Throwable $e) {
             $backfill->update(['status' => Backfill::FAILED, 'error' => Str::limit("Handing repos to Tap failed: {$e->getMessage()}", 1000), 'finished_at' => Carbon::now('UTC')]);
@@ -141,7 +157,7 @@ class Backfills
     {
         $connection = $this->connection();
         $this->stillBackfilling = null;
-        $configured = array_values(array_unique((array) config('atp-appview.ingest.collections', [])));
+        $configured = Collections::all();
         $known = $connection->table('atp_ingest_collections')->get()->keyBy('collection');
         $now = Carbon::now('UTC');
 
@@ -311,13 +327,22 @@ class Backfills
     }
 
     /**
-     * Resync repos Tap tracks, and add those it does not.
+     * Resync repos Tap tracks, and add those it does not. A companion
+     * collection's backfill never adds a repo: one Tap does not follow is
+     * left out of the backfill instead.
      *
      * @param  array<int, string>  $dids
      */
-    protected function resync(Backfill $backfill, array $dids): void
+    protected function resync(Backfill $backfill, array $dids, bool $addUntracked = true): void
     {
         $untracked = array_values(array_filter($dids, fn (string $did) => $this->tap->resyncRepo($did) === null));
+
+        if ($untracked !== [] && ! $addUntracked) {
+            BackfillRepo::query()->where('backfill_id', $backfill->id)->whereIn('did', $untracked)->delete();
+            $this->method($backfill, array_values(array_diff($dids, $untracked)), BackfillRepo::RESYNC);
+
+            return;
+        }
 
         if ($untracked !== []) {
             $this->tap->addRepos($untracked);

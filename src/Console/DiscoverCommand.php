@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use Throwable;
@@ -22,7 +23,7 @@ class DiscoverCommand extends Command
 
     public function handle(TapAdmin $tap, Blocklist $blocklist): int
     {
-        $collections = $this->argument('collection') ?: (array) config('atp-appview.ingest.collections', []);
+        $collections = $this->argument('collection') ?: Collections::followed();
 
         if ($collections === []) {
             $this->components->error('No collections to discover. Pass them as arguments or set atp-appview.ingest.collections.');
@@ -31,6 +32,12 @@ class DiscoverCommand extends Command
         }
 
         foreach ($collections as $collection) {
+            if (Collections::isCompanion((string) $collection)) {
+                $this->components->error("{$collection} is a companion collection, indexed only for repos already followed, so it is never discovered.");
+
+                return self::FAILURE;
+            }
+
             if (! preg_match(self::NSID, (string) $collection)) {
                 $this->components->error("\"{$collection}\" is not an NSID. listReposByCollection needs exact collections, without wildcards.");
 

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Index\IndexStats;
 use SocialDept\AtpAppview\Index\ReconcileErrors;
 use SocialDept\AtpAppview\Index\RecordValidation;
+use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
@@ -294,7 +295,7 @@ class AppviewStatus
      */
     protected function collectionNames(): array
     {
-        return array_values(array_unique((array) config('atp-appview.ingest.collections', [])));
+        return Collections::all();
     }
 
     protected function connection(): Connection

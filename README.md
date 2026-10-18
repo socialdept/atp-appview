@@ -341,6 +341,17 @@ Schedule::command('appview:discover')->hourly();
 
 Set `TAP_SIGNAL_COLLECTION` to whichever collection a new user creates first, and those repos are picked up live in between.
 
+### Companion collections
+
+Some collections describe a repo rather than being a reason to follow it. Profiles are the usual case: nearly every account has one, so discovering repos by `app.bsky.actor.profile` would have Tap follow most of the network. List those as companion collections instead:
+
+```dotenv
+ATP_APPVIEW_COLLECTIONS=app.example.post,app.example.like
+ATP_APPVIEW_COMPANION_COLLECTIONS=app.bsky.actor.profile
+```
+
+A companion collection is indexed only for repos already followed. `appview:discover` never looks for it and refuses one passed by name. Adding one backfills the active repos the index already knows instead of finding repos, and on a Tap with resync routes, a repo Tap does not follow is left out rather than added. Reconciliation, status counts and record sync cover both lists. A collection in both lists counts as followed.
+
 ### Tap admin
 
 `TapAdmin` wraps Tap's admin API: `addRepos()` to backfill and follow specific repos, `removeRepos()`, `info($did)`, `stats('repo-count')` and `healthy()`.
@@ -353,15 +364,16 @@ On a Tap with resync routes, such as the [socialde.pt/tap](https://tangled.org/s
 
 Adding a collection later is the awkward case. Tap ignores repos it already follows when they are added again, and its collection filters only filter what it sends, so the older records of a new collection never arrive from repos it already follows. Tracked backfills handle that, and report progress while they run.
 
-List the collections once, for both the index and Tap:
+List the collections once, for both the index and Tap, whose filters are both lists:
 
 ```dotenv
 ATP_APPVIEW_COLLECTIONS=app.example.post,app.example.like
+ATP_APPVIEW_COMPANION_COLLECTIONS=app.bsky.actor.profile
 ```
 
 ```yaml
 # Tap, in docker-compose.yml
-TAP_COLLECTION_FILTERS: ${ATP_APPVIEW_COLLECTIONS}
+TAB_COLLECTION_FILTERS: ${ATP_APPVIEW_COLLECTIONS},${ATP_APPVIEW_COMPANION_COLLECTIONS}
 ```
 
 Then schedule the worker:
@@ -370,7 +382,7 @@ Then schedule the worker:
 Schedule::command('appview:backfill:work')->everyMinute()->withoutOverlapping();
 ```
 
-To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap (and `appview:consume`, if you run it), and `appview:backfill:work` does the rest: it finds every repo holding the collection, as `appview:discover` does, and has Tap backfill them.
+To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap (and `appview:consume`, if you run it), and `appview:backfill:work` does the rest: it finds every repo holding the collection, as `appview:discover` does, and has Tap backfill them. A companion collection backfills the repos already followed instead.
 
 - **On a Tap with resync routes**, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
 - **On any other Tap**, repos are removed and added again. That works, but Tap re-sends every collection of every repo, and each repo's live events wait until its backfill runs.

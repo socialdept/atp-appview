@@ -91,6 +91,13 @@ class AppviewStatusTest extends TestCase
         $this->assertNotNull($this->appview()->countedAt());
     }
 
+    public function test_companion_collections_are_listed_after_followed_ones(): void
+    {
+        config(['atp-appview.ingest.companions' => ['app.example.profile', self::POSTS]]);
+
+        $this->assertSame([self::POSTS, self::LIKES, 'app.example.profile'], array_column($this->appview()->collections(), 'nsid'));
+    }
+
     public function test_it_tells_index_writes_from_records_the_network_made(): void
     {
         $this->record('did:plc:alice', self::POSTS, 'new');
