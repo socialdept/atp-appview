@@ -19,7 +19,7 @@
         "ratchet/pawl": "^0.4",
         "react/event-loop": "^1.5",
         "socialdept/atp-client": "^0.3.11",
-        "socialdept/atp-schema": "^0.4.8",
+        "socialdept/atp-schema": "^0.4.11",
         "socialdept/atp-support": "^0.3.2"
     },
     "require-dev": {
