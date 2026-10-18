@@ -21,6 +21,9 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  * - Several events for one record in a batch collapse to the last, which Tap's
  *   per-repo ordering makes the newest.
  *
+ * Records are checked against their lexicon first when
+ * atp-appview.index.validate asks for it, through RecordValidation.
+ *
  * An account event changes its records too, through AccountStatus: a deleted
  * account's records are tombstoned, an inactive account's hidden.
  */
@@ -28,6 +31,7 @@ class RecordIndexer implements BatchHandler
 {
     public function __construct(
         protected ConnectionResolverInterface $db,
+        protected ?RecordValidation $validation = null,
     ) {
     }
 
@@ -35,7 +39,8 @@ class RecordIndexer implements BatchHandler
     {
         $clock = Carbon::now('UTC');
         $now = $clock->format('Y-m-d H:i:s');
-        $records = $this->recordRows($batch->records(), $now, $clock);
+        $events = RecordValidation::mode() === RecordValidation::OFF ? $batch->records() : $this->validation()->filter($batch->records());
+        $records = $this->recordRows($events, $now, $clock);
         $identities = $this->identityRows($batch->identities(), $now);
 
         if ($records === [] && $identities === []) {
@@ -64,6 +69,11 @@ class RecordIndexer implements BatchHandler
                 $status->hideArrivals(array_column($records, 'did'));
             }
         });
+    }
+
+    protected function validation(): RecordValidation
+    {
+        return $this->validation ??= app(RecordValidation::class);
     }
 
     /**

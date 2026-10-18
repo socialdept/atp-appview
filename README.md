@@ -400,6 +400,22 @@ Run `appview:resort` after changing the fields: new records use them straight aw
 
 Dates are read as records actually write them: ISO 8601, a space in place of the `T`, or the date alone when the time part is unreadable. Dates that do not exist, and anything before 1970, count as missing. Record keys minted from an old date, as importers do, are trusted back to 1970 too.
 
+### Validation
+
+Records can be checked against their collection's lexicon before they are indexed:
+
+```dotenv
+ATP_APPVIEW_VALIDATE_RECORDS=drop   # off (default), log or drop
+```
+
+| Mode | Invalid records |
+|---|---|
+| `off` | Not checked |
+| `log` | Indexed, counted and logged |
+| `drop` | Left out of the index, counted and logged. An earlier valid version stays indexed |
+
+Only collections with a lexicon atp-schema can load are checked, and deletes always go through. Fields a lexicon does not mention are allowed, since a newer version of a lexicon may add optional fields this app does not know yet, and refs to other definitions are not followed. Every path into the index is checked: Tap, the sync procedure and reconciliation. Each batch logs one line per collection with an example, and `RecordValidation::count($collection)` reports how many invalid records a collection has seen. Checking costs well under a tenth of a millisecond per record.
+
 ### Stored values
 
 - **Postgres** stores `record` as `jsonb`, so fields can be read and indexed without re-parsing each document.
