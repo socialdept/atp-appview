@@ -2,6 +2,8 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
+use Illuminate\Support\Facades\Route;
+use Orchestra\Testbench\Attributes\DefineEnvironment;
 use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -28,7 +30,6 @@ class TapWebhookTest extends TestCase
         $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.ingest.password', 'secret');
-        $app['config']->set('atp-appview.ingest.webhook.enabled', true);
         $app['config']->set('atp-appview.ingest.handlers', [RecordIndexer::class, BackfillTracker::class]);
     }
 
@@ -52,6 +53,23 @@ class TapWebhookTest extends TestCase
             'live' => $live, 'rev' => '3l2aaaaaaaaaa', 'did' => $did, 'collection' => 'app.example.post',
             'rkey' => $rkey, 'action' => 'create', 'cid' => "bafy-{$rkey}", 'record' => ['text' => $rkey],
         ]];
+    }
+
+    public function test_the_webhook_is_on_by_default(): void
+    {
+        $this->assertTrue(Route::has('atp-appview.tap-webhook'));
+    }
+
+    #[DefineEnvironment('turnTheWebhookOff')]
+    public function test_the_webhook_can_be_turned_off_for_appview_consume(): void
+    {
+        $this->assertFalse(Route::has('atp-appview.tap-webhook'));
+        $this->postJson(self::PATH, ['events' => []])->assertNotFound();
+    }
+
+    protected function turnTheWebhookOff($app): void
+    {
+        $app['config']->set('atp-appview.ingest.webhook.enabled', false);
     }
 
     public function test_a_batch_is_indexed_and_reported(): void
