@@ -80,6 +80,15 @@ class DiscoverCommandTest extends TestCase
         $this->assertSame([2, 2, 1], $chunks);
     }
 
+    public function test_companion_collections_are_never_discovered(): void
+    {
+        config(['atp-appview.ingest.collections' => ['app.example.post'], 'atp-appview.ingest.companions' => ['app.example.profile']]);
+        Http::fake();
+
+        $this->artisan('appview:discover', ['collection' => ['app.example.profile']])->assertFailed();
+        Http::assertNothingSent();
+    }
+
     public function test_a_dry_run_counts_without_touching_tap(): void
     {
         Http::fake([

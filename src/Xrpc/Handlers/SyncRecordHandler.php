@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Xrpc\Handlers;
 
 use SocialDept\AtpAppview\Index\IndexesRecordsNow;
+use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
 use SocialDept\AtpAppview\Xrpc\XrpcRequest;
@@ -48,7 +49,7 @@ class SyncRecordHandler
             throw new XrpcException('NotYourRecord', 'Only your own records can be synced.', 403);
         }
 
-        if (! in_array($collection, (array) config('atp-appview.ingest.collections', []), true)) {
+        if (! Collections::ingests($collection)) {
             throw XrpcException::invalidRequest("{$collection} is not indexed here.");
         }
 

@@ -20,6 +20,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
+use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 class BackfillsTest extends TestCase
@@ -28,6 +29,7 @@ class BackfillsTest extends TestCase
     protected const RELAY = 'https://relay.test';
     protected const READS = 'app.example.read';
     protected const POSTS = 'app.example.post';
+    protected const PROFILES = 'app.example.profile';
 
     /** Repos the fake Tap tracks. */
     protected array $tracked = ['did:plc:followed'];
@@ -101,6 +103,11 @@ class BackfillsTest extends TestCase
     protected function backfilled(string $did, string $rkey, bool $live = false, string $collection = self::READS): RecordEvent
     {
         return new RecordEvent(1, $did, $collection, $rkey, RecordAction::Create, 'cid-'.$rkey, '3l2aaaaaaaaaa', ['subject' => 'x'], $live);
+    }
+
+    protected function relayCalls(): array
+    {
+        return collect(Http::recorded())->map(fn ($pair) => $pair[0])->filter(fn (Request $r) => str_starts_with($r->url(), self::RELAY))->values()->all();
     }
 
     protected function tapCalls(string $path): array
@@ -317,6 +324,45 @@ class BackfillsTest extends TestCase
         $this->assertSame([25, 66, 100], array_column($progress, 'percent'));
         $this->assertSame(['running', 'running', 'finished'], array_column($progress, 'status'));
         $this->assertCount(2, $this->backfills()->active());
+    }
+
+    public function test_a_companion_collection_backfills_the_repos_already_followed_without_discovering_any(): void
+    {
+        config(['atp-appview.ingest.companions' => [self::PROFILES]]);
+        Identity::query()->insert([
+            ['did' => 'did:plc:followed', 'active' => true, 'updated_at' => now()],
+            // Known to the index but not followed by Tap, such as a repo only resolved.
+            ['did' => 'did:plc:resolved', 'active' => true, 'updated_at' => now()],
+            ['did' => 'did:plc:gone', 'active' => false, 'updated_at' => now()],
+        ]);
+
+        $backfill = $this->backfills()->start(self::PROFILES);
+
+        $this->assertSame(Backfills::FOLLOWED_REPOS, $backfill->source);
+        $this->assertSame(['did:plc:followed' => 'resync'], $backfill->repos()->pluck('method', 'did')->all());
+        $this->assertSame([], $this->relayCalls(), 'Nothing is discovered.');
+        $this->assertSame([], $this->tapCalls('/repos/add'), 'No repo is added to Tap.');
+    }
+
+    public function test_a_companion_collection_added_later_is_backfilled_like_any_other(): void
+    {
+        $this->backfills()->work();
+        Backfill::query()->update(['status' => Backfill::FINISHED, 'finished_at' => now()]);
+        Identity::query()->insert(['did' => 'did:plc:followed', 'active' => true, 'updated_at' => now()]);
+
+        config(['atp-appview.ingest.companions' => [self::PROFILES]]);
+
+        $this->assertSame([self::PROFILES], $this->backfills()->work());
+        $this->assertSame(Backfills::FOLLOWED_REPOS, Backfill::query()->where('collection', self::PROFILES)->value('source'));
+    }
+
+    public function test_the_command_backfills_a_companion_collection(): void
+    {
+        config(['atp-appview.ingest.companions' => [self::PROFILES]]);
+
+        $this->artisan('appview:backfill', ['collection' => [self::PROFILES]])->assertSuccessful();
+
+        $this->assertSame(1, Backfill::query()->where('collection', self::PROFILES)->count());
     }
 
     public function test_the_command_refuses_a_collection_that_is_not_ingested(): void

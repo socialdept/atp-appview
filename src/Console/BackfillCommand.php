@@ -4,24 +4,24 @@ namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
 use SocialDept\AtpAppview\Backfill\Backfills;
+use SocialDept\AtpAppview\Ingest\Collections;
 use Throwable;
 
 class BackfillCommand extends Command
 {
     protected $signature = 'appview:backfill
-                            {collection* : Collections to backfill, each already in atp-appview.ingest.collections}
+                            {collection* : Collections to backfill, each already in atp-appview.ingest.collections or ingest.companions}
                             {--source= : A relay or Light Rail URL, defaults to atp-appview.ingest.discovery_url}';
 
     protected $description = 'Have Tap backfill collections the index started ingesting, and track their progress';
 
     public function handle(Backfills $backfills): int
     {
-        $ingested = (array) config('atp-appview.ingest.collections', []);
         $status = self::SUCCESS;
 
         foreach ((array) $this->argument('collection') as $collection) {
-            if (! in_array($collection, $ingested, true)) {
-                $this->components->error("{$collection} is not ingested. Add it to atp-appview.ingest.collections and to Tap's collection filters first.");
+            if (! Collections::ingests($collection)) {
+                $this->components->error("{$collection} is not ingested. Add it to atp-appview.ingest.collections or ingest.companions, and to Tap's collection filters, first.");
                 $status = self::FAILURE;
 
                 continue;
