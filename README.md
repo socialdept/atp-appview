@@ -604,6 +604,33 @@ Tombstones keep each record's own revision, so a replayed older event still cann
 Schedule::command('appview:purge-inactive')->daily();
 ```
 
+## Status
+
+`AppviewStatus` gathers what an operator wants to know, for a status page or an admin panel:
+
+```php
+use SocialDept\AtpAppview\Status\AppviewStatus;
+
+$status = app(AppviewStatus::class);
+
+$status->tap();             // Tap's health, repos followed, outbox, resync buffer, firehose cursor
+$status->ingest();          // events a minute, live and backfill, and whether a backfill is arriving
+$status->writes();          // rows written to the index lately, and the latest write
+$status->recentRecords();   // records the network made in the last 24 hours, by their own timestamps
+$status->collections();     // records, hidden, tombstones and repos per collection
+$status->totals();          // the same across collections
+$status->storage();         // the index's size on disk, on Postgres
+$status->accounts();        // active accounts, and inactive ones by status
+$status->reconciliation();  // repos checked recently, and reconcile errors grouped by kind
+$status->lexicons();        // followed lexicons and versions held back
+$status->validation();      // the validation mode, and invalid records per collection
+$status->blocklist();       // rules, records dropped and the latest drop
+```
+
+Each figure is cheap. Whole-index counts come from `IndexStats`, kept by `appview:stats`, and the rest is cached for a few seconds, so a page that polls costs little. Tap is asked with a short timeout, and a Tap that is down is reported rather than thrown.
+
+To reconcile one repo from a button and keep the outcome on its identity, the way the scheduled run does, call `Reconciler::reconcileAndRecord($did)`. `ReconcileResult::summary()` says what it found in one line, and `ReconcileErrors::kind()` groups errors such as "Host not found" or "Timed out". `FollowedLexicon` is the model for `atp_lexicons`.
+
 ## XRPC
 
 Every class carrying the `#[Xrpc]` attribute becomes a route at `/xrpc/{nsid}`. Whether it is a query (GET) or a procedure (POST) comes from its lexicon, loaded through atp-schema from `resources/lexicons`.

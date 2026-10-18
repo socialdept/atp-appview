@@ -28,4 +28,20 @@ final class ReconcileResult
     {
         return $this->indexed !== [] || $this->tombstoned !== [];
     }
+
+    /**
+     * One line saying what happened, for a notification or a log.
+     */
+    public function summary(): string
+    {
+        $account = $this->account !== null ? ", account {$this->account}" : '';
+
+        return match (true) {
+            $this->skipped !== null => "Skipped: {$this->skipped}",
+            $this->account !== null && $this->rev === null => "Account {$this->account}",
+            $this->changed() => count($this->indexed).' indexed, '.count($this->tombstoned).' tombstoned'.$account,
+            $this->account !== null => "In step with its PDS{$account}",
+            default => 'In step with its PDS',
+        };
+    }
 }
