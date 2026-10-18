@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Ingest;
 
+use Closure;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -52,6 +53,13 @@ class TapConsumer
     protected ?Cache $restartCache = null;
 
     protected mixed $lastRestart = null;
+
+    /** @var (Closure(): ?string)|null */
+    protected ?Closure $deployedFingerprint = null;
+
+    protected ?string $startedFingerprint = null;
+
+    protected int $configCheckSeconds = 60;
 
     protected int $startedAt = 0;
 
@@ -110,6 +118,37 @@ class TapConsumer
     }
 
     /**
+     * Exit when the deployed config is no longer the one this started with,
+     * checking every few seconds, so a new handler, collection or sort field
+     * takes effect without a manual appview:restart.
+     *
+     * @param  Closure(): ?string  $deployed  The deployed config's signature now, or null when it cannot tell
+     * @param  string  $started  The signature when this process started
+     */
+    public function withConfigWatch(Closure $deployed, string $started, int $everySeconds = 60): static
+    {
+        $this->deployedFingerprint = $deployed;
+        $this->startedFingerprint = $started;
+        $this->configCheckSeconds = max(1, $everySeconds);
+
+        return $this;
+    }
+
+    /**
+     * Whether the deployed config differs from the one this started with.
+     */
+    public function configChanged(): bool
+    {
+        if ($this->deployedFingerprint === null) {
+            return false;
+        }
+
+        $deployed = ($this->deployedFingerprint)();
+
+        return $deployed !== null && $deployed !== $this->startedFingerprint;
+    }
+
+    /**
      * Connect and consume until stopped. Blocks.
      */
     public function run(): void
@@ -120,6 +159,10 @@ class TapConsumer
             $this->flush();
             $this->stopIfLimitReached();
         });
+
+        if ($this->deployedFingerprint !== null) {
+            $this->loop->addPeriodicTimer($this->configCheckSeconds, fn () => $this->stopIfConfigChanged());
+        }
 
         // Signal handling needs ext-pcntl, which some PHP builds lack.
         if (function_exists('pcntl_signal')) {
@@ -266,6 +309,18 @@ class TapConsumer
         $this->batchesHandled = 0;
         $this->lastRestart = $this->restartCache?->get(self::RESTART_KEY);
         $this->disableQueryLogs();
+    }
+
+    /**
+     * Stop without acknowledging what is buffered, so Tap redelivers it to a
+     * consumer running the deployed config.
+     */
+    protected function stopIfConfigChanged(): void
+    {
+        if (! $this->stopping && $this->configChanged()) {
+            Log::info('[atp-appview] Stopping the consumer', ['reason' => 'the deployed config changed']);
+            $this->stop('the deployed config changed');
+        }
     }
 
     protected function stopIfLimitReached(): void
