@@ -12,6 +12,7 @@ use RuntimeException;
 use SocialDept\AtpAppview\Backfill\Events\BackfillFinished;
 use SocialDept\AtpAppview\Backfill\Events\BackfillStarted;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Models\Backfill;
@@ -38,10 +39,13 @@ class Backfills
 
     protected const RUNNING = 'atp-appview:backfills:running';
 
+    protected ?bool $stillBackfilling = null;
+
     public function __construct(
         protected TapAdmin $tap,
         protected Blocklist $blocklist,
         protected Cache $cache,
+        protected IngestStats $ingest,
     ) {
     }
 
@@ -125,11 +129,18 @@ class Backfills
      * every new collection is backfilled, even if a few live records reached
      * it first.
      *
+     * Except while Tap is still backfilling on that first run, as on a fresh
+     * install, where Tap starts on its signal collection's repos before the
+     * scheduler first runs. Those records are not a finished backfill, so a
+     * Tap with resync routes is asked to backfill again, which tracks the
+     * rest as they arrive and sends nothing for repos it already finished.
+     *
      * @return array<int, string> Collections a backfill was started for
      */
     public function startNew(): array
     {
         $connection = $this->connection();
+        $this->stillBackfilling = null;
         $configured = array_values(array_unique((array) config('atp-appview.ingest.collections', [])));
         $known = $connection->table('atp_ingest_collections')->get()->keyBy('collection');
         $now = Carbon::now('UTC');
@@ -149,7 +160,9 @@ class Backfills
                 continue;
             }
 
-            $baseline = $firstRun && Record::withTrashed()->withHidden()->where('collection', $collection)->exists();
+            $baseline = $firstRun
+                && Record::withTrashed()->withHidden()->where('collection', $collection)->exists()
+                && ! $this->stillBackfilling();
             $backfillId = null;
 
             if (! $baseline) {
@@ -396,6 +409,19 @@ class Backfills
             }
 
             BackfillRepo::query()->where('backfill_id', $backfill->id)->where('did', $did)->update(['error' => $error]);
+        }
+    }
+
+    /**
+     * Whether Tap is mid-backfill and can backfill again without re-sending
+     * what it already sent. Asked once per run.
+     */
+    protected function stillBackfilling(): bool
+    {
+        try {
+            return $this->stillBackfilling ??= $this->ingest->backfilling() && $this->tap->supportsResync();
+        } catch (Throwable) {
+            return $this->stillBackfilling = false;
         }
     }
 
