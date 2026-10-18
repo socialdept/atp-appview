@@ -158,6 +158,11 @@ return [
         // Repos handed to Tap per request.
         'chunk' => (int) env('ATP_APPVIEW_BACKFILL_CHUNK', 500),
 
+        // How long Tap must go without delivering before a backfill whose
+        // repos have all delivered is finished. A repo counts as delivered at
+        // its first record, so this waits out the rest.
+        'settle_seconds' => (int) env('ATP_APPVIEW_BACKFILL_SETTLE_SECONDS', 60),
+
         // How long Tap may go without delivering a repo before a backfill is
         // ended anyway. The repos left had nothing in the collection, or Tap
         // could not fetch them.

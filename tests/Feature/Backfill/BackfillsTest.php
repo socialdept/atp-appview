@@ -221,15 +221,33 @@ class BackfillsTest extends TestCase
         $this->assertNull(DB::table('atp_ingest_collections')->where('collection', self::READS)->value('removed_at'));
     }
 
-    public function test_a_backfill_finishes_once_every_repo_delivered(): void
+    public function test_a_backfill_whose_repos_all_delivered_waits_for_the_rest_of_their_records(): void
     {
         Event::fake([BackfillFinished::class]);
         $this->markKnown();
-        $backfill = $this->backfillWith(['did:plc:a' => now(), 'did:plc:b' => now()]);
+        $backfill = $this->backfillWith(['did:plc:a' => null, 'did:plc:b' => null]);
 
+        // Each repo's first records arrive, so every repo has delivered, but
+        // Tap is still sending the rest.
+        $this->app->make(BackfillTracker::class)->handle(new Batch([$this->backfilled('did:plc:a', '1'), $this->backfilled('did:plc:b', '2')]));
         $this->backfills()->work();
+        $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status);
 
+        $this->travel(30)->seconds();
+        $this->app->make(BackfillTracker::class)->handle(new Batch([$this->backfilled('did:plc:a', '3')]));
+        $this->travel(45)->seconds();
+        $this->backfills()->work();
+        $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status, 'Records arrived 45 seconds ago.');
+
+        $this->travel(30)->seconds();
+        $this->outbox = 2;
+        $this->backfills()->work();
+        $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status, 'Tap still has events to send.');
+
+        $this->outbox = 0;
+        $this->backfills()->work();
         $this->assertSame(Backfill::FINISHED, $backfill->fresh()->status);
+        $this->assertSame(3, (int) $backfill->repos()->sum('records'), 'Every record was counted, not just the first.');
         Event::assertDispatched(BackfillFinished::class, fn ($e) => $e->backfill->is($backfill));
     }
 
@@ -237,11 +255,12 @@ class BackfillsTest extends TestCase
     {
         $this->markKnown();
         $backfill = $this->backfillWith(['did:plc:a' => now()->subMinutes(2), 'did:plc:never' => null]);
+        $backfill->update(['last_delivery_at' => now()->subMinutes(2)]);
 
         $this->backfills()->work();
         $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status, 'Tap delivered recently.');
 
-        BackfillRepo::query()->where('did', 'did:plc:a')->update(['delivered_at' => now()->subMinutes(11)]);
+        $backfill->update(['last_delivery_at' => now()->subMinutes(11)]);
         $this->outbox = 3;
         $this->backfills()->work();
         $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status, 'Tap still has events to send.');
