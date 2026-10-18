@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use SocialDept\AtpAppview\Ingest\DeployedConfig;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 
 class ConsumeCommand extends Command
@@ -26,6 +27,7 @@ class ConsumeCommand extends Command
         $consumer
             ->withLimits((int) $this->option('max-time'), (int) $this->option('max-batches'), (int) $this->option('memory'))
             ->withRestartSignal($cache)
+            ->withConfigWatch(fn () => DeployedConfig::signature(), DeployedConfig::signature())
             ->run();
 
         if ($consumer->stopReason() !== null) {
