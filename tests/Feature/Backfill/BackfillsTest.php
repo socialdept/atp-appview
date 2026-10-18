@@ -72,6 +72,7 @@ class BackfillsTest extends TestCase
                     ? Http::response(['did' => $did, 'state' => 'desynchronized'])
                     : Http::response(['message' => 'repo not found'], 404);
             },
+            self::TAP.'/resync-all' => fn () => $this->resyncRoutes ? Http::response(['repos' => count($this->tracked)]) : Http::response(['message' => 'Not Found'], 404),
             self::TAP.'/repos/add' => fn () => $this->addFails ? Http::response('down', 500) : Http::response(),
             self::TAP.'/repos/remove' => Http::response(),
             self::TAP.'/stats/outbox-buffer' => fn () => Http::response(['outbox_buffer' => $this->outbox]),
@@ -157,8 +158,23 @@ class BackfillsTest extends TestCase
         $this->backfills()->start(self::READS);
     }
 
-    public function test_a_backfill_that_could_not_hand_its_repos_to_tap_fails(): void
+    public function test_a_repo_tap_does_not_take_keeps_its_error_and_the_rest_carry_on(): void
     {
+        // did:plc:followed resyncs, did:plc:new cannot be added.
+        $this->addFails = true;
+
+        $backfill = $this->backfills()->start(self::READS);
+
+        $this->assertSame(Backfill::RUNNING, $backfill->fresh()->status);
+        $this->assertSame('resync', $backfill->repos()->where('did', 'did:plc:followed')->value('method'));
+        $this->assertStringContainsString('Tap did not take it', (string) $backfill->repos()->where('did', 'did:plc:new')->value('error'));
+        $this->assertCount(3, $this->tapCalls('/repos/add'), 'The add is tried three times.');
+        $this->assertSame(1, $this->backfills()->progress()[0]['unreachable']);
+    }
+
+    public function test_a_backfill_tap_takes_none_of_fails(): void
+    {
+        $this->tracked = [];
         $this->addFails = true;
 
         try {
@@ -169,7 +185,42 @@ class BackfillsTest extends TestCase
 
         $backfill = Backfill::sole();
         $this->assertSame(Backfill::FAILED, $backfill->status);
-        $this->assertStringContainsString('Handing repos to Tap failed', $backfill->error);
+        $this->assertStringContainsString('Tap took none of the repos', $backfill->error);
+    }
+
+    public function test_starting_again_after_a_failed_attempt_does_not_hand_its_repos_over_twice(): void
+    {
+        $failed = Backfill::query()->create(['collection' => self::READS, 'source' => 'test', 'status' => Backfill::FAILED, 'started_at' => now(), 'finished_at' => now()]);
+        BackfillRepo::query()->insert(['backfill_id' => $failed->id, 'did' => 'did:plc:followed', 'method' => 'resync']);
+
+        $backfill = $this->backfills()->start(self::READS);
+
+        $this->assertSame([], $this->tapCalls('/resync/did:plc:followed'));
+        $this->assertSame(['did:plc:followed' => 'resync', 'did:plc:new' => 'add'], $backfill->repos()->orderBy('did')->pluck('method', 'did')->all());
+    }
+
+    public function test_a_failed_attempt_the_worker_retried_leaves_the_dashboard(): void
+    {
+        $failed = Backfill::query()->create(['collection' => self::READS, 'source' => 'test', 'status' => Backfill::FAILED, 'error' => 'timed out', 'started_at' => now(), 'finished_at' => now()]);
+        $this->backfillWith(['did:plc:a' => null]);
+        Backfill::query()->create(['collection' => self::POSTS, 'source' => 'test', 'status' => Backfill::FAILED, 'error' => 'timed out', 'started_at' => now(), 'finished_at' => now()]);
+        $this->backfills()->forget();
+
+        $shown = collect($this->backfills()->progress())->map(fn (array $b) => [$b['collection'], $b['status']])->all();
+
+        $this->assertNotContains($failed->id, array_column($this->backfills()->progress(), 'id'));
+        $this->assertEqualsCanonicalizing([[self::READS, Backfill::RUNNING], [self::POSTS, Backfill::FAILED]], $shown);
+    }
+
+    public function test_a_companion_backfill_asks_tap_to_resync_everything_in_one_request(): void
+    {
+        config(['atp-appview.ingest.companions' => [self::PROFILES]]);
+        Identity::query()->insert(['did' => 'did:plc:followed', 'active' => true, 'updated_at' => now()]);
+
+        $this->backfills()->start(self::PROFILES);
+
+        $this->assertCount(1, $this->tapCalls('/resync-all'));
+        $this->assertSame([], $this->tapCalls('/resync/did:plc:followed'));
     }
 
     public function test_a_repo_is_delivered_when_its_backfilled_records_arrive_and_live_ones_say_nothing(): void
@@ -339,7 +390,9 @@ class BackfillsTest extends TestCase
         $backfill = $this->backfills()->start(self::PROFILES);
 
         $this->assertSame(Backfills::FOLLOWED_REPOS, $backfill->source);
-        $this->assertSame(['did:plc:followed' => 'resync'], $backfill->repos()->pluck('method', 'did')->all());
+        // One resync-all covers every repo Tap follows. A repo it does not
+        // follow is never added, and simply never delivers.
+        $this->assertSame(['did:plc:followed' => 'resync', 'did:plc:resolved' => 'resync'], $backfill->repos()->orderBy('did')->pluck('method', 'did')->all());
         $this->assertSame([], $this->relayCalls(), 'Nothing is discovered.');
         $this->assertSame([], $this->tapCalls('/repos/add'), 'No repo is added to Tap.');
     }
