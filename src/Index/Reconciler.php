@@ -3,6 +3,8 @@
 namespace SocialDept\AtpAppview\Index;
 
 use Illuminate\Database\ConnectionResolverInterface;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use RuntimeException;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Blocklist\PdsLookup;
@@ -13,6 +15,7 @@ use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpClient\Exceptions\AtpResponseException;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpSupport\Facades\Resolver;
+use Throwable;
 
 /**
  * Brings one repo's indexed records in line with its own PDS.
@@ -45,6 +48,28 @@ class Reconciler
         protected Blocklist $blocklist,
         protected PdsLookup $pdsLookup,
     ) {
+    }
+
+    /**
+     * Reconcile a repo and keep the outcome on its identity, as the scheduled
+     * appview:reconcile does: when it was checked, the revision it compared
+     * against, and the error if the PDS could not be read.
+     *
+     * @throws Throwable when the PDS cannot be read, after recording why
+     */
+    public function reconcileAndRecord(string $did): ReconcileResult
+    {
+        try {
+            $result = $this->reconcile($did);
+        } catch (Throwable $e) {
+            $this->record($did, null, $e->getMessage());
+
+            throw $e;
+        }
+
+        $this->record($did, $result->rev, null);
+
+        return $result;
     }
 
     /**
@@ -156,6 +181,15 @@ class Reconciler
      *
      * @return array{pds: mixed, rev: string, status: null}|array{pds: null, rev: null, status: string}
      */
+    protected function record(string $did, ?string $rev, ?string $error): void
+    {
+        Identity::query()->whereKey($did)->update([
+            'reconciled_at' => Carbon::now('UTC'),
+            'reconciled_rev' => $rev,
+            'reconcile_error' => $error === null ? null : Str::limit($error, 1000),
+        ]);
+    }
+
     protected function latestCommit(string $did, bool $fresh = false): array
     {
         $pds = Atp::public(Resolver::resolvePds($did, ! $fresh) ?? throw new RuntimeException("{$did} has no PDS."));

@@ -30,18 +30,16 @@ class ReconcileCommand extends Command
             $totals['repos']++;
 
             try {
-                $result = $reconciler->reconcile($did, $dryRun);
+                $result = $dryRun ? $reconciler->reconcile($did, true) : $reconciler->reconcileAndRecord($did);
             } catch (Throwable $e) {
                 $totals['failed']++;
                 $this->components->twoColumnDetail($did, '<fg=red>'.Str::limit($e->getMessage(), 120).'</>');
-                $dryRun || $this->remember($did, null, $e->getMessage());
 
                 continue;
             }
 
             $totals['indexed'] += count($result->indexed);
             $totals['tombstoned'] += count($result->tombstoned);
-            $dryRun || $this->remember($did, $result->rev, null);
 
             $this->components->twoColumnDetail($did, match (true) {
                 $result->skipped !== null => "<fg=gray>skipped, {$result->skipped}</>",
@@ -106,14 +104,5 @@ class ReconcileCommand extends Command
         return $query->getConnection()->getDriverName() === 'pgsql'
             ? $query->orderByRaw('reconciled_at asc nulls first')
             : $query->orderBy('reconciled_at');
-    }
-
-    protected function remember(string $did, ?string $rev, ?string $error): void
-    {
-        Identity::query()->whereKey($did)->update([
-            'reconciled_at' => Carbon::now('UTC'),
-            'reconciled_rev' => $rev,
-            'reconcile_error' => $error === null ? null : Str::limit($error, 1000),
-        ]);
     }
 }
