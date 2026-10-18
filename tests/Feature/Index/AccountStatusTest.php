@@ -213,7 +213,8 @@ class AccountStatusTest extends TestCase
 
     public function test_upgrading_applies_the_status_of_accounts_already_inactive(): void
     {
-        $this->artisan('migrate:rollback', ['--step' => 1])->run();
+        // Back to before the account status migration, which a later one follows.
+        $this->artisan('migrate:rollback', ['--step' => 2])->run();
         Identity::query()->insert([
             ['did' => 'did:plc:gone', 'handle' => null, 'active' => false, 'status' => 'deleted', 'updated_at' => '2026-01-01 00:00:00'],
             ['did' => 'did:plc:away', 'handle' => null, 'active' => false, 'status' => 'deactivated', 'updated_at' => '2026-02-01 00:00:00'],

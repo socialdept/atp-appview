@@ -416,6 +416,35 @@ ATP_APPVIEW_VALIDATE_RECORDS=drop   # off (default), log or drop
 
 Only collections with a lexicon atp-schema can load are checked, and deletes always go through. Fields a lexicon does not mention are allowed, since a newer version of a lexicon may add optional fields this app does not know yet, and refs to other definitions are not followed. Every path into the index is checked: Tap, the sync procedure and reconciliation. Each batch logs one line per collection with an example, and `RecordValidation::count($collection)` reports how many invalid records a collection has seen. Checking costs well under a tenth of a millisecond per record.
 
+### Following published lexicons
+
+An AppView that indexes other people's records can follow their lexicons instead of copying the files in by hand. List the NSIDs and schedule the sync:
+
+```php
+// config/atp-appview.php
+'lexicons' => [
+    'follow' => ['com.example.thing', 'com.example.feed.post'],
+],
+```
+
+```php
+Schedule::command('appview:lexicons:sync')->hourly();
+```
+
+The sync resolves each NSID through its `_lexicon` DNS record, stores it in `atp_lexicons` with its CID, and writes the version in use to `lexicons.path`. That path is added to atp-schema's sources after the app's own, so validation and XRPC load followed lexicons like local ones, and an app's own copy wins. `atp_lexicon_versions` keeps every version that was put in use.
+
+A new version replaces the one in use only when atp-schema's breaking-change check passes. Otherwise it is held back with its findings, the one in use stays, and a warning is logged.
+
+```bash
+php artisan appview:lexicons                    # what is followed, and anything held back
+php artisan appview:lexicons:accept com.example.thing
+php artisan appview:lexicons:sync --force       # put held-back versions in use
+```
+
+The sync also asks Tap to follow each author's repo. With `com.atproto.lexicon.schema` in Tap's collection filters and `FollowedLexiconsHandler` in `ingest.handlers` (the default), a new version is synced as soon as its author publishes it. The event only says which NSID changed: the schema is still fetched through DNS, so a repo DNS does not name cannot publish a version this app uses. Long-running processes such as `appview:consume` read a new version once they restart.
+
+A fresh server or deploy gets every followed lexicon from the database: each sync writes all of them again.
+
 ### Stored values
 
 - **Postgres** stores `record` as `jsonb`, so fields can be read and indexed without re-parsing each document.

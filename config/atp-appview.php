@@ -134,6 +134,7 @@ return [
         // RecordIndexer writes the records index.
         'handlers' => [
             \SocialDept\AtpAppview\Index\RecordIndexer::class,
+            \SocialDept\AtpAppview\Lexicons\FollowedLexiconsHandler::class,
         ],
     ],
 
@@ -206,6 +207,30 @@ return [
         'inactive' => [
             'purge_after_days' => (int) env('ATP_APPVIEW_PURGE_INACTIVE_AFTER_DAYS', 180),
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Followed Lexicons
+    |--------------------------------------------------------------------------
+    |
+    | Published lexicons this AppView follows, usually other people's records
+    | it indexes. appview:lexicons:sync resolves each through its _lexicon DNS
+    | record, keeps it in atp_lexicons and writes the version in use to
+    | `path`, which atp-schema reads after the app's own lexicons. A new
+    | version that would break the one in use is held back until
+    | appview:lexicons:accept puts it in use. Schedule the sync hourly.
+    |
+    */
+
+    'lexicons' => [
+        'follow' => [],
+
+        'path' => storage_path('app/atp-appview/lexicons'),
+
+        // Ask Tap to follow each author's repo, so a new version arrives as
+        // an event. Tap also needs com.atproto.lexicon.schema in its filters.
+        'track_with_tap' => env('ATP_APPVIEW_TRACK_LEXICONS', true),
     ],
 
     /*
