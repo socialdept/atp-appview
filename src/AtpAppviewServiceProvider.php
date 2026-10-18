@@ -22,10 +22,12 @@ use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
+use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
 use SocialDept\AtpClient\Auth\ServiceAuth;
@@ -97,6 +99,11 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         if (! $this->app->routesAreCached()) {
             $this->app->make(XrpcRoutes::class)->register();
+
+            // Read when the config is loaded, so route:cache keeps the choice.
+            if ($this->app->make(ServiceIdentity::class)->publishable()) {
+                $this->app->make(Router::class)->get('.well-known/did.json', DidDocumentController::class)->name('atp-appview.did-document');
+            }
 
             if (FrontendAuth::enabled()) {
                 $this->app->make(FrontendAuth::class)->register();

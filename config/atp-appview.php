@@ -204,6 +204,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Service Identity
+    |--------------------------------------------------------------------------
+    |
+    | A PDS proxying a request with atproto-proxy resolves the AppView's DID
+    | to find where to send it. When atp-client.service_auth.audience is a
+    | did:web, such as did:web:example.com#atproto_appview, set the endpoint
+    | and the DID document is served at /.well-known/did.json with that
+    | service in it.
+    |
+    */
+
+    'service' => [
+        // Where this AppView's XRPC routes are reached from the internet, such
+        // as https://example.com. Null serves no DID document.
+        'endpoint' => env('ATP_APPVIEW_SERVICE_ENDPOINT'),
+
+        // The service type published for the audience's #fragment.
+        'type' => 'AtprotoAppView',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | XRPC
     |--------------------------------------------------------------------------
     |
