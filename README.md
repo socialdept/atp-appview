@@ -321,6 +321,42 @@ On a Tap with resync routes, such as the [socialde.pt/tap](https://tangled.org/s
 
 [Tab](https://tangled.org/pds.dad/tab), a Tap fork that adds multiple signal collections, speaks the same protocol and works unchanged.
 
+### Backfilling a new collection
+
+Adding a collection later is the awkward case. Tap ignores repos it already follows when they are added again, and its collection filters only filter what it sends, so the older records of a new collection never arrive from repos it already follows. Tracked backfills handle that, and report progress while they run.
+
+List the collections once, for both the index and Tap:
+
+```dotenv
+ATP_APPVIEW_COLLECTIONS=app.example.post,app.example.like
+```
+
+```yaml
+# Tap, in docker-compose.yml
+TAP_COLLECTION_FILTERS: ${ATP_APPVIEW_COLLECTIONS}
+```
+
+Then schedule the worker:
+
+```php
+Schedule::command('appview:backfill:work')->everyMinute()->withoutOverlapping();
+```
+
+To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap and `appview:consume`, and the worker does the rest: it finds every repo holding the collection, as `appview:discover` does, and has Tap backfill them.
+
+- **On a Tap with resync routes**, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
+- **On any other Tap**, repos are removed and added again. That works, but Tap re-sends every collection of every repo, and each repo's live events wait until its backfill runs.
+
+A repo counts as delivered once its first backfilled record arrives, or straight away if the index already holds its records in the collection, so running a backfill again finishes promptly instead of waiting on records Tap already sent. The backfill finishes when every repo has delivered, or once Tap has gone `backfill.quiet_minutes` (10) without delivering and its outbox is empty. The repos left either had nothing in the collection or could not be fetched, and Tap's reason is kept on `atp_backfill_repos.error`. If nothing at all arrived, the backfill fails instead, since Tap most likely backfilled the repos before the collection was in its filters. Fix the filters and start it again.
+
+The first time the worker runs it has no history, so collections that already hold records count as backfilled, and only empty ones are backfilled, which is what a fresh app wants.
+
+```bash
+php artisan appview:backfill app.example.like    # start one by hand
+```
+
+`Backfills::progress()` reports each running backfill, and those that ended in the last hour, for a status page or admin panel. `active()` returns only the running ones, so a page can tell people that some records may be missing for now. `BackfillStarted` and `BackfillFinished` events fire as they start and end.
+
 ## Blocklist
 
 Some repos are spam, and some hosts bridge in content an AppView does not want. Block rules keep their records out of the index before any handler sees them:
