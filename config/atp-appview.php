@@ -99,8 +99,10 @@ return [
     |
     | appview:consume reads Tap's acknowledged websocket channel in batches
     | and hands each batch to the handlers below. Tab, the Tap fork, speaks the
-    | same protocol. Never point this at Tap's webhook mode: one request per
-    | record floods the application during a backfill.
+    | same protocol. Without a long-running process, Tap can deliver by
+    | webhook instead, see ingest.webhook below, but only with batched
+    | webhooks: one request per record floods the application during a
+    | backfill.
     |
     */
 
@@ -131,6 +133,17 @@ return [
         // Where appview:discover lists repos by collection: a relay, or
         // Light Rail at https://lightrail.microcosm.blue.
         'discovery_url' => env('ATP_APPVIEW_DISCOVERY_URL', 'https://relay1.us-east.bsky.network'),
+
+        // Receiving events by webhook instead of running appview:consume. Point
+        // Tap's webhook URL at this path, and give it batched webhooks (the
+        // socialde.pt/tap fork's TAB_WEBHOOK_BATCH_SIZE), or it sends one
+        // request per event. Tap signs requests with its admin password, so
+        // ingest.password must be set.
+        'webhook' => [
+            'enabled' => (bool) env('ATP_APPVIEW_TAP_WEBHOOK', false),
+            'path' => env('ATP_APPVIEW_TAP_WEBHOOK_PATH', 'atp-appview/tap'),
+            'middleware' => [],
+        ],
 
         // Classes implementing BatchHandler, run in order for every batch.
         // RecordIndexer writes the records index.
