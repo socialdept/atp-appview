@@ -17,6 +17,7 @@ use SocialDept\AtpAppview\Backfill\Events\BackfillStarted;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -192,6 +193,27 @@ class BackfillsTest extends TestCase
         $this->assertSame([self::READS], Backfill::query()->pluck('collection')->all());
     }
 
+    public function test_the_first_run_tracks_a_backfill_tap_is_still_running(): void
+    {
+        $this->indexRecord(self::POSTS);
+        $this->tapIsBackfilling();
+
+        $this->assertSame([self::POSTS, self::READS], $this->backfills()->work());
+
+        $this->assertSame(0, (int) DB::table('atp_ingest_collections')->where('collection', self::POSTS)->value('baseline'));
+        $this->assertCount(2, $this->tapCalls('/resync/'.'did:plc:followed'));
+    }
+
+    public function test_the_first_run_keeps_the_baseline_on_a_tap_without_resync_even_mid_backfill(): void
+    {
+        $this->resyncRoutes = false;
+        $this->indexRecord(self::POSTS);
+        $this->tapIsBackfilling();
+
+        $this->assertSame([self::READS], $this->backfills()->work());
+        $this->assertSame(1, (int) DB::table('atp_ingest_collections')->where('collection', self::POSTS)->value('baseline'));
+    }
+
     public function test_later_a_new_collection_is_backfilled_even_if_live_records_reached_it_first(): void
     {
         config(['atp-appview.ingest.collections' => [self::POSTS]]);
@@ -322,6 +344,13 @@ class BackfillsTest extends TestCase
         foreach ((array) config('atp-appview.ingest.collections') as $collection) {
             DB::table('atp_ingest_collections')->insert(['collection' => $collection, 'first_seen_at' => now(), 'baseline' => true]);
         }
+    }
+
+    protected function tapIsBackfilling(): void
+    {
+        $stats = $this->app->make(IngestStats::class);
+        $stats->record(new Batch([$this->backfilled('did:plc:old', 'a', collection: self::POSTS)]));
+        $stats->flush();
     }
 
     protected function indexRecord(string $collection): void

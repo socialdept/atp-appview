@@ -371,7 +371,7 @@ To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap and `ap
 
 A repo counts as delivered once its first backfilled record arrives, or straight away if the index already holds its records in the collection, so running a backfill again finishes promptly instead of waiting on records Tap already sent. The backfill finishes once Tap has stopped sending: when every repo has delivered and no record has arrived for `backfill.settle_seconds` (60), or, with repos that never delivered, after `backfill.quiet_minutes` (10) without a record, and in both cases only with Tap's outbox empty. A repo counts as delivered at its first record, so the settle period waits out the rest. The repos left either had nothing in the collection or could not be fetched, and Tap's reason is kept on `atp_backfill_repos.error`. If nothing at all arrived, the backfill fails instead, since Tap most likely backfilled the repos before the collection was in its filters. Fix the filters and start it again.
 
-The first time the worker runs it has no history, so collections that already hold records count as backfilled, and only empty ones are backfilled, which is what a fresh app wants.
+The first time the worker runs it has no history, so collections that already hold records count as backfilled, and only empty ones are backfilled, which is what a fresh app wants. The exception is a Tap still backfilling on that first run, as on a fresh install, where Tap starts on its signal collection's repos before the scheduler does. With resync routes, those collections are backfilled again and tracked, which sends nothing for repos Tap already finished.
 
 ```bash
 php artisan appview:backfill app.example.like    # start one by hand
