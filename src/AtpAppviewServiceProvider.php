@@ -16,6 +16,9 @@ use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
+use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
+use SocialDept\AtpAppview\Console\LexiconsCommand;
+use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
@@ -27,6 +30,7 @@ use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Lexicons\LexiconFollower;
 use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
@@ -68,6 +72,12 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Followed lexicons are a source like any other, after the app's own.
+        config()->set('atp-schema.sources', array_values(array_unique([
+            ...(array) config('atp-schema.sources', []),
+            LexiconFollower::path(),
+        ])));
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/../config/atp-appview.php' => config_path('atp-appview.php'),
@@ -82,6 +92,9 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BlocksCommand::class,
                 ConsumeCommand::class,
                 DiscoverCommand::class,
+                LexiconsAcceptCommand::class,
+                LexiconsCommand::class,
+                LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
