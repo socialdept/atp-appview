@@ -29,6 +29,7 @@ use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Console\StatsCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
+use SocialDept\AtpAppview\Http\Controllers\TapWebhookController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
@@ -118,6 +119,14 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         if (! $this->app->routesAreCached()) {
             $this->app->make(XrpcRoutes::class)->register();
+
+            // Off by default: apps that run appview:consume do not need it.
+            if (config('atp-appview.ingest.webhook.enabled')) {
+                $this->app->make(Router::class)
+                    ->post((string) config('atp-appview.ingest.webhook.path', 'atp-appview/tap'), TapWebhookController::class)
+                    ->middleware((array) config('atp-appview.ingest.webhook.middleware', []))
+                    ->name('atp-appview.tap-webhook');
+            }
 
             // Read when the config is loaded, so route:cache keeps the choice.
             if ($this->app->make(ServiceIdentity::class)->publishable()) {

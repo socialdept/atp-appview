@@ -216,7 +216,7 @@ ATP_APPVIEW_TAP_ADMIN_URL=http://localhost:2480
 
 ### Why it does not flood
 
-Tap's webhook mode sends one HTTP request per record, which buries a PHP application during a backfill. The websocket channel is acknowledged instead: Tap stops sending once its outbox of unacknowledged events is full, and the worker acknowledges a batch only after every handler has committed it. While a batch is being handled the worker reads nothing, so the database sets the pace.
+Stock Tap's webhook mode sends one HTTP request per record, which buries a PHP application during a backfill. The websocket channel is acknowledged instead: Tap stops sending once its outbox of unacknowledged events is full, and the worker acknowledges a batch only after every handler has committed it. While a batch is being handled the worker reads nothing, so the database sets the pace.
 
 1. Events are buffered until `batch_size` arrive (200) or `flush_ms` passes (500).
 2. Every handler receives the batch, in order.
@@ -244,6 +244,26 @@ Run `php artisan appview:restart` at the end of a deploy, the same as `queue:res
 The worker also restarts itself when its config changes. Every minute it compares `.env`, the config cache and the files in `config/` with how they were when it started, and exits if any changed, so adding a collection or a handler takes effect without a manual restart. That only sees files in place: a zero-downtime deploy into a new release directory leaves the worker looking at the old one, so keep `appview:restart` in the deploy.
 
 Exiting is always lossless. The batch in progress finishes first, and anything not yet acknowledged is redelivered by Tap when the worker comes back.
+
+### Receiving by webhook
+
+Where a long-running `appview:consume` is not an option, such as serverless hosting, Tap can deliver by webhook instead. This needs batched webhooks, which the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork adds, since stock Tap sends one request per event.
+
+```dotenv
+ATP_APPVIEW_TAP_WEBHOOK=true
+ATP_APPVIEW_TAP_PASSWORD=a-long-random-secret
+```
+
+```yaml
+# Tap
+TAB_WEBHOOK_URL: https://your.app/atp-appview/tap
+TAB_WEBHOOK_BATCH_SIZE: 200
+TAB_ADMIN_PASSWORD: ${ATP_APPVIEW_TAP_PASSWORD}
+```
+
+Tap posts each batch as `{"events": [...]}` and signs it with its admin password, which the route checks against `ingest.password`, so it refuses everything until one is set. The events go through the same blocklist, handlers and stats as `appview:consume`, and the request succeeds only once every handler has committed them. Anything else, including a batch that still fails after `max_attempts`, gets an error response, and Tap retries the whole batch. Tap sends one batch at a time unless `TAB_WEBHOOK_BATCH_PARALLELISM` says otherwise, so the application sets the pace. A single event from a Tap without batching works too, just slowly.
+
+Each request reads the config fresh, so there is no worker to restart after a deploy. The path is `ingest.webhook.path`, and `ingest.webhook.middleware` adds route middleware. If the app published `config/atp-appview.php` before this existed, add the `webhook` block to its `ingest` section: Laravel merges a package's config one level deep, so a published `ingest` section replaces the package's whole.
 
 ### Handlers
 
