@@ -317,6 +317,8 @@ Set `TAP_SIGNAL_COLLECTION` to whichever collection a new user creates first, an
 
 `TapAdmin` wraps Tap's admin API: `addRepos()` to backfill and follow specific repos, `removeRepos()`, `info($did)`, `stats('repo-count')` and `healthy()`.
 
+On a Tap with resync routes, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, `resyncRepo($did)` backfills a tracked repo again while keeping what Tap already sent, so only records it never delivered go out. That is how a collection added to Tap's filters reaches repos it already follows, since `addRepos()` ignores them. `resyncAll()` does the same for every repo, and `supportsResync()` says whether the Tap has the routes. On a Tap without them, both resync methods throw `TapFeatureUnavailableException`.
+
 [Tab](https://tangled.org/pds.dad/tab), a Tap fork that adds multiple signal collections, speaks the same protocol and works unchanged.
 
 ## Blocklist
