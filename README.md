@@ -350,7 +350,7 @@ ATP_APPVIEW_COLLECTIONS=app.example.post,app.example.like
 ATP_APPVIEW_COMPANION_COLLECTIONS=app.bsky.actor.profile
 ```
 
-A companion collection is indexed only for repos already followed. `appview:discover` never looks for it and refuses one passed by name. Adding one backfills the active repos the index already knows instead of finding repos, and on a Tap with resync routes, a repo Tap does not follow is left out rather than added. Reconciliation, status counts and record sync cover both lists. A collection in both lists counts as followed.
+A companion collection is indexed only for repos already followed. `appview:discover` never looks for it and refuses one passed by name. Adding one backfills the active repos the index already knows instead of finding repos, and never adds a repo to Tap. On a Tap with resync routes it asks once, through `/resync-all`, and a repo the index knows but Tap does not follow simply never delivers. Reconciliation, status counts and record sync cover both lists. A collection in both lists counts as followed.
 
 ### Tap admin
 
@@ -386,6 +386,8 @@ To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap (and `a
 
 - **On a Tap with resync routes**, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
 - **On any other Tap**, repos are removed and added again. That works, but Tap re-sends every collection of every repo, and each repo's live events wait until its backfill runs.
+
+Handing repos over survives a busy Tap: each request is retried three times, and a repo Tap still does not take keeps the error, counts as unreachable, and leaves the rest of the backfill running. Only a backfill Tap takes none of fails. Starting again after a failed attempt skips the repos that attempt already handed over, and the failed attempt leaves the dashboard once its retry starts.
 
 A repo counts as delivered once its first backfilled record arrives, or straight away if the index already holds its records in the collection, so running a backfill again finishes promptly instead of waiting on records Tap already sent. The backfill finishes once Tap has stopped sending: when every repo has delivered and no record has arrived for `backfill.settle_seconds` (60), or, with repos that never delivered, after `backfill.quiet_minutes` (10) without a record, and in both cases only with Tap's outbox empty. A repo counts as delivered at its first record, so the settle period waits out the rest. The repos left either had nothing in the collection or could not be fetched, and Tap's reason is kept on `atp_backfill_repos.error`. If nothing at all arrived, the backfill fails instead, since Tap most likely backfilled the repos before the collection was in its filters. Fix the filters and start it again.
 

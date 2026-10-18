@@ -16,6 +16,7 @@ use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
+use SocialDept\AtpAppview\Ingest\TapFeatureUnavailableException;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
 use SocialDept\AtpAppview\Models\Identity;
@@ -97,11 +98,37 @@ class Backfills
 
         try {
             $resync = $this->tap->supportsResync();
+            // Repos an attempt that failed in the last hour already handed to
+            // Tap, so starting again does not ask twice.
+            $handed = $this->handedByFailedAttempt($collection);
+            $failed = 0;
 
             foreach (array_chunk($dids, $this->chunk()) as $chunk) {
                 BackfillRepo::query()->insert(array_map(fn (string $did) => ['backfill_id' => $backfill->id, 'did' => $did], $chunk));
                 $this->alreadyIndexed($backfill, $chunk);
-                $resync ? $this->resync($backfill, $chunk, addUntracked: ! $companion) : $this->readd($backfill, $chunk);
+
+                foreach (array_intersect_key($handed, array_flip($chunk)) as $did => $method) {
+                    $this->method($backfill, [$did], $method);
+                }
+
+                $toHand = array_values(array_diff($chunk, array_keys($handed)));
+
+                // Every repo Tap follows, in one request, rather than one each.
+                if ($companion && $resync) {
+                    $this->method($backfill, $toHand, BackfillRepo::RESYNC);
+
+                    continue;
+                }
+
+                $failed += $resync ? $this->resync($backfill, $toHand, addUntracked: ! $companion) : $this->readd($backfill, $toHand);
+            }
+
+            if ($companion && $resync && $dids !== []) {
+                retry(3, fn () => $this->tap->resyncAll(), fn (int $attempt) => $attempt * 1000);
+            }
+
+            if ($dids !== [] && $failed === count($dids)) {
+                throw new RuntimeException('Tap took none of the repos. The last error is kept on each repo.');
             }
         } catch (Throwable $e) {
             $backfill->update(['status' => Backfill::FAILED, 'error' => Str::limit("Handing repos to Tap failed: {$e->getMessage()}", 1000), 'finished_at' => Carbon::now('UTC')]);
@@ -280,6 +307,11 @@ class Backfills
                 ->get()
                 ->keyBy('backfill_id');
 
+            // An ended backfill another of the same collection started after
+            // is superseded, such as a failed attempt the worker retried.
+            $backfills = $backfills->reject(fn (Backfill $backfill) => $backfill->status !== Backfill::RUNNING
+                && $backfills->contains(fn (Backfill $other) => $other->collection === $backfill->collection && $other->id > $backfill->id));
+
             return $backfills->map(fn (Backfill $backfill) => $this->describe($backfill, $counts[$backfill->id] ?? null))
                 ->sortBy(fn (array $b) => [$b['status'] === Backfill::RUNNING ? 0 : 1, $b['percent']])
                 ->values()
@@ -331,25 +363,49 @@ class Backfills
      * collection's backfill never adds a repo: one Tap does not follow is
      * left out of the backfill instead.
      *
+     * Each request is retried, and a repo Tap still does not take keeps the
+     * error and stays in the backfill, so one slow answer from a busy Tap
+     * does not throw away every repo handed over before it.
+     *
      * @param  array<int, string>  $dids
+     * @return int Repos Tap did not take
      */
-    protected function resync(Backfill $backfill, array $dids, bool $addUntracked = true): void
+    protected function resync(Backfill $backfill, array $dids, bool $addUntracked = true): int
     {
-        $untracked = array_values(array_filter($dids, fn (string $did) => $this->tap->resyncRepo($did) === null));
+        $resynced = [];
+        $untracked = [];
+        $failed = [];
+
+        foreach ($dids as $did) {
+            try {
+                $answer = $this->retrying(fn () => $this->tap->resyncRepo($did));
+            } catch (Throwable $e) {
+                $failed[$did] = $e->getMessage();
+
+                continue;
+            }
+
+            $answer === null ? $untracked[] = $did : $resynced[] = $did;
+        }
 
         if ($untracked !== [] && ! $addUntracked) {
             BackfillRepo::query()->where('backfill_id', $backfill->id)->whereIn('did', $untracked)->delete();
-            $this->method($backfill, array_values(array_diff($dids, $untracked)), BackfillRepo::RESYNC);
-
-            return;
+            $untracked = [];
         }
 
         if ($untracked !== []) {
-            $this->tap->addRepos($untracked);
+            try {
+                $this->retrying(fn () => $this->tap->addRepos($untracked));
+                $this->method($backfill, $untracked, BackfillRepo::ADD);
+            } catch (Throwable $e) {
+                $failed += array_fill_keys($untracked, $e->getMessage());
+            }
         }
 
-        $this->method($backfill, array_values(array_diff($dids, $untracked)), BackfillRepo::RESYNC);
-        $this->method($backfill, $untracked, BackfillRepo::ADD);
+        $this->method($backfill, $resynced, BackfillRepo::RESYNC);
+        $this->failed($backfill, $failed);
+
+        return count($failed);
     }
 
     /**
@@ -357,13 +413,69 @@ class Backfills
      * a repo removed but not added again is no longer followed at all.
      *
      * @param  array<int, string>  $dids
+     * @return int Repos Tap did not take
      */
-    protected function readd(Backfill $backfill, array $dids): void
+    protected function readd(Backfill $backfill, array $dids): int
     {
-        $this->tap->removeRepos($dids);
-        retry(3, fn () => $this->tap->addRepos($dids), 1000);
+        if ($dids === []) {
+            return 0;
+        }
+
+        try {
+            $this->retrying(fn () => $this->tap->removeRepos($dids));
+            $this->retrying(fn () => $this->tap->addRepos($dids));
+        } catch (Throwable $e) {
+            $this->failed($backfill, array_fill_keys($dids, $e->getMessage()));
+
+            return count($dids);
+        }
 
         $this->method($backfill, $dids, BackfillRepo::READD);
+
+        return 0;
+    }
+
+    /**
+     * A Tap request, tried three times with a growing pause. A Tap without
+     * the feature is not retried.
+     */
+    protected function retrying(Closure $request): mixed
+    {
+        return retry(3, $request, fn (int $attempt) => $attempt * 500, fn (Throwable $e) => ! $e instanceof TapFeatureUnavailableException);
+    }
+
+    /**
+     * Keep why Tap did not take each repo. They stay in the backfill and count
+     * as unreachable unless they deliver anyway.
+     *
+     * @param  array<string, string>  $errors  Error by DID
+     */
+    protected function failed(Backfill $backfill, array $errors): void
+    {
+        foreach ($errors as $did => $error) {
+            BackfillRepo::query()->where('backfill_id', $backfill->id)->where('did', $did)
+                ->update(['error' => Str::limit("Tap did not take it: {$error}", 1000)]);
+        }
+    }
+
+    /**
+     * Repos the last attempt at this collection handed to Tap, when it failed
+     * within the hour, with how each was handed.
+     *
+     * @return array<string, string> Method by DID
+     */
+    protected function handedByFailedAttempt(string $collection): array
+    {
+        $previous = Backfill::query()->where('collection', $collection)->latest('id')->skip(1)->first();
+
+        if ($previous === null || $previous->status !== Backfill::FAILED || $previous->finished_at?->lt(Carbon::now('UTC')->subHour())) {
+            return [];
+        }
+
+        return BackfillRepo::query()->where('backfill_id', $previous->id)
+            ->whereNotNull('method')->whereNull('error')
+            ->pluck('method', 'did')
+            ->all();
     }
 
     /**
