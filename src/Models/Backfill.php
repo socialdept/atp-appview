@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $status running, finished or failed
  * @property string|null $error Why it failed
  * @property \Illuminate\Support\Carbon $started_at
+ * @property \Illuminate\Support\Carbon|null $last_delivery_at When any of its records last arrived
  * @property \Illuminate\Support\Carbon|null $finished_at
  */
 class Backfill extends Model
@@ -38,7 +39,7 @@ class Backfill extends Model
 
     protected function casts(): array
     {
-        return ['started_at' => 'datetime', 'finished_at' => 'datetime'];
+        return ['started_at' => 'datetime', 'finished_at' => 'datetime', 'last_delivery_at' => 'datetime'];
     }
 
     /**

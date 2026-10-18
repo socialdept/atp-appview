@@ -190,13 +190,17 @@ class Backfills
         $repos = implode(', ', array_fill(0, count($counts), '?'));
         $ids = implode(', ', array_fill(0, count($backfillIds), '?'));
 
+        $now = Carbon::now('UTC')->format('Y-m-d H:i:s');
+
+        $this->connection()->table('atp_backfills')->whereIn('id', $backfillIds)->update(['last_delivery_at' => $now]);
+
         // One statement for the batch: each repo's count added, and its first
         // arrival kept.
         $this->connection()->update(
             "update atp_backfill_repos set records = records + case did {$cases} else 0 end, delivered_at = coalesce(delivered_at, ?) where backfill_id in ({$ids}) and did in ({$repos})",
             [
                 ...collect($counts)->flatMap(fn (int $n, string $did) => [$did, $n])->all(),
-                Carbon::now('UTC')->format('Y-m-d H:i:s'),
+                $now,
                 ...array_values($backfillIds),
                 ...array_keys($counts),
             ],
@@ -335,25 +339,32 @@ class Backfills
     }
 
     /**
-     * A backfill is done when every repo delivered, or Tap has gone quiet with
-     * its outbox empty. If nothing at all arrived by then, Tap most likely
-     * backfilled the repos without the collection in its filters, so it
-     * fails instead of finishing.
+     * A backfill is done once Tap has stopped sending its records: no delivery
+     * for a short while and an empty outbox. A repo counts as delivered at its
+     * first record, so every repo having delivered is not enough on its own,
+     * since the rest of their records may still be on the way.
+     *
+     * Repos that never delivered get the longer quiet window first. If
+     * nothing at all arrived by then, Tap most likely backfilled the repos
+     * without the collection in its filters, so it fails instead of
+     * finishing.
      */
     protected function finishIfDone(Backfill $backfill): void
     {
         $repos = BackfillRepo::query()->where('backfill_id', $backfill->id);
         $total = (clone $repos)->count();
         $delivered = (clone $repos)->whereNotNull('delivered_at')->count();
+        $last = Carbon::parse($backfill->last_delivery_at ?? $backfill->started_at, 'UTC');
+
+        $wait = $delivered < $total
+            ? Carbon::now('UTC')->subMinutes($this->quietMinutes())
+            : Carbon::now('UTC')->subSeconds($this->settleSeconds());
+
+        if (! $last->lt($wait) || ! $this->tapDrained()) {
+            return;
+        }
 
         if ($delivered < $total) {
-            $last = (clone $repos)->max('delivered_at') ?? $backfill->started_at;
-            $quiet = Carbon::parse($last, 'UTC')->lt(Carbon::now('UTC')->subMinutes($this->quietMinutes()));
-
-            if (! $quiet || ! $this->tapDrained()) {
-                return;
-            }
-
             $this->explainStragglers($backfill);
         }
 
@@ -430,6 +441,11 @@ class Backfills
     protected function chunk(): int
     {
         return max(1, (int) config('atp-appview.backfill.chunk', 500));
+    }
+
+    protected function settleSeconds(): int
+    {
+        return max(0, (int) config('atp-appview.backfill.settle_seconds', 60));
     }
 
     protected function quietMinutes(): int
