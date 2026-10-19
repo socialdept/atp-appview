@@ -209,7 +209,7 @@ An issuer with a fragment, such as `did:web:feed.example#bsky_fg`, is a service 
 
 [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) does the network work: crawling, fetching repos, verifying commits and ordering events per repo. It delivers what it finds to your application in batches, and each batch goes to your handlers. The application only writes what arrives.
 
-By default Tap delivers by webhook, so there is no worker to keep running. This needs batched webhooks, which the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork adds, with its image at `ghcr.io/socialdept/tap`. Stock Tap sends one request per event, which buries a PHP application during a backfill. With stock Tap, [run a worker](#running-a-worker-instead) instead.
+By default Tap delivers by webhook, so there is no worker to keep running. This needs batched webhooks, which [Tab](https://tangled.org/pds.dad/tab), a fork of Tap, adds, with its image at `fatfingers23/tab`. Its settings use the `TAB_` prefix in place of `TAP_`. Stock Tap sends one request per event, which buries a PHP application during a backfill. With stock Tap, [run a worker](#running-a-worker-instead) instead.
 
 ```dotenv
 ATP_APPVIEW_TAP_ADMIN_URL=http://localhost:2480
@@ -356,9 +356,9 @@ A companion collection is indexed only for repos already followed. `appview:disc
 
 `TapAdmin` wraps Tap's admin API: `addRepos()` to backfill and follow specific repos, `removeRepos()`, `info($did)`, `stats('repo-count')` and `healthy()`.
 
-On a Tap with resync routes, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, `resyncRepo($did)` backfills a tracked repo again while keeping what Tap already sent, so only records it never delivered go out. That is how a collection added to Tap's filters reaches repos it already follows, since `addRepos()` ignores them. `resyncAll()` does the same for every repo, and `supportsResync()` says whether the Tap has the routes. On a Tap without them, both resync methods throw `TapFeatureUnavailableException`.
+On a Tap with resync routes, such as [Tab](https://tangled.org/pds.dad/tab), `resyncRepo($did)` backfills a tracked repo again while keeping what Tap already sent, so only records it never delivered go out. That is how a collection added to Tap's filters reaches repos it already follows, since `addRepos()` ignores them. `resyncAll()` does the same for every repo, and `supportsResync()` says whether the Tap has the routes. On a Tap without them, both resync methods throw `TapFeatureUnavailableException`.
 
-[Tab](https://tangled.org/pds.dad/tab), a Tap fork that adds multiple signal collections, speaks the same protocol and works unchanged.
+[Tab](https://tangled.org/pds.dad/tab) also adds multiple signal collections, and speaks the same protocol as Tap otherwise.
 
 ### Backfilling a new collection
 
@@ -384,7 +384,7 @@ Schedule::command('appview:backfill:work')->everyMinute()->withoutOverlapping();
 
 To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap (and `appview:consume`, if you run it), and `appview:backfill:work` does the rest: it finds every repo holding the collection, as `appview:discover` does, and has Tap backfill them. A companion collection backfills the repos already followed instead.
 
-- **On a Tap with resync routes**, such as the [socialde.pt/tap](https://tangled.org/socialde.pt/tap) fork, repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
+- **On a Tap with resync routes**, such as [Tab](https://tangled.org/pds.dad/tab), repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
 - **On any other Tap**, repos are removed and added again. That works, but Tap re-sends every collection of every repo, and each repo's live events wait until its backfill runs.
 
 Handing repos over survives a busy Tap: each request is retried three times, and a repo Tap still does not take keeps the error, counts as unreachable, and leaves the rest of the backfill running. Only a backfill Tap takes none of fails. Starting again after a failed attempt skips the repos that attempt already handed over, and the failed attempt leaves the dashboard once its retry starts.

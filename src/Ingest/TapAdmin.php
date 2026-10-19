@@ -54,7 +54,7 @@ class TapAdmin
      * collection added to its filters. Returns the repo's resulting state, or
      * null if Tap does not track the repo.
      *
-     * Needs a Tap with POST /resync/:did, such as the socialde.pt/tap fork.
+     * Needs a Tap with POST /resync/:did, such as Tab (tangled.org/pds.dad/tab).
      * Check with supportsResync() first.
      *
      * @throws TapFeatureUnavailableException when the Tap has no resync route
