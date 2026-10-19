@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Labels;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Models\Label;
 
 /**
  * Keeps Tack's subjects in step with the index, so Tack fetches the labels
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\DB;
  * - Records indexed after their account was registered but made before it,
  *   such as a backfill arriving late, are sent too. Records made since need
  *   nothing: their labels arrive live.
+ * - Labels past their expiry are dropped, and what they hid is shown.
  */
 class SubjectSync
 {
@@ -30,14 +32,31 @@ class SubjectSync
     }
 
     /**
-     * @return array{accounts: int, uris: int}
+     * @return array{accounts: int, uris: int, expired: int}
      */
     public function run(int $limit = 1000): array
     {
+        $expired = self::expire();
         $accounts = $this->registerAccounts($limit);
         $uris = $this->sendLateRecords();
 
-        return ['accounts' => $accounts, 'uris' => $uris];
+        return ['accounts' => $accounts, 'uris' => $uris, 'expired' => $expired];
+    }
+
+    /**
+     * Drop labels past their expiry and refresh the accounts they were on.
+     *
+     * @return int Labels dropped
+     */
+    public static function expire(): int
+    {
+        $expired = Label::query()->whereNotNull('exp')->where('exp', '<=', Carbon::now('UTC'));
+        $subjects = (clone $expired)->distinct()->pluck('subject')->all();
+        $count = $expired->delete();
+
+        app(Visibility::class)->refresh($subjects);
+
+        return $count;
     }
 
     protected function registerAccounts(int $limit): int

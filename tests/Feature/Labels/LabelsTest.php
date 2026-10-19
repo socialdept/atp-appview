@@ -278,4 +278,17 @@ class LabelsTest extends TestCase
 
         Http::assertSent(fn ($request) => $request->url() === 'http://tack.test/labelers/add' && $request['did'] === 'did:plc:new');
     }
+
+    public function test_an_expired_label_stops_hiding_once_swept(): void
+    {
+        $this->indexPost('a');
+        (new LabelIndexer())->handle(new Batch([new LabelEvent(++$this->id, self::MOD, $this->uri('a'), null, 'porn', false, '2026-01-01T00:00:00.000Z', now()->addHour()->toIso8601ZuluString(), true)]));
+        $this->assertSame(0, Record::query()->count());
+
+        $this->travel(2)->hours();
+        $this->artisan('appview:labels:sync')->assertSuccessful();
+
+        $this->assertSame(0, Label::query()->count());
+        $this->assertSame(1, Record::query()->count());
+    }
 }

@@ -12,12 +12,13 @@ class LabelsSyncCommand extends Command
     protected $signature = 'appview:labels:sync
                             {--limit=1000 : Accounts to register per run}';
 
-    protected $description = 'Register the accounts the index knows with Tack, so their labels arrive';
+    protected $description = 'Register the accounts the index knows with Tack, and drop expired labels';
 
     public function handle(SubjectSync $sync): int
     {
         if (! Tack::configured()) {
-            $this->components->info('No Tack configured in atp-appview.labels.tack.url. Nothing to sync.');
+            $expired = SubjectSync::expire();
+            $this->components->info("No Tack configured in atp-appview.labels.tack.url. {$expired} expired labels dropped.");
 
             return self::SUCCESS;
         }
@@ -30,7 +31,7 @@ class LabelsSyncCommand extends Command
             return self::FAILURE;
         }
 
-        $this->components->info("{$result['accounts']} accounts registered with Tack, {$result['uris']} late records sent.");
+        $this->components->info("{$result['accounts']} accounts registered with Tack, {$result['uris']} late records sent, {$result['expired']} expired labels dropped.");
 
         return self::SUCCESS;
     }
