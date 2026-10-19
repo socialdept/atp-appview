@@ -6,6 +6,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Pipeline\Pipeline as LaravelPipeline;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
+use SocialDept\AtpAppview\Labels\LabelIndexer;
 
 /**
  * One attempt at a batch: it passes through the pipes in
@@ -39,10 +40,27 @@ class Pipeline
      */
     public static function fromConfig(Container $container): self
     {
-        return new self(
-            $container,
-            array_map(fn (string $class) => $container->make($class), (array) config('atp-appview.ingest.handlers', [])),
-        );
+        return new self($container, self::handlers($container));
+    }
+
+    /**
+     * The handlers in atp-appview.ingest.handlers, with LabelIndexer added
+     * when the list leaves it out. An app's published config lists the
+     * handlers of the version it was published from, and labels would be
+     * acknowledged and dropped without it. RecordIndexer and LabelIndexer
+     * each ignore the other's events.
+     *
+     * @return array<int, BatchHandler>
+     */
+    public static function handlers(Container $container): array
+    {
+        $classes = (array) config('atp-appview.ingest.handlers', []);
+
+        if (! in_array(LabelIndexer::class, $classes, true)) {
+            $classes[] = LabelIndexer::class;
+        }
+
+        return array_map(fn (string $class) => $container->make($class), $classes);
     }
 
     /**

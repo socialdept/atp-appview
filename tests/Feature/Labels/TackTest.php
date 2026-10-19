@@ -59,6 +59,15 @@ class TackTest extends TestCase
         $this->assertSame('https://mod.example', Labeler::query()->sole()->endpoint);
     }
 
+    public function test_labels_are_kept_when_a_published_config_lists_only_older_handlers(): void
+    {
+        config(['atp-appview.ingest.handlers' => [\SocialDept\AtpAppview\Index\RecordIndexer::class]]);
+
+        $this->call('POST', '/atp-appview/tack', [], [], [], [...self::AUTH, 'CONTENT_TYPE' => 'application/json'], json_encode($this->labelEvent(1, 'did:plc:alice')))->assertOk();
+
+        $this->assertSame(1, Label::query()->count());
+    }
+
     public function test_the_webhook_refuses_everything_without_a_password(): void
     {
         config(['atp-appview.labels.tack.password' => null]);

@@ -8,6 +8,7 @@ use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\DeployedConfig;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
+use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Labels\Tack;
 
@@ -35,7 +36,7 @@ class LabelsConsumeCommand extends Command
         }
 
         $consumer = new TapConsumer(
-            handlers: array_map(fn (string $class) => app($class), (array) config('atp-appview.ingest.handlers', [])),
+            handlers: Pipeline::handlers(app()),
             url: $channel,
             password: config('atp-appview.labels.tack.password'),
             batchSize: (int) config('atp-appview.ingest.batch_size', 200),

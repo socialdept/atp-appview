@@ -42,6 +42,7 @@ use SocialDept\AtpAppview\Images\PdsBlobUrls;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
+use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
@@ -96,7 +97,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
         $this->mergeConfig();
 
         $this->app->singleton(TapConsumer::class, fn (Application $app) => new TapConsumer(
-            handlers: array_map(fn (string $class) => $app->make($class), config('atp-appview.ingest.handlers', [])),
+            handlers: Pipeline::handlers($app),
             url: config('atp-appview.ingest.url'),
             password: config('atp-appview.ingest.password'),
             batchSize: (int) config('atp-appview.ingest.batch_size', 200),
