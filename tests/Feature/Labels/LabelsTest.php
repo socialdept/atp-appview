@@ -294,4 +294,20 @@ class LabelsTest extends TestCase
         $this->assertSame(0, Label::query()->count());
         $this->assertSame(1, Record::query()->count());
     }
+
+    public function test_an_author_who_asked_not_to_be_shown_signed_out_is_hidden_from_guests_only(): void
+    {
+        $this->indexPost('a');
+        (new RecordIndexer(app('db')))->handle(new Batch([
+            new RecordEvent(++$this->id, self::ALICE, 'app.bsky.actor.profile', 'self', RecordAction::Create, 'bafy-profile', '3l2aaaaaaaaaa', ['labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => '!no-unauthenticated']]]], true),
+        ]));
+
+        $record = Record::query()->where('rkey', 'a')->sole();
+        $labels = app(LabelsService::class);
+
+        $this->assertTrue($labels->decide($record)->forViewer(null)->hide, 'Hidden from a signed-out viewer.');
+        $this->assertFalse($labels->decide($record, 'did:plc:viewer')->hide, 'Shown to a signed-in one.');
+        $this->assertTrue($labels->decide($record, 'did:plc:viewer')->noUnauthenticated);
+        $this->assertSame(1, Record::query()->where('rkey', 'a')->count(), 'Nothing is hidden from queries: it is about who views it.');
+    }
 }
