@@ -71,6 +71,18 @@ class Policies
     }
 
     /**
+     * What a label would do without an operator's policy: config, then the
+     * declaration and the defaults. For showing what clearing a policy
+     * would bring back.
+     */
+    public function fallback(string $labeler, string $value, string $target): Effect
+    {
+        $effect = $this->decide($labeler, $value, $target, operator: false);
+
+        return $effect->appliesTo($target) ? $effect : Effect::Hide;
+    }
+
+    /**
      * What a blur from this label covers: media, or the whole content.
      */
     public function blurs(string $labeler, string $value): string
@@ -109,9 +121,9 @@ class Policies
         $this->labelers = null;
     }
 
-    protected function decide(string $labeler, string $value, string $target): Effect
+    protected function decide(string $labeler, string $value, string $target, bool $operator = true): Effect
     {
-        $overrides = $this->overrides();
+        $overrides = $operator ? $this->overrides() : [];
 
         foreach ([$labeler, LabelPolicy::ANY] as $who) {
             if (isset($overrides["{$who} {$value} {$target}"])) {

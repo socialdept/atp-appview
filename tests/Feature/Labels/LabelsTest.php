@@ -137,6 +137,7 @@ class LabelsTest extends TestCase
 
         $this->policy('rude', Target::CONTENT, 'hide');
         $this->assertSame(Effect::Hide, $policies->effect(self::MOD, 'rude', Target::CONTENT), 'The operator overrides config.');
+        $this->assertSame(Effect::Badge, $policies->fallback(self::MOD, 'rude', Target::CONTENT), 'Without the operator, config decides.');
 
         $this->policy('rude', Target::CONTENT, 'ban');
         $this->assertSame(Effect::Hide, $policies->effect(self::MOD, 'rude', Target::CONTENT), 'A ban on content hides it.');
