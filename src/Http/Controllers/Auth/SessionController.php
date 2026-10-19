@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use SocialDept\AtpAppview\Auth\AccountResolver;
+use SocialDept\AtpAppview\Moderation\AccountActions;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 use SocialDept\AtpClient\Exceptions\ServiceAuthException;
 use Throwable;
@@ -49,6 +50,10 @@ class SessionController extends Controller
             $account = $accounts->resolve($token->did());
         } catch (Throwable) {
             return response()->json(['message' => 'Could not resolve the account.'], 422);
+        }
+
+        if (app(AccountActions::class)->banned($account['did'])) {
+            return response()->json(['error' => 'AccountBanned', 'message' => 'This account cannot sign in here.'], 403);
         }
 
         $guard = $this->guard();

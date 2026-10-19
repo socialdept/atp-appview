@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Labels;
 
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Models\AccountAction;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
 use SocialDept\AtpAppview\Models\Record;
@@ -46,7 +47,8 @@ class Labels
     }
 
     /**
-     * What to do with an account, from the labels on it and its profile.
+     * What to do with an account, from the labels on it and its profile, and
+     * the actions in force on it.
      */
     public function account(string $did): Decision
     {
@@ -64,9 +66,12 @@ class Labels
             ->filter(fn (Label $label) => Target::of($label->uri) === Target::ACCOUNT)
             ->groupBy('subject');
 
+        $actions = AccountAction::query()->active()->whereIn('did', $dids)->get(['did', 'action'])->groupBy('did');
+
         $decisions = [];
         foreach ($dids as $did) {
-            $decisions[$did] = Decision::from($labels[$did] ?? [], Target::ACCOUNT, $this->policies);
+            $decisions[$did] = Decision::from($labels[$did] ?? [], Target::ACCOUNT, $this->policies)
+                ->withActions(($actions[$did] ?? collect())->pluck('action')->all());
         }
 
         return $decisions;

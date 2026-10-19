@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Factory as AuthFactory;
 use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Auth\UserProvider;
 use Illuminate\Http\Request;
+use SocialDept\AtpAppview\Moderation\AccountActions;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
 use SocialDept\AtpClient\Exceptions\ServiceAuthException;
@@ -68,9 +69,17 @@ class AtpGuard implements Guard
 
         $token = $this->serviceAuth->fromHeader($this->request->header('Authorization'));
 
-        return $this->resolved[$key] = $token !== null
+        $viewer = $token !== null
             ? $this->viewerFromServiceAuth($token, $method)
             : $this->viewerFromSession();
+
+        // A banned account is nobody here: its sessions and tokens stop
+        // working the moment it is banned.
+        if ($viewer !== null && ! $viewer->isService() && app()->bound('db') && app(AccountActions::class)->banned($viewer->did)) {
+            $viewer = null;
+        }
+
+        return $this->resolved[$key] = $viewer;
     }
 
     public function user(): ?Authenticatable

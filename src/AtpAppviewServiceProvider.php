@@ -175,6 +175,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 RoutesCommand::class,
                 \SocialDept\AtpAppview\Console\LabelsConsumeCommand::class,
                 \SocialDept\AtpAppview\Console\LabelsSyncCommand::class,
+                \SocialDept\AtpAppview\Console\ModerationPruneCommand::class,
                 StatsCommand::class,
                 UnblockCommand::class,
             ]);

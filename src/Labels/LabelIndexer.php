@@ -9,6 +9,9 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
 use SocialDept\AtpAppview\Ingest\Events\LabelEvent;
+use SocialDept\AtpAppview\Labels\Events\LabelApplied;
+use SocialDept\AtpAppview\Labels\Events\LabelWithdrawn;
+use SocialDept\AtpAppview\Models\Label;
 
 /**
  * Writes the labels and labeler declarations Tack delivers.
@@ -80,7 +83,13 @@ class LabelIndexer implements BatchHandler
         $key = fn () => $connection->table('atp_labels')->where('src', $label->src)->where('uri', $label->uri)->where('val', $label->val);
 
         if ($label->neg) {
-            return $key()->where('cts', '<=', $label->cts)->delete() > 0;
+            $withdrawn = $key()->where('cts', '<=', $label->cts)->delete() > 0;
+
+            if ($withdrawn) {
+                $connection->afterCommit(fn () => event(new LabelWithdrawn($label->src, $label->uri, $label->val)));
+            }
+
+            return $withdrawn;
         }
 
         $stored = $key()->value('cts');
@@ -102,6 +111,15 @@ class LabelIndexer implements BatchHandler
             ? $table->insert(['src' => $label->src, 'uri' => $label->uri, 'val' => $label->val, ...$row])
             : $key()->update($row);
 
+        $connection->afterCommit(function () use ($label) {
+            $model = Label::query()->where('src', $label->src)->where('uri', $label->uri)->where('val', $label->val)->first();
+
+            if ($model !== null) {
+                $target = Target::of($label->uri);
+                event(new LabelApplied($model, $target, app(Policies::class)->effect($label->src, $label->val, $target)));
+            }
+        });
+
         return true;
     }
 
@@ -114,7 +132,9 @@ class LabelIndexer implements BatchHandler
 
         if ($labeler->removed) {
             $subjects = $connection->table('atp_labels')->where('src', $labeler->did)->distinct()->pluck('subject')->all();
+            $removed = $connection->table('atp_labels')->where('src', $labeler->did)->get(['uri', 'val']);
             $connection->table('atp_labels')->where('src', $labeler->did)->delete();
+            $connection->afterCommit(fn () => $removed->each(fn ($row) => event(new LabelWithdrawn($labeler->did, $row->uri, $row->val))));
             $connection->table('atp_labelers')->where('did', $labeler->did)->delete();
 
             return $subjects;

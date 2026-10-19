@@ -20,7 +20,8 @@ use SocialDept\AtpAppview\Models\Record;
  *
  * Without orderBy() records come newest first by sort_at. Sorting by a field
  * leaves out records that have no value for it. Pages are keyset based, so
- * they never skip or repeat a record while new ones arrive.
+ * they never skip or repeat a record while new ones arrive. Records that need
+ * review are left out unless the query is for one repo.
  */
 class RecordQuery
 {
@@ -177,6 +178,12 @@ class RecordQuery
             $query->whereExists(fn (Builder $exists) => $exists->selectRaw('1')->from(RecordValues::VALUES.' as f')
                 ->whereColumn('f.record_id', 'd.record_id')
                 ->where('f.key_id', $filter['key'])->where('f.value_hash', $filter['hash']));
+        }
+
+        // Across accounts is discovery: what needs review is left out. One
+        // repo's records are asked for directly, so they are all shown.
+        if ($this->did === null) {
+            $query->where('d.limited', false);
         }
 
         if ($this->did !== null) {

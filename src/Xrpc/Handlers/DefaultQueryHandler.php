@@ -65,6 +65,9 @@ class DefaultQueryHandler
 
         if (($repo = $this->repo($request)) !== null) {
             $query->by($repo);
+        } else {
+            // Across accounts is discovery: what needs review is left out.
+            $query->discoverable();
         }
 
         if (is_string($cursor = $request->param('cursor')) && $cursor !== '') {

@@ -31,8 +31,10 @@ use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property \Illuminate\Support\Carbon|null $hidden_at
  * @property \Illuminate\Support\Carbon|null $moderated_at  When moderation hid it: a label or a ban
+ * @property \Illuminate\Support\Carbon|null $limited_at  When it began to need review: shown where asked for, not in discovery
  *
  * @method static Builder<static> collection(string $nsid)
+ * @method static Builder<static> discoverable()
  * @method static Builder<static> by(string $did)
  * @method static Builder<static> withHidden()
  * @method static Builder<static> onlyHidden()
@@ -73,7 +75,20 @@ class Record extends Model
             'deleted_at' => 'datetime',
             'hidden_at' => 'datetime',
             'moderated_at' => 'datetime',
+            'limited_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Records fit for discovery: those that need review are left out. Use
+     * it for anything across accounts, such as a feed or search, and not for
+     * one account's own records or a record asked for by its uri.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeDiscoverable(Builder $query): void
+    {
+        $query->whereNull($query->getModel()->qualifyColumn('limited_at'));
     }
 
     /**
