@@ -89,11 +89,17 @@ class TackTest extends TestCase
 
     public function test_sync_registers_new_accounts_with_their_records_and_sends_late_ones(): void
     {
-        Http::fake(['tack.test/*' => Http::response(['added' => 1, 'urisQueued' => 1])]);
+        Http::fake([
+            'tack.test/labelers' => Http::response(['labelers' => [['did' => 'did:plc:mod', 'endpoint' => 'https://mod.example', 'declaration' => ['policies' => ['labelValues' => ['spam']]]]]]),
+            'tack.test/*' => Http::response(['added' => 1, 'urisQueued' => 1]),
+        ]);
+        Labeler::query()->create(['did' => 'did:plc:gone']);
         DB::table('atp_identities')->insert(['did' => 'did:plc:alice', 'handle' => 'alice.test', 'active' => true, 'updated_at' => now()]);
         $this->record('did:plc:alice', 'old', '2026-01-01 00:00:00', '2026-01-01 00:00:00');
 
         $this->assertSame(['accounts' => 1, 'uris' => 0, 'expired' => 0], app(SubjectSync::class)->run());
+        $this->assertSame(['did:plc:mod'], Labeler::query()->pluck('did')->all(), 'Labelers follow what Tack follows.');
+        $this->assertSame(['spam'], Labeler::query()->sole()->values());
 
         Http::assertSent(fn (Request $request) => $request->url() === 'http://tack.test/subjects/add'
             && $request['dids'] === ['did:plc:alice']

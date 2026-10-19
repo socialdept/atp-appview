@@ -5,7 +5,10 @@ namespace SocialDept\AtpAppview\Labels;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
 use SocialDept\AtpAppview\Models\Label;
+use SocialDept\AtpAppview\Models\Labeler;
 
 /**
  * Keeps Tack's subjects in step with the index, so Tack fetches the labels
@@ -18,6 +21,8 @@ use SocialDept\AtpAppview\Models\Label;
  *   such as a backfill arriving late, are sent too. Records made since need
  *   nothing: their labels arrive live.
  * - Labels past their expiry are dropped, and what they hid is shown.
+ * - The labelers Tack follows, with their declarations, are read from its
+ *   API, so a declaration missed in delivery is caught up.
  */
 class SubjectSync
 {
@@ -36,6 +41,7 @@ class SubjectSync
      */
     public function run(int $limit = 1000): array
     {
+        $this->syncLabelers();
         $expired = self::expire();
         $accounts = $this->registerAccounts($limit);
         $uris = $this->sendLateRecords();
@@ -57,6 +63,32 @@ class SubjectSync
         app(Visibility::class)->refresh($subjects);
 
         return $count;
+    }
+
+    /**
+     * Bring atp_labelers in line with the labelers Tack follows.
+     */
+    protected function syncLabelers(): void
+    {
+        $events = [];
+        $following = [];
+
+        foreach ($this->tack->labelers() as $i => $labeler) {
+            if (! is_string($labeler['did'] ?? null)) {
+                continue;
+            }
+
+            $following[] = $labeler['did'];
+            $events[] = new LabelerEvent(0, $labeler['did'], $labeler['endpoint'] ?? null, is_array($labeler['declaration'] ?? null) ? $labeler['declaration'] : null, false);
+        }
+
+        foreach (Labeler::query()->whereNotIn('did', $following)->pluck('did') as $gone) {
+            $events[] = new LabelerEvent(0, $gone, null, null, true);
+        }
+
+        if ($events !== []) {
+            app(LabelIndexer::class)->handle(new Batch($events));
+        }
     }
 
     protected function registerAccounts(int $limit): int

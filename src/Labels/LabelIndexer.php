@@ -120,10 +120,17 @@ class LabelIndexer implements BatchHandler
             return $subjects;
         }
 
+        $declaration = $labeler->declaration === null ? null : json_encode($labeler->declaration, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $stored = $connection->table('atp_labelers')->where('did', $labeler->did)->first(['endpoint', 'declaration']);
+
+        if ($stored !== null && $stored->endpoint === $labeler->endpoint && self::sameJson($stored->declaration, $declaration)) {
+            return [];
+        }
+
         $connection->table('atp_labelers')->upsert([[
             'did' => $labeler->did,
             'endpoint' => $labeler->endpoint,
-            'declaration' => $labeler->declaration === null ? null : json_encode($labeler->declaration, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'declaration' => $declaration,
             'created_at' => $now,
             'updated_at' => $now,
         ]], ['did'], ['endpoint', 'declaration', 'updated_at']);
@@ -132,6 +139,11 @@ class LabelIndexer implements BatchHandler
         app(Policies::class)->forget();
 
         return $connection->table('atp_labels')->where('src', $labeler->did)->distinct()->pluck('subject')->all();
+    }
+
+    protected static function sameJson(?string $a, ?string $b): bool
+    {
+        return ($a === null ? null : json_decode($a, true)) == ($b === null ? null : json_decode($b, true));
     }
 
     protected static function time(?string $value): ?string
