@@ -423,6 +423,8 @@ The first of these decides:
 
 Anything else is ignored: still listed on what it labels, doing nothing.
 
+`!no-unauthenticated` is a request rather than a judgement: an author self-labels their profile with it to ask apps not to show them to signed-out viewers. Decisions carry it as `noUnauthenticated`, from the content or its author, and `decide($record, $viewer)`, `decideMany($records, $viewer)` and the `Moderation` view part give a signed-out viewer `hide` for it. Nothing is hidden from queries: it depends on who is looking.
+
 ```php
 // config/atp-appview/labels.php
 'policies' => [

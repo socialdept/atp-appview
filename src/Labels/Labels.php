@@ -78,20 +78,22 @@ class Labels
     }
 
     /**
-     * What to do with one record.
+     * What to do with one record, for a viewer when given: a signed-out
+     * viewer is not shown authors who asked not to be.
      */
-    public function decide(Record $record): Decision
+    public function decide(Record $record, ?string $viewer = null): Decision
     {
-        return $this->decideMany(new Collection([$record]))[$record->uri];
+        return $this->decideMany(new Collection([$record]), $viewer)[$record->uri];
     }
 
     /**
      * What to do with each record of a page, in two queries.
      *
      * @param  Collection<int, Record>  $records
+     * @param  string|null  $viewer  The viewer's DID, or null when signed out
      * @return array<string, Decision> By uri
      */
-    public function decideMany(Collection $records): array
+    public function decideMany(Collection $records, ?string $viewer = null): array
     {
         if ($records->isEmpty()) {
             return [];
@@ -101,7 +103,7 @@ class Labels
         $labels = Label::query()->live()->whereIn('uri', $records->pluck('uri')->all())->get()->groupBy('uri');
 
         return $records->mapWithKeys(fn (Record $record) => [
-            $record->uri => Decision::from($labels[$record->uri] ?? [], Target::CONTENT, $this->policies, $authors[$record->did]),
+            $record->uri => Decision::from($labels[$record->uri] ?? [], Target::CONTENT, $this->policies, $authors[$record->did])->forViewer($viewer),
         ])->all();
     }
 

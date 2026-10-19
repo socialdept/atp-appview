@@ -21,6 +21,7 @@ final class Decision
      * @param  array<int, array{src: string, val: string}>  $warnings
      * @param  array<int, array{src: string, val: string}>  $badges
      * @param  string|null  $blur  media or content, when something blurs
+     * @param  bool  $noUnauthenticated  The author asked, with !no-unauthenticated, not to be shown to signed-out viewers
      */
     public function __construct(
         public readonly array $labels = [],
@@ -31,6 +32,7 @@ final class Decision
         public readonly ?string $blur = null,
         public readonly array $badges = [],
         public readonly ?Decision $author = null,
+        public readonly bool $noUnauthenticated = false,
     ) {
     }
 
@@ -41,12 +43,20 @@ final class Decision
      */
     public static function from(iterable $labels, string $target, Policies $policies, ?Decision $author = null): self
     {
-        $hide = $review = $ban = false;
+        $hide = $review = $ban = $noUnauthenticated = false;
         $warnings = $badges = $kept = [];
         $blur = null;
 
         foreach ($labels as $label) {
             $kept[] = $label;
+
+            // A request about who may see it, not a judgement of it.
+            if ($label->val === '!no-unauthenticated') {
+                $noUnauthenticated = true;
+
+                continue;
+            }
+
             $effect = $policies->effect($label->src, $label->val, $target);
             $named = ['src' => $label->src, 'val' => $label->val];
 
@@ -65,14 +75,17 @@ final class Decision
             }
         }
 
-        // What hides, needs review or bans an account does so to its content.
+        // What hides, needs review or bans an account does so to its content,
+        // and an author who asked not to be shown to signed-out viewers asked
+        // it for everything they wrote.
         if ($author !== null) {
             $hide = $hide || $author->hide;
             $review = $review || $author->review;
             $ban = $author->ban;
+            $noUnauthenticated = $noUnauthenticated || $author->noUnauthenticated;
         }
 
-        return new self($kept, $hide, $review, $ban, $warnings, $blur, $badges, $author);
+        return new self($kept, $hide, $review, $ban, $warnings, $blur, $badges, $author, $noUnauthenticated);
     }
 
     /**
@@ -89,7 +102,20 @@ final class Decision
 
         $ban = $this->ban || in_array('ban', $actions, true);
 
-        return new self($this->labels, $this->hide || $ban, $this->review || in_array('review', $actions, true), $ban, $this->warnings, $this->blur, $this->badges, $this->author);
+        return new self($this->labels, $this->hide || $ban, $this->review || in_array('review', $actions, true), $ban, $this->warnings, $this->blur, $this->badges, $this->author, $this->noUnauthenticated);
+    }
+
+    /**
+     * As a viewer sees it: hidden from a signed-out viewer when its author
+     * asked not to be shown to them.
+     */
+    public function forViewer(?string $viewer): self
+    {
+        if ($viewer !== null || ! $this->noUnauthenticated || $this->hide) {
+            return $this;
+        }
+
+        return new self($this->labels, true, $this->review, $this->ban, $this->warnings, $this->blur, $this->badges, $this->author, true);
     }
 
     /**
@@ -105,6 +131,7 @@ final class Decision
             'blur' => $this->blur,
             'badges' => $this->badges,
             'author' => $this->author?->toArray(),
+            'noUnauthenticated' => $this->noUnauthenticated,
         ], fn ($value) => $value !== null && $value !== false && $value !== []);
     }
 }
