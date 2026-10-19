@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpClient\AtpClientServiceProvider;
@@ -216,6 +217,23 @@ class ProceduresTest extends TestCase
         $this->assertNotNull(Record::withTrashed()->find('at://did:plc:alice/com.example.thing/gone')->deleted_at);
     }
 
+    public function test_sync_runs_the_ingest_hooks_like_any_delivery(): void
+    {
+        config()->set('atp-appview.ingest.hooks', [RejectsEverything::class]);
+        $this->holdsSession = false;
+        Resolver::shouldReceive('resolvePds')->andReturn('https://pds.example');
+        $this->atp = Atp::fake();
+        $this->atp->stub('com.atproto.sync.getLatestCommit', ['cid' => 'c', 'rev' => self::REV]);
+        $this->atp->stub('com.atproto.repo.getRecord', ['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab', 'cid' => 'bafyfrompds', 'value' => ['$type' => self::COLLECTION, 'text' => 'spam']]);
+
+        $this->actingAs($this->user, 'web')
+            ->postJson('/xrpc/com.example.syncRecord', ['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab'])
+            ->assertOk()
+            ->assertExactJson(['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab', 'indexed' => false]);
+
+        $this->assertNull(Record::find('at://did:plc:alice/com.example.thing/3m2aaaaaaaaab'));
+    }
+
     public function test_sync_takes_only_the_callers_own_records_in_indexed_collections(): void
     {
         $this->atp = Atp::fake();
@@ -254,5 +272,13 @@ class ProceduresUser extends Authenticatable implements HasAtpSession
     public function getAtpDid(): ?string
     {
         return $this->did;
+    }
+}
+
+class RejectsEverything implements IngestHook
+{
+    public function reject(array $records): array
+    {
+        return array_fill_keys(array_map(fn ($event) => $event->uri(), $records), 'no');
     }
 }

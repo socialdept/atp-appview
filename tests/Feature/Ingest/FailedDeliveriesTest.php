@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
 use Closure;
 use Illuminate\Support\Carbon;
+use LogicException;
 use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -11,14 +12,25 @@ use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
+use SocialDept\AtpAppview\Ingest\Contracts\IngestRepair;
+use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestBuffer;
+use SocialDept\AtpAppview\Ingest\Pipeline;
+use SocialDept\AtpAppview\Ingest\Pipes\RunRepairs;
 use SocialDept\AtpAppview\Ingest\Rejections;
+use SocialDept\AtpAppview\Ingest\Repairs;
 use SocialDept\AtpAppview\Models\FailedDelivery;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpClient\AtpClientServiceProvider;
+use SocialDept\AtpClient\Facades\Atp;
+use SocialDept\AtpClient\Testing\FakeResponse;
+use SocialDept\AtpSchema\SchemaServiceProvider;
+use SocialDept\AtpSupport\AtpSupportServiceProvider;
+use SocialDept\AtpSupport\Facades\Resolver;
 
 class FailedDeliveriesTest extends TestCase
 {
@@ -27,7 +39,7 @@ class FailedDeliveriesTest extends TestCase
 
     protected function getPackageProviders($app): array
     {
-        return [AtpAppviewServiceProvider::class];
+        return [AtpSupportServiceProvider::class, SchemaServiceProvider::class, AtpClientServiceProvider::class, AtpAppviewServiceProvider::class];
     }
 
     protected function defineEnvironment($app): void
@@ -45,7 +57,9 @@ class FailedDeliveriesTest extends TestCase
         $this->artisan('migrate')->run();
         Picky::$refuse = ['bad'];
         Picky::$down = false;
+        Picky::$isoDates = false;
         Spammy::$seen = [];
+        Spammy::$dates = [];
     }
 
     protected function event(int $id, string $rkey, RecordAction $action = RecordAction::Create, array $record = []): RecordEvent
@@ -186,6 +200,109 @@ class FailedDeliveriesTest extends TestCase
         $this->assertSame(2, Counting::$after, 'Code after $next() runs once the handlers have the batch.');
     }
 
+    public function test_a_repair_rewrites_a_record_before_the_hooks_and_keeps_the_original(): void
+    {
+        config(['atp-appview.ingest.repairs' => [SlashDates::class], 'atp-appview.ingest.hooks' => [Spammy::class]]);
+        Picky::$isoDates = true;
+
+        $this->deliverThroughConfig([$this->event(1, 'a', record: ['createdAt' => '2026/10/01']), $this->event(2, 'b', record: ['createdAt' => '2026-10-02T00:00:00Z'])]);
+
+        $repaired = Record::query()->find('at://did:plc:alice/app.example.post/a');
+        $this->assertSame('2026-10-01T00:00:00Z', $repaired->record['createdAt'], 'The handlers took the repaired record.');
+        $this->assertSame(['by' => [SlashDates::class], 'original' => ['text' => 'a', 'createdAt' => '2026/10/01']], $repaired->repair);
+        $this->assertSame('bafy-a', $repaired->cid, 'The CID is still the one in the repo.');
+        $this->assertSame(['2026-10-01T00:00:00Z'], Spammy::$dates, 'Hooks see the repaired record.');
+        $this->assertNull(Record::query()->find('at://did:plc:alice/app.example.post/b')->repair, 'A record no repair changed carries nothing.');
+
+        $this->assertSame([['repair' => SlashDates::class, 'collection' => 'app.example.post', 'total' => 1, 'last_uri' => 'at://did:plc:alice/app.example.post/a']], array_map(
+            fn (array $row) => array_intersect_key($row, array_flip(['repair', 'collection', 'total', 'last_uri'])),
+            app(Repairs::class)->all(),
+        ));
+
+        // The author fixes the record: the repair is gone with the old version.
+        $this->deliverThroughConfig([new RecordEvent(3, 'did:plc:alice', 'app.example.post', 'a', RecordAction::Update, 'bafy-a2', '3l2aaaaaaab3', ['text' => 'a', 'createdAt' => '2026-10-01T00:00:00Z'], true)]);
+        $this->assertNull(Record::query()->find('at://did:plc:alice/app.example.post/a')->repair);
+    }
+
+    public function test_a_repair_is_tallied_only_once_the_batch_goes_through(): void
+    {
+        config(['atp-appview.ingest.repairs' => [SlashDates::class]]);
+        Picky::$down = true;
+
+        try {
+            (new Pipeline(app(), [new Picky()], [RunRepairs::class]))->run(new Batch([$this->event(1, 'a', record: ['createdAt' => '2026/10/01'])]));
+            $this->fail('Expected the attempt to fail.');
+        } catch (RuntimeException) {
+        }
+
+        $this->assertSame([], app(Repairs::class)->all(), 'A failed attempt tallies nothing.');
+    }
+
+    public function test_a_failed_delivery_goes_through_once_a_repair_for_it_is_added(): void
+    {
+        Picky::$isoDates = true;
+        $this->deliverThroughConfig([$this->event(1, 'a', record: ['createdAt' => '2026/10/01']), $this->event(2, 'z')]);
+        $delivery = FailedDelivery::query()->sole();
+        $this->assertSame('2026/10/01', $delivery->payload['record']['createdAt'], 'The original is what is parked.');
+
+        config(['atp-appview.ingest.repairs' => [SlashDates::class]]);
+        $this->assertTrue(app(FailedDeliveries::class)->retry($delivery));
+        $this->assertSame('2026-10-01T00:00:00Z', Record::query()->find('at://did:plc:alice/app.example.post/a')->record['createdAt']);
+    }
+
+    public function test_reindex_indexes_the_record_as_its_pds_has_it_now(): void
+    {
+        Picky::$isoDates = true;
+        $this->deliverThroughConfig([$this->event(1, 'a', record: ['createdAt' => '2026/10/01']), $this->event(2, 'z')]);
+
+        // The author has since fixed it.
+        Resolver::shouldReceive('resolvePds')->with('did:plc:alice')->andReturn('https://pds.example');
+        $atp = Atp::fake();
+        $atp->stub('com.atproto.sync.getLatestCommit', ['cid' => 'c', 'rev' => '3l2zzzzzzzzzz']);
+        $atp->stub('com.atproto.repo.getRecord', ['uri' => 'at://did:plc:alice/app.example.post/a', 'cid' => 'bafy-fixed', 'value' => ['text' => 'a', 'createdAt' => '2026-10-01T00:00:00Z']]);
+
+        $this->assertTrue(app(FailedDeliveries::class)->reindex(FailedDelivery::query()->sole()));
+
+        $record = Record::query()->find('at://did:plc:alice/app.example.post/a');
+        $this->assertSame('2026-10-01T00:00:00Z', $record->record['createdAt']);
+        $this->assertSame('bafy-fixed', $record->cid);
+        $this->assertSame('3l2zzzzzzzzzz', $record->rev);
+        $this->assertSame(0, FailedDelivery::query()->count());
+    }
+
+    public function test_reindex_tombstones_a_record_the_author_deleted_and_keeps_one_it_cannot_fetch(): void
+    {
+        Picky::$refuse = ['bad', 'worse'];
+        $this->deliver([$this->event(1, 'bad'), $this->event(2, 'worse'), $this->event(3, 'z')]);
+        Resolver::shouldReceive('resolvePds')->andReturn('https://pds.example');
+        $atp = Atp::fake();
+        $atp->stub('com.atproto.sync.getLatestCommit', ['cid' => 'c', 'rev' => '3l2zzzzzzzzzz']);
+        $atp->stub('com.atproto.repo.getRecord', FakeResponse::error('RecordNotFound', 'Could not locate record', 400));
+
+        [$bad, $worse] = FailedDelivery::query()->orderBy('id')->get()->all();
+        Picky::$refuse = [];
+        $this->assertTrue(app(FailedDeliveries::class)->reindex($bad));
+        $this->assertNotNull(Record::withTrashed()->find('at://did:plc:alice/app.example.post/bad')->deleted_at);
+
+        $atp->stub('com.atproto.repo.getRecord', FakeResponse::error('InternalServerError', 'The PDS is down', 500));
+        $this->assertFalse(app(FailedDeliveries::class)->reindex($worse));
+        $this->assertSame(1, $worse->fresh()->retries);
+    }
+
+    public function test_an_identity_event_cannot_be_reindexed_and_the_command_skips_it(): void
+    {
+        $identity = app(FailedDeliveries::class)->park(new IdentityEvent(7, 'did:plc:alice', 'alice.test', true, null), new RuntimeException('no'));
+
+        try {
+            app(FailedDeliveries::class)->reindex($identity);
+            $this->fail('Expected identity events to be refused.');
+        } catch (LogicException) {
+        }
+
+        $this->artisan('appview:failed-deliveries', ['--reindex' => true])->expectsOutputToContain('0 went through, 0 failed again')->assertSuccessful();
+        $this->assertSame(1, FailedDelivery::query()->count());
+    }
+
     public function test_prune_keeps_what_keep_days_and_max_allow(): void
     {
         foreach ([200, 100, 10, 1, 0] as $i => $daysAgo) {
@@ -253,6 +370,9 @@ class Picky implements BatchHandler
 
     public static bool $down = false;
 
+    /** Refuse dates that are not ISO 8601, as a strict index might. */
+    public static bool $isoDates = false;
+
     public function handle(Batch $batch): void
     {
         if (self::$down) {
@@ -263,6 +383,10 @@ class Picky implements BatchHandler
             if (in_array($event->rkey, self::$refuse, true)) {
                 throw new RuntimeException("Picky refuses {$event->rkey}");
             }
+
+            if (self::$isoDates && isset($event->record['createdAt']) && ! preg_match('/^\d{4}-\d{2}-\d{2}T/', $event->record['createdAt'])) {
+                throw new RuntimeException("Picky refuses the date of {$event->rkey}");
+            }
         }
     }
 }
@@ -272,12 +396,19 @@ class Spammy implements IngestHook
     /** @var array<int, string> */
     public static array $seen = [];
 
+    /** @var array<int, string> */
+    public static array $dates = [];
+
     public function reject(array $records): array
     {
         $rejected = [];
 
         foreach ($records as $event) {
             self::$seen[] = $event->rkey;
+
+            if ($event->rkey === 'a' && isset($event->record['createdAt'])) {
+                self::$dates[] = $event->record['createdAt'];
+            }
 
             if (str_contains((string) ($event->record['text'] ?? ''), 'buy now')) {
                 $rejected[$event->uri()] = 'looks like spam';
@@ -298,5 +429,22 @@ class Counting
         self::$after += $batch->count();
 
         return $result;
+    }
+}
+
+/**
+ * Rewrites 2026/10/01 as 2026-10-01T00:00:00Z.
+ */
+class SlashDates implements IngestRepair
+{
+    public function repair(RecordEvent $record): ?array
+    {
+        $date = $record->record['createdAt'] ?? null;
+
+        if (! is_string($date) || ! preg_match('#^(\d{4})/(\d{2})/(\d{2})$#', $date, $parts)) {
+            return null;
+        }
+
+        return [...$record->record, 'createdAt' => "{$parts[1]}-{$parts[2]}-{$parts[3]}T00:00:00Z"];
     }
 }

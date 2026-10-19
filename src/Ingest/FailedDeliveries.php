@@ -2,10 +2,13 @@
 
 namespace SocialDept\AtpAppview\Ingest;
 
+use Closure;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use LogicException;
+use SocialDept\AtpAppview\Index\LatestRecord;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
@@ -14,8 +17,8 @@ use Throwable;
 
 /**
  * Events the handlers could not take, parked so the rest of their batch is
- * acknowledged and ingest moves on, then retried or forgotten once the cause
- * is fixed. Kept for atp-appview.failed_deliveries.keep_days, and at most `max`.
+ * acknowledged and ingest moves on, then retried, reindexed from the PDS or
+ * forgotten once the cause is fixed. Kept for atp-appview.failed_deliveries.keep_days, and at most `max`.
  */
 class FailedDeliveries
 {
@@ -74,8 +77,16 @@ class FailedDeliveries
      */
     public function retry(FailedDelivery $delivery): bool
     {
+        return $this->attempt($delivery, fn () => self::rebuild($delivery->payload));
+    }
+
+    /**
+     * @param  Closure(): (RecordEvent|IdentityEvent)  $event
+     */
+    protected function attempt(FailedDelivery $delivery, Closure $event): bool
+    {
         try {
-            Pipeline::fromConfig($this->container)->run(new Batch([self::rebuild($delivery->payload)]));
+            Pipeline::fromConfig($this->container)->run(new Batch([$event()]));
         } catch (Throwable $e) {
             $delivery->update([
                 'error_class' => $e::class,
@@ -90,6 +101,26 @@ class FailedDeliveries
         $delivery->delete();
 
         return true;
+    }
+
+    /**
+     * Fetch the record from its author's PDS as it is now, and run that
+     * through ingest instead of the parked event. For a record the author
+     * has since fixed, or deleted, or that Tap delivered damaged. On success
+     * it is gone, otherwise its error is updated.
+     *
+     * @throws LogicException for an identity event, which has no record to fetch
+     */
+    public function reindex(FailedDelivery $delivery): bool
+    {
+        if ($delivery->kind !== 'record') {
+            throw new LogicException('Only records can be reindexed. Retry an identity event instead.');
+        }
+
+        $payload = $delivery->payload;
+
+        return $this->attempt($delivery, fn () => $this->container->make(LatestRecord::class)
+            ->fetch($payload['did'], $payload['collection'], $payload['rkey'], (int) $payload['id']));
     }
 
     /**

@@ -154,8 +154,15 @@ return [
         // with handle(Batch $batch, Closure $next), as in a Laravel pipeline.
         'pipes' => [
             \SocialDept\AtpAppview\Ingest\Pipes\DropBlocked::class,
+            \SocialDept\AtpAppview\Ingest\Pipes\RunRepairs::class,
             \SocialDept\AtpAppview\Ingest\Pipes\RunHooks::class,
         ],
+
+        // Classes implementing IngestRepair, which rewrite records the app
+        // knows how to fix, such as a malformed date, before the hooks see
+        // them. Off until listed. A repaired record keeps the original
+        // beside it in atp_records.repair.
+        'repairs' => [],
 
         // Classes implementing IngestHook, which reject records the app does
         // not want before they are indexed. They never change a record.

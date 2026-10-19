@@ -9,8 +9,8 @@ use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 
 /**
  * One attempt at a batch: it passes through the pipes in
- * atp-appview.ingest.pipes, by default the blocklist and then the ingest
- * hooks, and every handler takes what is left.
+ * atp-appview.ingest.pipes, by default the blocklist, the ingest repairs
+ * and the ingest hooks, and every handler takes what is left.
  *
  * A pipe is a class with handle(Batch $batch, Closure $next), as in any
  * Laravel pipeline. Code after $next() runs once the handlers have taken

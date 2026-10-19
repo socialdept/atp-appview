@@ -3,13 +3,11 @@
 namespace SocialDept\AtpAppview\Xrpc\Handlers;
 
 use SocialDept\AtpAppview\Index\IndexesRecordsNow;
+use SocialDept\AtpAppview\Index\LatestRecord;
+use SocialDept\AtpAppview\Index\RepoNotFound;
 use SocialDept\AtpAppview\Ingest\Collections;
-use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
 use SocialDept\AtpAppview\Xrpc\XrpcRequest;
-use SocialDept\AtpClient\Exceptions\AtpResponseException;
-use SocialDept\AtpClient\Facades\Atp;
-use SocialDept\AtpSupport\Facades\Resolver;
 use Throwable;
 
 /**
@@ -28,6 +26,7 @@ class SyncRecordHandler
 {
     public function __construct(
         protected IndexesRecordsNow $index,
+        protected LatestRecord $latest,
     ) {
     }
 
@@ -58,44 +57,15 @@ class SyncRecordHandler
         }
 
         try {
-            $pds = Atp::public(Resolver::resolvePds($did) ?? throw new XrpcException('RepoNotFound', "{$did} has no PDS.", 404));
-
-            // The revision first: the record read after it is at least that
-            // new, so a later delivery from Tap can only replace it.
-            $rev = $pds->atproto->sync->getLatestCommit($did)->rev;
-            $record = $this->fetch($pds, $did, $collection, $rkey);
-        } catch (XrpcException $e) {
-            throw $e;
+            $event = $this->latest->fetch($did, $collection, $rkey);
+        } catch (RepoNotFound $e) {
+            throw new XrpcException('RepoNotFound', $e->getMessage(), 404);
         } catch (Throwable $e) {
             throw new XrpcException('UpstreamFailure', "Could not read the record from its PDS: {$e->getMessage()}", 502);
         }
 
-        $record === null
-            ? $this->index->index($did, $collection, $rkey, RecordAction::Delete, null, $rev, null)
-            : $this->index->index($did, $collection, $rkey, RecordAction::Update, $record['cid'], $rev, $record['value']);
+        $indexed = $this->index->index($did, $collection, $rkey, $event->action, $event->cid, $event->rev, $event->record);
 
-        return ['uri' => $uri, 'indexed' => true];
-    }
-
-    /**
-     * @return array{cid: string, value: array<string, mixed>}|null Null when the record is gone
-     */
-    protected function fetch(mixed $pds, string $did, string $collection, string $rkey): ?array
-    {
-        try {
-            $response = $pds->atproto->repo->getRecord($did, $collection, $rkey);
-        } catch (AtpResponseException $e) {
-            if ($e->errorCode === 'RecordNotFound') {
-                return null;
-            }
-
-            throw $e;
-        }
-
-        if (! is_array($response->value) || ! is_string($response->cid)) {
-            throw new XrpcException('UpstreamFailure', 'The PDS answered without the record.', 502);
-        }
-
-        return ['cid' => $response->cid, 'value' => $response->value];
+        return ['uri' => $uri, 'indexed' => $indexed];
     }
 }

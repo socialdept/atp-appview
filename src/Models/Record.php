@@ -25,6 +25,7 @@ use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
  * @property string|null $cid
  * @property string $rev
  * @property array<string, mixed>|null $record
+ * @property array{by: array<int, class-string>, original: array<string, mixed>}|null $repair  When an ingest repair rewrote the record
  * @property \Illuminate\Support\Carbon $indexed_at
  * @property \Illuminate\Support\Carbon|null $sort_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
@@ -65,6 +66,7 @@ class Record extends Model
     {
         return [
             'record' => 'array',
+            'repair' => 'array',
             'indexed_at' => 'datetime',
             'sort_at' => 'datetime',
             'deleted_at' => 'datetime',

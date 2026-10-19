@@ -29,7 +29,7 @@ class RecordWriter
      * MySQL each assignment's condition reads the stored cid and rev, so they
      * must change after every other column.
      */
-    public const COLUMNS = ['uri', 'did', 'collection', 'rkey', 'record', 'indexed_at', 'sort_at', 'deleted_at', 'cid', 'rev'];
+    public const COLUMNS = ['uri', 'did', 'collection', 'rkey', 'record', 'repair', 'indexed_at', 'sort_at', 'deleted_at', 'cid', 'rev'];
 
     /**
      * Rows per statement, well under every driver's bound parameter limit.

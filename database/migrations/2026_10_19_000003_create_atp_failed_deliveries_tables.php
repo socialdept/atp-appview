@@ -47,11 +47,31 @@ return new class () extends Migration {
 
             $table->primary(['hook', 'collection', 'reason']);
         });
+
+        // What ingest repairs rewrote, tallied the same way.
+        $schema->create('atp_ingest_repairs', function (Blueprint $table) {
+            $table->string('repair', 255);
+            $table->string('collection', 317);
+            $table->unsignedBigInteger('total')->default(0);
+            $table->string('last_uri', 512)->nullable();
+            $table->dateTime('last_repaired_at');
+
+            $table->primary(['repair', 'collection']);
+        });
+
+        // A repaired record keeps the repairs that changed it and the record
+        // as it is in the repo. Null for every other record, so it costs
+        // nothing on the rest of the table.
+        $schema->table('atp_records', function (Blueprint $table) {
+            $table->json('repair')->nullable();
+        });
     }
 
     public function down(): void
     {
         $schema = Schema::connection($this->getConnection());
+        $schema->table('atp_records', fn (Blueprint $table) => $table->dropColumn('repair'));
+        $schema->dropIfExists('atp_ingest_repairs');
         $schema->dropIfExists('atp_ingest_rejections');
         $schema->dropIfExists('atp_failed_deliveries');
     }

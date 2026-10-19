@@ -11,7 +11,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  * blocklist.
  *
  * Only creates and updates are offered: a delete always goes through. A
- * hook never changes a record, so the index matches what is in the repo.
+ * hook never changes a record. Rewriting one is what IngestRepair is for.
  */
 interface IngestHook
 {

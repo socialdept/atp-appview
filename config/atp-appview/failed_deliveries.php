@@ -10,7 +10,8 @@
 | here so the rest go through. When every event fails on its own, the cause
 | is more likely the database or a service, so the batch goes back to Tap,
 | and an event is parked only once it has failed in max_deliveries separate
-| deliveries. appview:failed-deliveries retries, forgets and prunes them.
+| deliveries. appview:failed-deliveries retries, reindexes, forgets and
+| prunes them.
 |
 | How long to keep them depends on how many arrive: keep_days null keeps
 | them until forgotten, and max caps how many are kept, oldest dropped first.

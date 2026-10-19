@@ -10,11 +10,12 @@ class FailedDeliveriesCommand extends Command
 {
     protected $signature = 'appview:failed-deliveries
                             {--retry : Run every failed delivery through ingest again}
+                            {--reindex : Fetch each failed record from its PDS and index it as it is now}
                             {--forget : Drop every failed delivery}
                             {--prune : Drop those past atp-appview.failed_deliveries.keep_days and max}
                             {--collection= : Only failed deliveries of this collection}';
 
-    protected $description = 'Show, retry, forget or prune deliveries the handlers could not take';
+    protected $description = 'Show, retry, reindex, forget or prune deliveries the handlers could not take';
 
     public function handle(FailedDeliveries $deliveries): int
     {
@@ -32,13 +33,15 @@ class FailedDeliveriesCommand extends Command
             return self::SUCCESS;
         }
 
-        if ($this->option('retry')) {
+        if ($this->option('retry') || $this->option('reindex')) {
+            $reindex = (bool) $this->option('reindex');
             $done = 0;
             $failed = 0;
 
-            $query()->orderBy('id')->chunkById(100, function ($chunk) use ($deliveries, &$done, &$failed) {
+            // Identity events have no record to fetch, so reindexing skips them.
+            $query()->when($reindex, fn ($query) => $query->where('kind', 'record'))->orderBy('id')->chunkById(100, function ($chunk) use ($deliveries, $reindex, &$done, &$failed) {
                 foreach ($chunk as $delivery) {
-                    $deliveries->retry($delivery) ? $done++ : $failed++;
+                    ($reindex ? $deliveries->reindex($delivery) : $deliveries->retry($delivery)) ? $done++ : $failed++;
                 }
             });
 
