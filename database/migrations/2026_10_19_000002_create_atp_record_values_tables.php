@@ -54,9 +54,10 @@ return new class () extends Migration {
         $schema->create('atp_record_values', function (Blueprint $table) use ($driver) {
             $table->unsignedSmallInteger('key_id');
             in_array($driver, ['mysql', 'mariadb'], true) ? $table->unsignedBigInteger('record_id') : $table->bigInteger('record_id');
-            $table->bigInteger('did_hash');
+            // The author, for viewer state, which only references have.
+            $table->bigInteger('did_hash')->nullable();
             $table->bigInteger('value_hash');
-            $table->timestamp('value_time', 6)->nullable();
+            $table->dateTime('value_time', 6)->nullable();
             $table->double('value_num')->nullable();
             $table->timestamp('sort_at', 6)->nullable();
             $table->boolean('hidden')->default(false);
@@ -65,12 +66,21 @@ return new class () extends Migration {
             $table->unique(['record_id', 'key_id', 'value_hash'], 'atp_record_values_record');
             // Records with a value, newest first.
             $table->index(['key_id', 'value_hash', 'hidden', 'sort_at', 'record_id'], 'atp_record_values_lookup');
-            // Records in order of a date or number.
-            $table->index(['key_id', 'hidden', 'value_time', 'record_id'], 'atp_record_values_time');
-            $table->index(['key_id', 'hidden', 'value_num', 'record_id'], 'atp_record_values_num');
-            // An account's own values: viewer state, and hiding or dropping them.
-            $table->index(['did_hash', 'key_id', 'value_hash', 'hidden', 'record_id'], 'atp_record_values_account');
         });
+
+        // Records in order of a date or number, and the viewer's own
+        // references. Each covers only the rows that have one, where the
+        // database can say so: MySQL and MariaDB index every row.
+        $partial = ! in_array($driver, ['mysql', 'mariadb'], true);
+        $indexes = [
+            'atp_record_values_time' => ['key_id, hidden, value_time, record_id', 'value_time is not null'],
+            'atp_record_values_num' => ['key_id, hidden, value_num, record_id', 'value_num is not null'],
+            'atp_record_values_viewer' => ['did_hash, key_id, value_hash, hidden, record_id', 'did_hash is not null'],
+        ];
+
+        foreach ($indexes as $name => [$columns, $where]) {
+            $db->statement("create index {$name} on atp_record_values ({$columns})".($partial ? " where {$where}" : ''));
+        }
 
         // How many visible records have each value, kept as values change, so
         // counts and top values are read, never counted.

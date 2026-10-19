@@ -26,9 +26,12 @@ class RecordQuery
 {
     /**
      * Above this many matches, a filter paired with a sort is checked against
-     * the sort's index rather than read in full and sorted.
+     * the sort's index rather than read in full and sorted. Reading and sorting
+     * costs in step with the matches, about 50 ms for 17,000 on Postgres.
+     * Walking the sort's index is quick only when the matches happen to sort
+     * early, which nothing predicts, so it is kept for very common values.
      */
-    public static int $sortFirstAbove = 10000;
+    public static int $sortFirstAbove = 50000;
 
     /** @var array<int, array{key: int, hash: int|null, field: Field}> */
     protected array $filters = [];
@@ -177,7 +180,9 @@ class RecordQuery
         }
 
         if ($this->did !== null) {
-            $query->where('d.did_hash', ValueHash::of($this->did));
+            // By the records table's (did, collection) index.
+            $query->whereIn('d.record_id', fn (Builder $records) => $records->select('id')->from('atp_records')
+                ->where('did', $this->did)->where('collection', $this->collection));
         }
 
         if ($this->cursor !== null) {

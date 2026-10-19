@@ -157,8 +157,7 @@ class RecordValues
     public function hide(Connection $connection, array $dids, bool $hidden = true): void
     {
         foreach (array_chunk($dids, 500) as $chunk) {
-            $hashes = array_map(ValueHash::of(...), $chunk);
-            $affected = $connection->table(self::VALUES)->whereIn('did_hash', $hashes)->where('hidden', ! $hidden);
+            $affected = $this->ofAccounts($connection, $chunk)->where('hidden', ! $hidden);
 
             $this->adjust($connection, (clone $affected)->groupBy('key_id', 'value_hash')
                 ->selectRaw('key_id, value_hash, count(*) as n')->get()
@@ -177,29 +176,24 @@ class RecordValues
     public function drop(Connection $connection, array $dids): void
     {
         foreach (array_chunk($dids, 500) as $chunk) {
-            $rows = $connection->table(self::VALUES)->whereIn('did_hash', array_map(ValueHash::of(...), $chunk));
-
-            $this->adjust($connection, $this->visibleTotals(clone $rows));
-            $rows->delete();
+            $this->adjust($connection, $this->visibleTotals($this->ofAccounts($connection, $chunk)));
+            $this->ofAccounts($connection, $chunk)->delete();
         }
     }
 
     /**
-     * Drop the values of records that no longer exist, for accounts some of
-     * whose records were deleted outright, such as by a blocklist purge.
+     * Drop the values of records deleted outright, such as by a blocklist
+     * purge, by the ids they had.
      *
-     * @param  array<int, string>  $dids
+     * @param  array<int, int>  $ids
      */
-    public function dropOrphans(Connection $connection, array $dids): void
+    public function dropRecords(Connection $connection, array $ids): void
     {
-        foreach (array_chunk($dids, 500) as $chunk) {
-            $orphans = fn () => $connection->table(self::VALUES)
-                ->whereIn('did_hash', array_map(ValueHash::of(...), $chunk))
-                ->whereNotExists(fn (Builder $query) => $query->selectRaw('1')->from('atp_records')
-                    ->whereColumn('atp_records.id', self::VALUES.'.record_id')->whereNull('atp_records.deleted_at'));
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $rows = fn () => $connection->table(self::VALUES)->whereIn('record_id', $chunk);
 
-            $this->adjust($connection, $this->visibleTotals($orphans()));
-            $orphans()->delete();
+            $this->adjust($connection, $this->visibleTotals($rows()));
+            $rows()->delete();
         }
     }
 
@@ -392,8 +386,8 @@ class RecordValues
 
         return $this->connection()->table(self::COUNTS)
             ->where('key_id', $this->keyId($declared))->where('total', '>', 0)
-            // A range an index can seek to, then the exact prefix.
-            ->where('value', '>=', $prefix)->where('value', '<', $prefix."\u{10FFFF}")
+            // Read in order of use, so the most common matches come first and
+            // the read stops at the limit.
             ->whereRaw("value like ? escape '!'", [str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $prefix).'%'])
             ->orderByDesc('total')->limit($limit)
             ->get(['value', 'total'])
@@ -448,6 +442,7 @@ class RecordValues
         $didHash = ValueHash::of($record->did);
         $hidden = $record->hidden_at !== null;
 
+
         foreach ($only ?? $this->fields()[$collection] ?? [] as $field) {
             $key = $this->keyId($field);
 
@@ -456,7 +451,8 @@ class RecordValues
                 $rows[] = [
                     'key_id' => $key,
                     'record_id' => (int) $record->id,
-                    'did_hash' => $didHash,
+                    // Only references need their author, for viewer state.
+                    'did_hash' => $field->type === 'uri' ? $didHash : null,
                     'value_hash' => $item['hash'],
                     'value_time' => $item['time'],
                     'value_num' => $item['num'],
@@ -557,6 +553,25 @@ class RecordValues
                 'value' => DB::raw($text),
             ]);
         }
+    }
+
+    /**
+     * Every value of these accounts' records, found through atp_records,
+     * whose (did, collection) index answers by account.
+     *
+     * @param  array<int, string>  $dids
+     */
+    protected function ofAccounts(Connection $connection, array $dids): Builder
+    {
+        return $connection->table(self::VALUES)->whereIn('record_id', $this->recordIdsOf($connection, $dids));
+    }
+
+    /**
+     * @param  array<int, string>  $dids
+     */
+    protected function recordIdsOf(Connection $connection, array $dids): Builder
+    {
+        return $connection->table('atp_records')->whereIn('did', $dids)->select('id');
     }
 
     /**

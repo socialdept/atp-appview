@@ -56,7 +56,7 @@ class RecordFieldsTest extends TestCase
         parent::setUp();
 
         $this->artisan('migrate')->run();
-        RecordQuery::$sortFirstAbove = 10000;
+        RecordQuery::$sortFirstAbove = 50000;
     }
 
     /**

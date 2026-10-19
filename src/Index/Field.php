@@ -90,6 +90,22 @@ final class Field
     }
 
     /**
+     * A date as stored, without sort_at's floor, since an old date is a real
+     * value here. Years outside 1000 to 9999 are left out, which every
+     * database can hold.
+     */
+    protected static function date(mixed $value): ?string
+    {
+        $date = SortAt::parse($value, floor: false);
+
+        if (! $date instanceof DateTimeInterface || (int) $date->format('Y') < 1000) {
+            return null;
+        }
+
+        return $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
+    }
+
+    /**
      * @return array{hash: int, time: string|null, num: float|null, text: string}|null
      */
     protected function normalize(mixed $value): ?array
@@ -99,9 +115,7 @@ final class Field
             'uri' => is_string($value) ? trim($value) : null,
             'number' => is_numeric($value) ? (string) (0 + $value) : null,
             'bool' => is_bool($value) ? ($value ? 'true' : 'false') : null,
-            'datetime' => ($date = SortAt::parse($value)) instanceof DateTimeInterface
-                ? $date->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u')
-                : null,
+            'datetime' => self::date($value),
         };
 
         if ($text === null || $text === '' || strlen($text) > 2048) {

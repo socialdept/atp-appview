@@ -62,7 +62,10 @@ final class SortAt
      * the T, or with a time part too broken to read, in which case the date
      * alone is used.
      */
-    public static function parse(mixed $value): ?DateTimeImmutable
+    /**
+     * @param  bool  $floor  Refuse dates before the earliest plausible one, as sort_at does. A date field keeps them.
+     */
+    public static function parse(mixed $value, bool $floor = true): ?DateTimeImmutable
     {
         if (! is_string($value) || ! preg_match('/^(\d{4})-(\d{2})-(\d{2})(.*)$/', trim($value), $match)) {
             return null;
@@ -85,7 +88,7 @@ final class SortAt
                 continue;
             }
 
-            return self::plausible($parsed) ? $parsed : null;
+            return ! $floor || self::plausible($parsed) ? $parsed : null;
         }
 
         return null;
