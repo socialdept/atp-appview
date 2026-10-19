@@ -8,7 +8,8 @@ use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Index\RecordIndexer;
-use SocialDept\AtpAppview\Index\Refs;
+use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
@@ -92,6 +93,16 @@ class HydratedViewsTest extends TestCase
         $this->index(...array_map(fn (int $n) => $this->event('did:plc:writer', 'com.example.thing', "t{$n}", ['title' => "Thing {$n}", 'shelf' => self::SHELF]), range(1, $count)));
     }
 
+    protected function rowsOf(string $did): \Illuminate\Database\Query\Builder
+    {
+        return DB::table(RecordValues::VALUES)->where('did_hash', ValueHash::of($did));
+    }
+
+    protected function rowsFor(string $field): \Illuminate\Database\Query\Builder
+    {
+        return DB::table(RecordValues::VALUES)->whereIn('key_id', DB::table(RecordValues::KEYS)->where('field', $field)->select('id'));
+    }
+
     public function test_a_view_carries_its_author_embed_counts_and_the_viewers_own_record(): void
     {
         $this->things(1);
@@ -144,7 +155,7 @@ class HydratedViewsTest extends TestCase
         // A deleted account's references go with its records.
         $this->index(new IdentityEvent(++$this->eventId, 'did:plc:alice', 'alice.test', false, 'deleted'));
         $this->assertSame(1, $this->thingView(1)['likeCount']);
-        $this->assertSame(0, DB::table(Refs::TABLE)->where('source_did', 'did:plc:alice')->count());
+        $this->assertSame(0, $this->rowsOf('did:plc:alice')->count());
     }
 
     public function test_a_like_from_an_inactive_account_arrives_hidden(): void
@@ -154,7 +165,7 @@ class HydratedViewsTest extends TestCase
         $this->index($this->like('did:plc:bob', 1));
 
         $this->assertSame(0, $this->thingView(1)['likeCount']);
-        $this->assertSame(1, DB::table(Refs::TABLE)->where('source_did', 'did:plc:bob')->where('hidden', true)->count());
+        $this->assertSame(1, $this->rowsOf('did:plc:bob')->where('hidden', true)->count());
     }
 
     public function test_a_blocklist_purge_drops_the_purged_records_references(): void
@@ -166,41 +177,41 @@ class HydratedViewsTest extends TestCase
         app(Blocklist::class)->block('did:plc:spam', purge: true);
 
         $this->assertSame(1, $this->thingView(1)['likeCount']);
-        $this->assertSame(0, DB::table(Refs::TABLE)->where('source_did', 'did:plc:spam')->count());
+        $this->assertSame(0, $this->rowsOf('did:plc:spam')->count());
     }
 
     public function test_reference_fields_come_from_the_views_and_config(): void
     {
         config(['atp-appview.index.refs' => ['com.example.repost' => ['subject.uri']]]);
-        app(Refs::class)->flush();
+        app(RecordValues::class)->flush();
 
         // ShelfView is only embedded, so its count is never resolved or kept.
-        $this->assertEqualsCanonicalizing(['com.example.like', 'com.example.repost'], array_keys(app(Refs::class)->paths()));
-        $this->assertSame(['subject.uri'], app(Refs::class)->paths()['com.example.repost']);
-        $this->assertSame(['subject.uri'], app(Refs::class)->paths()['com.example.like']);
+        $this->assertEqualsCanonicalizing(['com.example.like', 'com.example.repost'], array_keys(app(RecordValues::class)->fields()));
+        $this->assertSame(['subject.uri'], array_keys(app(RecordValues::class)->fields()['com.example.repost']));
+        $this->assertSame('uri', app(RecordValues::class)->field('com.example.like', 'subject.uri')->type);
     }
 
     public function test_appview_refs_builds_a_new_field_for_records_already_indexed_and_drops_a_removed_one(): void
     {
         config(['atp-appview.xrpc.views' => []]);
-        app(Refs::class)->flush();
+        app(RecordValues::class)->flush();
         $this->things(2);
         $this->index($this->like('did:plc:alice', 1));
-        $this->assertSame(0, DB::table(Refs::TABLE)->count(), 'No view, no references.');
+        $this->assertSame(0, DB::table(RecordValues::VALUES)->count(), 'No view, no references.');
 
         config(['atp-appview.views' => [ThingView::class]]);
-        app(Refs::class)->flush();
+        app(RecordValues::class)->flush();
         $this->artisan('appview:refs')->assertSuccessful();
 
-        $this->assertSame(1, DB::table(Refs::TABLE)->where('path', 'subject.uri')->count());
-        $this->assertSame(2, DB::table(Refs::PATHS_TABLE)->count(), 'Likes and reposts.');
+        $this->assertSame(1, $this->rowsFor('subject.uri')->count());
+        $this->assertSame(2, DB::table(RecordValues::KEYS)->whereNotNull('built_at')->count(), 'Likes and reposts.');
 
         config(['atp-appview.views' => [ShelfView::class]]);
-        app(Refs::class)->flush();
+        app(RecordValues::class)->flush();
         $this->artisan('appview:refs')->assertSuccessful();
 
-        $this->assertSame(0, DB::table(Refs::TABLE)->where('path', 'subject.uri')->count());
-        $this->assertSame(2, DB::table(Refs::TABLE)->where('path', 'shelf')->count());
+        $this->assertSame(0, $this->rowsFor('subject.uri')->count());
+        $this->assertSame(2, $this->rowsFor('shelf')->count());
     }
 
     public function test_a_record_resent_unchanged_or_out_of_date_leaves_its_references_alone(): void
@@ -214,12 +225,12 @@ class HydratedViewsTest extends TestCase
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->index(new RecordEvent(++$this->eventId, $like->did, $like->collection, $like->rkey, $like->action, $like->cid, $like->rev, $like->record, false));
-        $writes = array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, Refs::TABLE));
+        $writes = array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, 'atp_record_values') || str_contains($sql, 'atp_value_counts'));
         $this->assertSame([], array_values($writes), 'Nothing changed, nothing rewritten.');
 
         // An older version arriving late changes nothing either.
         $this->index(new RecordEvent(++$this->eventId, $like->did, $like->collection, $like->rkey, RecordAction::Update, 'bafy-old', '3l1aaaaaaaaaa', ['subject' => ['uri' => $this->thing(9)]], true));
-        $this->assertSame([$this->thing(1)], DB::table(Refs::TABLE)->where('source_did', 'did:plc:alice')->pluck('target_uri')->all());
+        $this->assertSame([ValueHash::of($this->thing(1))], $this->rowsOf('did:plc:alice')->pluck('value_hash')->map(fn ($hash) => (int) $hash)->all());
     }
 
     public function test_a_batch_outside_every_view_writes_no_references(): void
@@ -227,7 +238,7 @@ class HydratedViewsTest extends TestCase
         DB::enableQueryLog();
         $this->index($this->event('did:plc:writer', 'com.example.other', 'x', ['subject' => ['uri' => $this->thing(1)]]));
 
-        $this->assertEmpty(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, Refs::TABLE)));
+        $this->assertEmpty(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, 'atp_record_values') || str_contains($sql, 'atp_value_counts')));
     }
 
     public function test_every_count_shares_one_query_and_every_viewer_field_another(): void
@@ -238,7 +249,7 @@ class HydratedViewsTest extends TestCase
         DB::flushQueryLog();
         DB::enableQueryLog();
         app(Hydrator::class)->hydrate(app(ThingView::class), Record::query()->where('collection', 'com.example.thing')->get(), 'did:plc:alice');
-        $refs = array_values(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, Refs::TABLE)));
+        $refs = array_values(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, 'atp_record_values') || str_contains($sql, 'atp_value_counts')));
 
         $this->assertCount(2, $refs, 'Two counts and two viewer fields, two queries.');
     }

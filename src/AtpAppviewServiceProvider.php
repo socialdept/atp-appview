@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview;
 
 use CoInfra\Image\UrlBuilder;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
@@ -19,12 +20,12 @@ use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
+use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
-use SocialDept\AtpAppview\Console\RefsCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
@@ -36,7 +37,7 @@ use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Images\BlobUrls;
 use SocialDept\AtpAppview\Images\InfraCoopBlobUrls;
 use SocialDept\AtpAppview\Images\PdsBlobUrls;
-use SocialDept\AtpAppview\Index\Refs;
+use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -49,9 +50,47 @@ use SocialDept\AtpClient\Auth\ServiceAuth;
 
 class AtpAppviewServiceProvider extends ServiceProvider
 {
+    /**
+     * The package's config: atp-appview.php for what is global, and a file
+     * per feature in config/atp-appview/ (atp-appview.profiles from
+     * profiles.php and so on), which is how an app's own config is laid out
+     * too. Laravel loads an app's config/atp-appview/*.php as those keys.
+     *
+     * Defaults merge one level deeper than mergeConfigFrom(): a setting added
+     * to a section in a later release reaches an app whose published config
+     * predates it, instead of the app's section replacing the whole of ours.
+     */
+    protected function mergeConfig(): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        $config = $this->app->make('config');
+        $defaults = require __DIR__.'/../config/atp-appview.php';
+
+        foreach (glob(__DIR__.'/../config/atp-appview/*.php') ?: [] as $file) {
+            $defaults[basename($file, '.php')] = require $file;
+        }
+
+        $app = (array) $config->get('atp-appview', []);
+
+        foreach ($defaults as $section => $values) {
+            $mine = $app[$section] ?? null;
+
+            // A section the app sets as a whole list, such as views, is the
+            // app's alone. A keyed section takes our defaults for keys it lacks.
+            $app[$section] = is_array($mine) && is_array($values) && ! array_is_list($values) && ! array_is_list($mine)
+                ? array_merge($values, $mine)
+                : ($mine ?? $values);
+        }
+
+        $config->set('atp-appview', $app);
+    }
+
     public function register(): void
     {
-        $this->mergeConfigFrom(__DIR__.'/../config/atp-appview.php', 'atp-appview');
+        $this->mergeConfig();
 
         $this->app->singleton(TapConsumer::class, fn (Application $app) => new TapConsumer(
             handlers: array_map(fn (string $class) => $app->make($class), config('atp-appview.ingest.handlers', [])),
@@ -75,7 +114,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         $this->app->singleton(XrpcRegistry::class);
 
-        $this->app->singleton(Refs::class);
+        $this->app->singleton(RecordValues::class);
 
         // One list of profile sources, so fluent changes at boot stick.
         $this->app->singleton(Profiles::class);
@@ -101,6 +140,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/../config/atp-appview.php' => config_path('atp-appview.php'),
+                __DIR__.'/../config/atp-appview' => config_path('atp-appview'),
             ], 'atp-appview-config');
 
             $this->publishes([
@@ -118,7 +158,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsCommand::class,
                 LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
-                RefsCommand::class,
+                FieldsCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
                 RestartCommand::class,

@@ -31,7 +31,10 @@ It builds on [atp-client](https://github.com/socialdept/atp-client) for OAuth, s
 
 ```bash
 composer require socialdept/atp-appview
+php artisan vendor:publish --tag=atp-appview-config
 ```
+
+The config is split: `config/atp-appview.php` holds what is global (auth, ingest, the index, the service identity, XRPC), and `config/atp-appview/` holds a file per feature (`fields.php`, `views.php`, `profiles.php`, `images.php`, `lexicons.php`, `backfill.php`, `blocklist.php`). Laravel loads each as a key of its own, `atp-appview.fields` and so on. Every section keeps the package's defaults for settings it does not mention, so a setting added in a later release reaches a config published before it.
 
 ## Frontend and backend mode
 
@@ -233,7 +236,7 @@ Tap posts each batch as `{"events": [...]}` and signs it with its admin password
 
 Tap sends one batch at a time unless `TAB_WEBHOOK_BATCH_PARALLELISM` says otherwise, so the application sets the pace, and events wait in Tap while the application is down. Delivery is at least once and Tap keeps events for one repo in order, so handlers must apply a batch idempotently.
 
-Each request reads the config fresh, so there is nothing to restart after a deploy. The path is `ingest.webhook.path`, and `ingest.webhook.middleware` adds route middleware. If the app published `config/atp-appview.php` before the webhook existed, add the `webhook` block to its `ingest` section: Laravel merges a package's config one level deep, so a published `ingest` section replaces the package's whole.
+Each request reads the config fresh, so there is nothing to restart after a deploy. The path is `ingest.webhook.path`, and `ingest.webhook.middleware` adds route middleware. A config published before the webhook existed still gets the `webhook` defaults, since each section keeps the package's defaults for settings it does not mention.
 
 ### Running a worker instead
 
@@ -819,20 +822,80 @@ It pages, filters by `did` or `actor` and looks up one `uri` exactly as a defaul
 | --- | --- | --- |
 | `Author` | `did`, `handle`, `displayName`, `avatar` from [profiles](#profiles) | one query per profile source, by primary key |
 | `Embed($path, $view)` | the record a field points at, in that view's `summary()` | one query by primary key |
-| `Count($collection, $path)` | how many visible records point here through that field | every count in the view shares one query |
+| `Count($collection, $path)` | how many visible records point here through that field | every count in the view is one read of the kept counts |
 | `ViewerRef($collection, $path)` | the uri of the viewer's own record pointing here, or null | every viewer field shares one query, none without a viewer |
 
 So a page costs the same number of queries whatever its size, and adding a count to a view adds no query. Paths are dot paths, and a field may hold one at-uri or a list. Override `summary()` to embed a short form, and `base()` to change the fields every view starts with.
 
-### References
+### Fields
 
-Counts and viewer state read `atp_record_refs`, which records which indexed record points at which through which field. Its fields come from the views' `Count` and `ViewerRef` parts, plus any in `index.refs`. It is kept as records are indexed: a batch rewrites only the references of records it actually changed, from the records already in memory, and writes only what differs, so a resync of unchanged records writes nothing. A tombstoned record has no references, and a hidden account's are marked hidden, so a count reads one index and never touches `atp_records`.
-
-A field added later is built for records already indexed by `appview:refs`, which also drops a removed one. Schedule it:
+Records can be filtered, sorted and counted by their own fields, declared per collection in `config/atp-appview/fields.php`:
 
 ```php
-Schedule::command('appview:refs')->everyFiveMinutes()->withoutOverlapping();
+return [
+    'com.example.post' => [
+        'tags' => 'string[]',
+        'langs' => 'string[]',
+        'createdAt' => 'datetime',
+        'parent' => ['type' => 'uri', 'path' => 'reply.parent.uri'],
+    ],
+];
 ```
+
+A type is `string`, `uri`, `datetime`, `number` or `bool`, with `[]` for a list. `path` reaches a field by another name or nested. Strings match without regard to case unless `'case' => 'exact'`. Dates are read leniently, and a value that cannot be read is left out.
+
+```php
+use SocialDept\AtpAppview\Index\RecordQuery;
+
+$page = RecordQuery::in('com.example.post')
+    ->where('tags', 'php')
+    ->where('langs', 'en')
+    ->orderBy('createdAt')          // a date or number field, newest first
+    ->after($cursor)
+    ->limit(50)
+    ->get();                        // ['records' => Collection, 'cursor' => ?string]
+```
+
+Without `orderBy()` records come newest first by `sort_at`. Several filters are all required, and the one with the fewest matches drives the query. `by($did)` narrows to one repo. Sorting by a field leaves out records without a value for it.
+
+A view query maps request parameters to fields, which its lexicon declares:
+
+```php
+'xrpc' => [
+    'views' => [
+        'com.example.getPosts' => [
+            'view' => PostView::class,
+            'filters' => ['tag' => 'tags', 'lang' => 'langs'],   // ?tag=php&lang=en
+            'sorts' => ['created' => 'createdAt'],              // ?sort=created
+        ],
+    ],
+],
+```
+
+Counts are kept as records change, so the most common values and suggestions read them rather than count:
+
+```php
+$values = app(\SocialDept\AtpAppview\Index\RecordValues::class);
+
+$values->top('com.example.post', 'tags', 20);          // [['value' => 'php', 'total' => 312], ...]
+$values->suggest('com.example.post', 'tags', 'lar');   // tags starting with "lar", most used first
+```
+
+#### How fields are stored
+
+Every value is a row in `atp_record_values`: a 2-byte id for the collection and field, the record's 8-byte id, the value as an 8-byte hash, the date or number when there is one, and the record's `sort_at` and whether its account is hidden. So a filtered page reads one index range and never joins `atp_records`. Matching is exact, which is what filters need: there is no alphabetical sort or substring match on strings. Search comes from a search index, and anything else can be built from the records themselves.
+
+References are fields too: a `uri` value is the record it points at. The `Count` and `ViewerRef` parts of a view name references, which are kept without being declared. `atp_value_counts` holds how many visible records have each value, moved as values are written, hidden, shown and dropped, in atomic `+n` updates that concurrent batches cannot lose.
+
+A batch rewrites only the values of records it changed, from the records already in memory, and writes only what differs, so a resync of unchanged records writes nothing. A tombstoned record has no values, and a hidden account's are marked hidden.
+
+`appview:fields` builds a field declared later for records already indexed, rebuilds one whose type or case changed, and drops a removed one. `--recount` counts every value again, to repair counts that drifted. Schedule it:
+
+```php
+Schedule::command('appview:fields')->everyFiveMinutes()->withoutOverlapping();
+```
+
+On Postgres with 290,000 records, 1.28 million values take 300 MB with their indexes. A page filtered by a value reads in under a millisecond, a sort by a date in about one, two filters together in a few. A common value paired with a sort is read and sorted, about 50 ms for 17,000 matches.
 
 ### Profiles
 

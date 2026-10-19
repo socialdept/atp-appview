@@ -68,7 +68,7 @@ class RecordIndexer implements BatchHandler
             if ($records !== []) {
                 $status->hideArrivals(array_column($records, 'did'));
                 // After hiding, so new references of an inactive account are hidden too.
-                app(Refs::class)->rewrite($connection, $records, $now);
+                app(RecordValues::class)->rewrite($connection, $records, $now);
             }
         });
     }
