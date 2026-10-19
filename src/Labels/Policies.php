@@ -18,7 +18,9 @@ use SocialDept\AtpAppview\Models\LabelPolicy;
  * 4. The labeler's declaration of the value: its defaultSetting, what it
  *    blurs and its severity.
  * 5. The defaults for the values Bluesky defines, such as porn and
- *    graphic-media, which labelers use without defining them.
+ *    graphic-media, which labelers use without defining them. On an
+ *    account they blur its avatar and banner, as Bluesky does, and leave
+ *    what it wrote to the labels on that.
  *
  * Anything else is ignored: still listed on what it labels, doing nothing.
  */
@@ -135,7 +137,11 @@ class Policies
             return self::fromDefinition($definition);
         }
 
-        return self::DEFAULTS[$value][0] ?? Effect::Ignore;
+        if (! isset(self::DEFAULTS[$value])) {
+            return Effect::Ignore;
+        }
+
+        return $target === Target::ACCOUNT ? Effect::Blur : self::DEFAULTS[$value][0];
     }
 
     /**
