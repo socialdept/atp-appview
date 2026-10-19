@@ -19,8 +19,8 @@ use SocialDept\AtpAppview\Console\BackfillWorkCommand;
 use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
-use SocialDept\AtpAppview\Console\DeadLettersCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
+use SocialDept\AtpAppview\Console\FailedDeliveriesCommand;
 use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
@@ -39,7 +39,7 @@ use SocialDept\AtpAppview\Images\BlobUrls;
 use SocialDept\AtpAppview\Images\InfraCoopBlobUrls;
 use SocialDept\AtpAppview\Images\PdsBlobUrls;
 use SocialDept\AtpAppview\Index\RecordValues;
-use SocialDept\AtpAppview\Ingest\DeadLetters;
+use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -103,7 +103,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
             blocklist: $app->make(Blocklist::class),
             stats: $app->make(IngestStats::class),
-            deadLetters: $app->make(DeadLetters::class),
+            failedDeliveries: $app->make(FailedDeliveries::class),
         ));
 
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
@@ -156,7 +156,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BlockCommand::class,
                 BlocksCommand::class,
                 ConsumeCommand::class,
-                DeadLettersCommand::class,
+                FailedDeliveriesCommand::class,
                 DiscoverCommand::class,
                 LexiconsAcceptCommand::class,
                 LexiconsCommand::class,

@@ -327,26 +327,26 @@ List hooks in `atp-appview.ingest.hooks`. They run in order on the whole batch, 
 
 The blocklist and the hooks are the default `atp-appview.ingest.pipes`: a batch passes through them as through any Laravel pipeline, then the handlers take it. An app can add its own pipe, a class with `handle(Batch $batch, Closure $next)`. Code after `$next()` runs once the handlers have taken the batch.
 
-### Dead letters
+### Failed deliveries
 
-Without them, one record no handler can take holds up everything behind it: the worker reconnects without acknowledging the batch and Tap sends it again, or the webhook fails and Tap retries it, forever.
+Without this, one record no handler can take would hold up everything behind it: the worker reconnects without acknowledging the batch and Tap sends it again, or the webhook fails and Tap retries it, forever.
 
-So a batch that still fails after `max_attempts` is split in halves until the events failing on their own are found. Those are parked in `atp_dead_letters`, with the event and the error, and the rest of the batch goes through. When every event fails on its own, the cause is more likely the database or a service than the records, so the batch goes back to Tap as before, and an event is parked only once it has failed in `dead_letters.max_deliveries` (3) separate deliveries.
+So a batch that still fails after `max_attempts` is split in halves until the events failing on their own are found. Those are parked in `atp_failed_deliveries`, with the event and the error, and the rest of the batch goes through. When every event fails on its own, the cause is more likely the database or a service than the records, so the batch goes back to Tap as before, and an event is parked only once it has failed in `failed_deliveries.max_deliveries` (3) separate deliveries.
 
 ```bash
-php artisan appview:dead-letters                          # count by collection and error
-php artisan appview:dead-letters --retry                  # run them through ingest again, once fixed
-php artisan appview:dead-letters --dismiss --collection=app.example.post
-php artisan appview:dead-letters --prune                  # drop those past keep_days and max
+php artisan appview:failed-deliveries                          # count by collection and error
+php artisan appview:failed-deliveries --retry                  # run them through ingest again, once fixed
+php artisan appview:failed-deliveries --forget --collection=app.example.post
+php artisan appview:failed-deliveries --prune                  # drop those past keep_days and max
 ```
 
-How long to keep them depends on how many arrive, so it is configured in `config/atp-appview/dead_letters.php`: `keep_days` (90, null to keep them until dismissed) and `max`, a cap with the oldest dropped first. Schedule the prune:
+How long to keep them depends on how many arrive, so it is configured in `config/atp-appview/failed_deliveries.php`: `keep_days` (90, null to keep them until forgotten) and `max`, a cap with the oldest dropped first. Schedule the prune:
 
 ```php
-Schedule::command('appview:dead-letters --prune')->daily();
+Schedule::command('appview:failed-deliveries --prune')->daily();
 ```
 
-`DeadLetters::retry($letter)` runs one through ingest as configured now, and drops it once it goes through.
+`FailedDeliveries::retry($delivery)` runs one through ingest as configured now, and drops it once it goes through.
 
 ### Backfill status
 

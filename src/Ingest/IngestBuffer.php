@@ -21,7 +21,7 @@ use Throwable;
  * database.
  *
  * A batch that keeps failing is split until the events failing on their own
- * are found. They are parked as dead letters and the rest go through, so one
+ * are found. They are parked as failed deliveries and the rest go through, so one
  * bad record cannot hold up everything behind it. When every event fails on
  * its own, the cause is more likely the database or a service than the
  * records, so the batch is left for Tap to redeliver, and only an event that
@@ -47,7 +47,7 @@ class IngestBuffer
      * @param  Closure(int): void|null  $sleep  Waits the given milliseconds between attempts
      * @param  Blocklist|null  $blocklist  Drops blocked records before the handlers see them
      * @param  IngestStats|null  $stats  Counts what Tap delivered, blocked or not
-     * @param  DeadLetters|null  $deadLetters  Parks events that keep failing. Without it, a failing batch is never acknowledged
+     * @param  FailedDeliveries|null  $failedDeliveries  Parks events that keep failing. Without it, a failing batch is never acknowledged
      * @param  array<int, class-string|object>|null  $pipes  Null for atp-appview.ingest.pipes
      */
     public function __construct(
@@ -58,7 +58,7 @@ class IngestBuffer
         protected ?Closure $sleep = null,
         protected ?Blocklist $blocklist = null,
         protected ?IngestStats $stats = null,
-        protected ?DeadLetters $deadLetters = null,
+        protected ?FailedDeliveries $failedDeliveries = null,
         ?array $pipes = null,
     ) {
         // The blocklist pipe uses the Blocklist given, and is left out without one.
@@ -143,7 +143,7 @@ class IngestBuffer
                 return;
             } catch (Throwable $e) {
                 if ($attempt >= $this->maxAttempts) {
-                    $this->deadLetter($batch, new BatchFailed($attempt, $e));
+                    $this->parkFailed($batch, new BatchFailed($attempt, $e));
 
                     return;
                 }
@@ -165,9 +165,9 @@ class IngestBuffer
      *
      * @throws BatchFailed when it goes back to Tap
      */
-    protected function deadLetter(Batch $batch, BatchFailed $failure): void
+    protected function parkFailed(Batch $batch, BatchFailed $failure): void
     {
-        if ($this->deadLetters === null) {
+        if ($this->failedDeliveries === null) {
             throw $failure;
         }
 
@@ -175,26 +175,26 @@ class IngestBuffer
 
         if (count($failed) < $batch->count()) {
             foreach ($failed as [$event, $error]) {
-                $this->deadLetters->park($event, $error);
+                $this->failedDeliveries->park($event, $error);
             }
 
-            Log::error('[atp-appview] Parked events that kept failing as dead letters', ['parked' => count($failed), 'events' => $batch->count()]);
+            Log::error('[atp-appview] Parked events that kept failing as failed deliveries', ['parked' => count($failed), 'events' => $batch->count()]);
 
             return;
         }
 
         // Everything failed on its own: more likely the database or a service.
-        $due = $this->deadLetters->failedDelivery($batch->events);
+        $due = $this->failedDeliveries->failedDelivery($batch->events);
 
         if (count($due) < $batch->count()) {
             throw $failure;
         }
 
         foreach ($failed as [$event, $error]) {
-            $this->deadLetters->park($event, $error);
+            $this->failedDeliveries->park($event, $error);
         }
 
-        Log::error('[atp-appview] Parked a batch that failed in every delivery as dead letters', ['parked' => count($failed)]);
+        Log::error('[atp-appview] Parked a batch that failed in every delivery as failed deliveries', ['parked' => count($failed)]);
     }
 
     /**

@@ -86,10 +86,10 @@ class TapConsumer
         ?LoopInterface $loop = null,
         ?Blocklist $blocklist = null,
         protected ?IngestStats $stats = null,
-        ?DeadLetters $deadLetters = null,
+        ?FailedDeliveries $failedDeliveries = null,
     ) {
         $this->loop = $loop ?? Loop::get();
-        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts, blocklist: $blocklist, stats: $stats, deadLetters: $deadLetters);
+        $this->buffer = new IngestBuffer($handlers, fn (int $id) => $this->ack($id), $batchSize, $maxAttempts, blocklist: $blocklist, stats: $stats, failedDeliveries: $failedDeliveries);
     }
 
     /**

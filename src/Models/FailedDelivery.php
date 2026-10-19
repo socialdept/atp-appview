@@ -20,9 +20,9 @@ use Illuminate\Database\Eloquent\Model;
  * @property \Illuminate\Support\Carbon $failed_at
  * @property \Illuminate\Support\Carbon|null $retried_at
  */
-class DeadLetter extends Model
+class FailedDelivery extends Model
 {
-    protected $table = 'atp_dead_letters';
+    protected $table = 'atp_failed_deliveries';
 
     public $timestamps = false;
 

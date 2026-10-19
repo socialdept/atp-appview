@@ -16,7 +16,7 @@ return new class () extends Migration {
 
         // Events the handlers could not take, kept with what failed, so the
         // rest of their batch could be acknowledged and ingest moves on.
-        $schema->create('atp_dead_letters', function (Blueprint $table) {
+        $schema->create('atp_failed_deliveries', function (Blueprint $table) {
             $table->id();
             $table->string('kind', 16);
             $table->unsignedBigInteger('event_id')->nullable();
@@ -53,6 +53,6 @@ return new class () extends Migration {
     {
         $schema = Schema::connection($this->getConnection());
         $schema->dropIfExists('atp_ingest_rejections');
-        $schema->dropIfExists('atp_dead_letters');
+        $schema->dropIfExists('atp_failed_deliveries');
     }
 };

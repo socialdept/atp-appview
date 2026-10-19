@@ -9,17 +9,17 @@ use Illuminate\Support\Str;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
-use SocialDept\AtpAppview\Models\DeadLetter;
+use SocialDept\AtpAppview\Models\FailedDelivery;
 use Throwable;
 
 /**
  * Events the handlers could not take, parked so the rest of their batch is
- * acknowledged and ingest moves on, then retried or dismissed once the cause
- * is fixed. Kept for atp-appview.dead_letters.keep_days, and at most `max`.
+ * acknowledged and ingest moves on, then retried or forgotten once the cause
+ * is fixed. Kept for atp-appview.failed_deliveries.keep_days, and at most `max`.
  */
-class DeadLetters
+class FailedDeliveries
 {
-    protected const DELIVERIES = 'atp-appview:dead-letters:deliveries:';
+    protected const DELIVERIES = 'atp-appview:failed-deliveries:deliveries:';
 
     public function __construct(
         protected Cache $cache,
@@ -27,9 +27,9 @@ class DeadLetters
     ) {
     }
 
-    public function park(RecordEvent|IdentityEvent $event, Throwable $error): DeadLetter
+    public function park(RecordEvent|IdentityEvent $event, Throwable $error): FailedDelivery
     {
-        return DeadLetter::query()->create([
+        return FailedDelivery::query()->create([
             'kind' => $event instanceof RecordEvent ? 'record' : 'identity',
             'event_id' => $event->id,
             'did' => $event->did,
@@ -52,7 +52,7 @@ class DeadLetters
      */
     public function failedDelivery(array $events): array
     {
-        $limit = max(1, (int) config('atp-appview.dead_letters.max_deliveries', 3));
+        $limit = max(1, (int) config('atp-appview.failed_deliveries.max_deliveries', 3));
         $due = [];
 
         foreach ($events as $event) {
@@ -72,46 +72,46 @@ class DeadLetters
      * Run a parked event through ingest again, as configured now. On success
      * it is gone, otherwise its error is updated.
      */
-    public function retry(DeadLetter $letter): bool
+    public function retry(FailedDelivery $delivery): bool
     {
         try {
-            Pipeline::fromConfig($this->container)->run(new Batch([self::rebuild($letter->payload)]));
+            Pipeline::fromConfig($this->container)->run(new Batch([self::rebuild($delivery->payload)]));
         } catch (Throwable $e) {
-            $letter->update([
+            $delivery->update([
                 'error_class' => $e::class,
                 'error' => Str::limit($e->getMessage(), 4000),
-                'retries' => $letter->retries + 1,
+                'retries' => $delivery->retries + 1,
                 'retried_at' => Carbon::now('UTC'),
             ]);
 
             return false;
         }
 
-        $letter->delete();
+        $delivery->delete();
 
         return true;
     }
 
     /**
-     * Drop dead letters older than keep_days, then the oldest beyond max.
+     * Drop failed deliveries older than keep_days, then the oldest beyond max.
      *
      * @return int How many were dropped
      */
     public function prune(): int
     {
         $dropped = 0;
-        $days = config('atp-appview.dead_letters.keep_days');
-        $max = config('atp-appview.dead_letters.max');
+        $days = config('atp-appview.failed_deliveries.keep_days');
+        $max = config('atp-appview.failed_deliveries.max');
 
         if ($days !== null && $days !== '') {
-            $dropped += DeadLetter::query()->where('failed_at', '<', Carbon::now('UTC')->subDays((int) $days))->delete();
+            $dropped += FailedDelivery::query()->where('failed_at', '<', Carbon::now('UTC')->subDays((int) $days))->delete();
         }
 
         if ($max !== null && $max !== '') {
-            $keepFrom = DeadLetter::query()->orderByDesc('id')->skip((int) $max)->value('id');
+            $keepFrom = FailedDelivery::query()->orderByDesc('id')->skip((int) $max)->value('id');
 
             if ($keepFrom !== null) {
-                $dropped += DeadLetter::query()->where('id', '<=', $keepFrom)->delete();
+                $dropped += FailedDelivery::query()->where('id', '<=', $keepFrom)->delete();
             }
         }
 

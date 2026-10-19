@@ -11,16 +11,16 @@ use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
-use SocialDept\AtpAppview\Ingest\DeadLetters;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
+use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestBuffer;
 use SocialDept\AtpAppview\Ingest\Rejections;
-use SocialDept\AtpAppview\Models\DeadLetter;
+use SocialDept\AtpAppview\Models\FailedDelivery;
 use SocialDept\AtpAppview\Models\Record;
 
-class DeadLettersTest extends TestCase
+class FailedDeliveriesTest extends TestCase
 {
     /** @var array<int, int> */
     protected array $acked = [];
@@ -62,7 +62,7 @@ class DeadLettersTest extends TestCase
             },
             maxAttempts: 2,
             sleep: fn () => null,
-            deadLetters: app(DeadLetters::class),
+            failedDeliveries: app(FailedDeliveries::class),
             pipes: [],
         );
     }
@@ -88,16 +88,16 @@ class DeadLettersTest extends TestCase
         $this->assertSame([1, 2, 3, 4, 5], $this->acked, 'The whole batch is acknowledged.');
         $this->assertSame(['a', 'b', 'c', 'd'], Record::query()->orderBy('rkey')->pluck('rkey')->all());
 
-        $letter = DeadLetter::query()->sole();
-        $this->assertSame('at://did:plc:alice/app.example.post/bad', $letter->uri);
-        $this->assertSame(RuntimeException::class, $letter->error_class);
-        $this->assertSame('Picky refuses bad', $letter->error);
-        $this->assertSame('bad', $letter->payload['rkey']);
+        $delivery = FailedDelivery::query()->sole();
+        $this->assertSame('at://did:plc:alice/app.example.post/bad', $delivery->uri);
+        $this->assertSame(RuntimeException::class, $delivery->error_class);
+        $this->assertSame('Picky refuses bad', $delivery->error);
+        $this->assertSame('bad', $delivery->payload['rkey']);
     }
 
     public function test_when_everything_fails_the_batch_goes_back_to_tap_until_it_has_failed_in_several_deliveries(): void
     {
-        config(['atp-appview.dead_letters.max_deliveries' => 3]);
+        config(['atp-appview.failed_deliveries.max_deliveries' => 3]);
         Picky::$down = true;
         $events = [$this->event(1, 'a'), $this->event(2, 'b')];
 
@@ -110,12 +110,12 @@ class DeadLettersTest extends TestCase
         }
 
         $this->assertSame([], $this->acked);
-        $this->assertSame(0, DeadLetter::query()->count());
+        $this->assertSame(0, FailedDelivery::query()->count());
 
         // The third delivery fails too: now both are parked and acknowledged.
         $this->deliver($events);
         $this->assertSame([1, 2], $this->acked);
-        $this->assertSame(2, DeadLetter::query()->count());
+        $this->assertSame(2, FailedDelivery::query()->count());
     }
 
     public function test_a_poison_event_delivered_by_webhook_is_parked_and_the_request_succeeds(): void
@@ -126,21 +126,21 @@ class DeadLettersTest extends TestCase
         ]], ['Authorization' => 'Basic '.base64_encode('admin:secret')])->assertOk();
 
         $this->assertSame(['a'], Record::query()->pluck('rkey')->all());
-        $this->assertSame('bad', DeadLetter::query()->sole()->payload['rkey']);
+        $this->assertSame('bad', FailedDelivery::query()->sole()->payload['rkey']);
     }
 
-    public function test_a_dead_letter_is_retried_once_the_cause_is_fixed(): void
+    public function test_a_failed_delivery_is_retried_once_the_cause_is_fixed(): void
     {
         $this->deliver([$this->event(1, 'a'), $this->event(2, 'bad')]);
-        $letter = DeadLetter::query()->sole();
+        $delivery = FailedDelivery::query()->sole();
 
         // Still broken: kept, with the attempt noted.
-        $this->assertFalse(app(DeadLetters::class)->retry($letter));
-        $this->assertSame(1, $letter->fresh()->retries);
+        $this->assertFalse(app(FailedDeliveries::class)->retry($delivery));
+        $this->assertSame(1, $delivery->fresh()->retries);
 
         Picky::$refuse = [];
-        $this->assertTrue(app(DeadLetters::class)->retry($letter->fresh()));
-        $this->assertSame(0, DeadLetter::query()->count());
+        $this->assertTrue(app(FailedDeliveries::class)->retry($delivery->fresh()));
+        $this->assertSame(0, FailedDelivery::query()->count());
         $this->assertSame(['a', 'bad'], Record::query()->orderBy('rkey')->pluck('rkey')->all());
     }
 
@@ -189,35 +189,35 @@ class DeadLettersTest extends TestCase
     public function test_prune_keeps_what_keep_days_and_max_allow(): void
     {
         foreach ([200, 100, 10, 1, 0] as $i => $daysAgo) {
-            DeadLetter::query()->create(['kind' => 'record', 'did' => 'did:plc:a', 'payload' => [], 'error_class' => 'E', 'error' => 'e', 'failed_at' => Carbon::now('UTC')->subDays($daysAgo)]);
+            FailedDelivery::query()->create(['kind' => 'record', 'did' => 'did:plc:a', 'payload' => [], 'error_class' => 'E', 'error' => 'e', 'failed_at' => Carbon::now('UTC')->subDays($daysAgo)]);
         }
 
-        config(['atp-appview.dead_letters.keep_days' => 90, 'atp-appview.dead_letters.max' => 2]);
-        $this->artisan('appview:dead-letters', ['--prune' => true])->assertSuccessful();
+        config(['atp-appview.failed_deliveries.keep_days' => 90, 'atp-appview.failed_deliveries.max' => 2]);
+        $this->artisan('appview:failed-deliveries', ['--prune' => true])->assertSuccessful();
 
-        $this->assertSame([1, 0], DeadLetter::query()->orderBy('id')->get()->map(fn ($letter) => (int) round($letter->failed_at->diffInDays(Carbon::now('UTC'), true)))->all());
+        $this->assertSame([1, 0], FailedDelivery::query()->orderBy('id')->get()->map(fn ($delivery) => (int) round($delivery->failed_at->diffInDays(Carbon::now('UTC'), true)))->all());
 
-        config(['atp-appview.dead_letters.keep_days' => null, 'atp-appview.dead_letters.max' => null]);
-        $this->assertSame(0, app(DeadLetters::class)->prune(), 'Null keeps them all.');
+        config(['atp-appview.failed_deliveries.keep_days' => null, 'atp-appview.failed_deliveries.max' => null]);
+        $this->assertSame(0, app(FailedDeliveries::class)->prune(), 'Null keeps them all.');
     }
 
-    public function test_the_command_shows_retries_and_dismisses(): void
+    public function test_the_command_shows_retries_and_forgets(): void
     {
         $this->deliver([$this->event(1, 'bad'), $this->event(2, 'a')]);
 
-        $this->artisan('appview:dead-letters')->expectsTable(['Collection', 'Error', 'Count', 'Latest'], [
-            ['app.example.post', 'RuntimeException', '1', DeadLetter::query()->value('failed_at')->format('Y-m-d H:i:s')],
+        $this->artisan('appview:failed-deliveries')->expectsTable(['Collection', 'Error', 'Count', 'Latest'], [
+            ['app.example.post', 'RuntimeException', '1', FailedDelivery::query()->value('failed_at')->format('Y-m-d H:i:s')],
         ])->assertSuccessful();
 
-        $this->artisan('appview:dead-letters', ['--retry' => true])->assertFailed();
+        $this->artisan('appview:failed-deliveries', ['--retry' => true])->assertFailed();
 
         Picky::$refuse = [];
-        $this->artisan('appview:dead-letters', ['--retry' => true])->assertSuccessful();
-        $this->assertSame(0, DeadLetter::query()->count());
+        $this->artisan('appview:failed-deliveries', ['--retry' => true])->assertSuccessful();
+        $this->assertSame(0, FailedDelivery::query()->count());
 
-        DeadLetter::query()->create(['kind' => 'record', 'did' => 'did:plc:a', 'collection' => 'app.example.post', 'payload' => [], 'error_class' => 'E', 'error' => 'e', 'failed_at' => now()]);
-        $this->artisan('appview:dead-letters', ['--dismiss' => true])->assertSuccessful();
-        $this->assertSame(0, DeadLetter::query()->count());
+        FailedDelivery::query()->create(['kind' => 'record', 'did' => 'did:plc:a', 'collection' => 'app.example.post', 'payload' => [], 'error_class' => 'E', 'error' => 'e', 'failed_at' => now()]);
+        $this->artisan('appview:failed-deliveries', ['--forget' => true])->assertSuccessful();
+        $this->assertSame(0, FailedDelivery::query()->count());
     }
 
     /**
@@ -232,7 +232,7 @@ class DeadLettersTest extends TestCase
             },
             maxAttempts: 1,
             sleep: fn () => null,
-            deadLetters: app(DeadLetters::class),
+            failedDeliveries: app(FailedDeliveries::class),
         );
 
         foreach ($events as $event) {
