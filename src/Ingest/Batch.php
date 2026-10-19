@@ -3,6 +3,8 @@
 namespace SocialDept\AtpAppview\Ingest;
 
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
+use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Events\LabelEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 
 /**
@@ -14,7 +16,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 final class Batch
 {
     /**
-     * @param  array<int, RecordEvent|IdentityEvent>  $events
+     * @param  array<int, RecordEvent|IdentityEvent|LabelEvent|LabelerEvent>  $events
      */
     public function __construct(
         public readonly array $events,
@@ -35,6 +37,22 @@ final class Batch
     public function identities(): array
     {
         return array_values(array_filter($this->events, fn ($event) => $event instanceof IdentityEvent));
+    }
+
+    /**
+     * @return array<int, LabelEvent>
+     */
+    public function labels(): array
+    {
+        return array_values(array_filter($this->events, fn ($event) => $event instanceof LabelEvent));
+    }
+
+    /**
+     * @return array<int, LabelerEvent>
+     */
+    public function labelers(): array
+    {
+        return array_values(array_filter($this->events, fn ($event) => $event instanceof LabelerEvent));
     }
 
     public function isEmpty(): bool

@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Log;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
+use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Events\LabelEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
 use SocialDept\AtpAppview\Ingest\Pipes\DropBlocked;
@@ -37,7 +39,7 @@ class IngestBuffer
     protected array $ids = [];
 
     /**
-     * @var array<int, RecordEvent|IdentityEvent>
+     * @var array<int, RecordEvent|IdentityEvent|LabelEvent|LabelerEvent>
      */
     protected array $events = [];
 
@@ -80,7 +82,7 @@ class IngestBuffer
      *
      * @return bool Whether the batch is now full and should be flushed
      */
-    public function push(int $id, RecordEvent|IdentityEvent|null $event): bool
+    public function push(int $id, RecordEvent|IdentityEvent|LabelEvent|LabelerEvent|null $event): bool
     {
         $this->ids[] = $id;
 
@@ -202,8 +204,8 @@ class IngestBuffer
      * halves in order until single events are left: about two attempts per
      * failing event for each halving.
      *
-     * @param  array<int, RecordEvent|IdentityEvent>  $events
-     * @return array<int, array{0: RecordEvent|IdentityEvent, 1: Throwable}>
+     * @param  array<int, RecordEvent|IdentityEvent|LabelEvent|LabelerEvent>  $events
+     * @return array<int, array{0: RecordEvent|IdentityEvent|LabelEvent|LabelerEvent, 1: Throwable}>
      */
     protected function isolate(array $events): array
     {
