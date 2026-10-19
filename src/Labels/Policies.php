@@ -17,26 +17,28 @@ use SocialDept\AtpAppview\Models\LabelPolicy;
  *    !suspend hide, and !no-promote keeps content out of discovery.
  * 4. The labeler's declaration of the value: its defaultSetting, what it
  *    blurs and its severity.
- * 5. The defaults for the values Bluesky defines, such as porn and
- *    graphic-media, which labelers use without defining them. On an
- *    account they blur its avatar and banner, as Bluesky does, and leave
- *    what it wrote to the labels on that.
+ * 5. Defaults for the values Bluesky uses without labelers defining them:
+ *    porn, sexual, nudity, graphic-media and gore, and needs-review.
  *
  * Anything else is ignored: still listed on what it labels, doing nothing.
  */
 class Policies
 {
     /**
-     * Bluesky's own values, with what they do when a labeler leaves them
-     * undefined, and what a blur covers.
+     * Values Bluesky uses without labelers defining them: what each does to
+     * content and to an account, and what a blur covers. On an account,
+     * Bluesky's content values blur its avatar and banner, and leave what it
+     * wrote to the labels on that. needs-review is Bluesky's label for an
+     * account awaiting review.
      */
     public const DEFAULTS = [
-        'porn' => [Effect::Hide, 'media'],
-        'sexual' => [Effect::Blur, 'media'],
-        'sexual-figurative' => [Effect::Blur, 'media'],
-        'nudity' => [Effect::Blur, 'media'],
-        'graphic-media' => [Effect::Blur, 'media'],
-        'gore' => [Effect::Blur, 'media'],
+        'porn' => [Effect::Hide, Effect::Blur, 'media'],
+        'sexual' => [Effect::Blur, Effect::Blur, 'media'],
+        'sexual-figurative' => [Effect::Blur, Effect::Blur, 'media'],
+        'nudity' => [Effect::Blur, Effect::Blur, 'media'],
+        'graphic-media' => [Effect::Blur, Effect::Blur, 'media'],
+        'gore' => [Effect::Blur, Effect::Blur, 'media'],
+        'needs-review' => [Effect::Review, Effect::Review, 'content'],
     ];
 
     public const GLOBAL = [
@@ -74,7 +76,7 @@ class Policies
     public function blurs(string $labeler, string $value): string
     {
         $declared = $this->labelers()[$labeler] ?? null;
-        $blurs = $declared?->definition($value)['blurs'] ?? self::DEFAULTS[$value][1] ?? 'content';
+        $blurs = $declared?->definition($value)['blurs'] ?? self::DEFAULTS[$value][2] ?? 'content';
 
         return $blurs === 'media' ? 'media' : 'content';
     }
@@ -141,7 +143,7 @@ class Policies
             return Effect::Ignore;
         }
 
-        return $target === Target::ACCOUNT ? Effect::Blur : self::DEFAULTS[$value][0];
+        return self::DEFAULTS[$value][$target === Target::ACCOUNT ? 1 : 0];
     }
 
     /**

@@ -114,6 +114,7 @@ class LabelsTest extends TestCase
         $this->assertSame(Effect::Ignore, $policies->effect(self::MOD, 'unknown', Target::CONTENT), 'An undefined value does nothing.');
         $this->assertSame(Effect::Hide, $policies->effect(self::MOD, 'porn', Target::CONTENT), "Bluesky's own values have defaults.");
         $this->assertSame(Effect::Blur, $policies->effect(self::MOD, 'porn', Target::ACCOUNT), 'On an account they blur the profile, as Bluesky does.');
+        $this->assertSame(Effect::Review, $policies->effect(self::MOD, 'needs-review', Target::ACCOUNT), "Bluesky's awaiting-review label needs review.");
         $this->assertSame('media', $policies->blurs(self::MOD, 'graphic-media'));
         $this->assertSame(Effect::Hide, $policies->effect(self::MOD, '!hide', Target::ACCOUNT));
         $this->assertSame(Effect::Review, $policies->effect(self::MOD, '!no-promote', Target::CONTENT));

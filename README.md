@@ -419,7 +419,7 @@ The first of these decides:
 2. `labels.policies` in config, the same way.
 3. The global values every labeler may use: `!hide`, `!takedown` and `!suspend` hide, `!warn` warns, `!no-promote` needs review.
 4. The labeler's declaration of the value: its `defaultSetting`, what it blurs, its severity.
-5. Defaults for the values Bluesky defines and labelers use without defining: `porn` hides, and `sexual`, `nudity`, `graphic-media` and `gore` blur media.
+5. Defaults for the values Bluesky uses without labelers defining them. On content, `porn` hides, and `sexual`, `nudity`, `graphic-media` and `gore` blur media. On an account they blur its avatar and banner and leave what it wrote alone, as Bluesky does. `needs-review`, Bluesky's label for an account awaiting review, needs review.
 
 Anything else is ignored: still listed on what it labels, doing nothing.
 
