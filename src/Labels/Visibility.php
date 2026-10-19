@@ -4,19 +4,26 @@ namespace SocialDept\AtpAppview\Labels;
 
 use Illuminate\Database\Connection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Models\AccountAction;
 use SocialDept\AtpAppview\Models\Label;
+use SocialDept\AtpAppview\Moderation\AccountActions;
 
 /**
- * Keeps what labels hide out of lists and views. A record is moderated when
- * a label on it hides content, or a label on its account hides the account,
- * and moderated records carry moderated_at, which queries leave out through
- * the same indexes as records hidden for their account's status.
+ * Keeps what moderation hides out of lists and views, and what needs review
+ * out of discovery.
  *
- * Refreshing an account works out what should be moderated from its labels
- * as they are now, and moves only what differs, so it can run after any
- * change: a label arriving or withdrawn, a policy edited, a record indexed.
+ * - A record is moderated (moderated_at) when a label on it hides content,
+ *   or its account is hidden by a label or banned.
+ * - A record is limited (limited_at) when a label on it needs review, or its
+ *   account needs review by a label or an operator.
+ *
+ * Account labels that ban or need review become account actions, lifted
+ * once their label is gone. Refreshing an account works out both sets from
+ * its labels and actions as they are now, and moves only what differs, so it
+ * can run after any change.
  */
 class Visibility
 {
@@ -47,8 +54,7 @@ class Visibility
 
     /**
      * After records are indexed: moderate new records of accounts that have
-     * labels, such as a new post of an account whose labels hide it, and
-     * refresh accounts whose self-labels changed.
+     * labels or actions, and refresh accounts whose self-labels changed.
      *
      * @param  array<int, string>  $dids  Accounts the batch wrote records for
      * @param  array<int, string>  $changed  Accounts whose self-labels changed
@@ -59,51 +65,73 @@ class Visibility
             return;
         }
 
-        $labeled = $dids === [] ? [] : Label::query()->whereIn('subject', array_values(array_unique($dids)))->distinct()->pluck('subject')->all();
+        $dids = array_values(array_unique($dids));
+        $affected = $dids === [] ? [] : [
+            ...Label::query()->whereIn('subject', $dids)->distinct()->pluck('subject')->all(),
+            ...AccountAction::query()->active()->whereIn('did', $dids)->distinct()->pluck('did')->all(),
+        ];
 
-        $this->refresh(array_values(array_unique([...$labeled, ...$changed])));
+        $this->refresh(array_values(array_unique([...$affected, ...$changed])));
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, Label>  $labels
+     * @param  Collection<int, Label>  $labels
      */
-    protected function apply(Connection $connection, string $did, $labels): void
+    protected function apply(Connection $connection, string $did, Collection $labels): void
     {
-        $accountHidden = false;
-        $hiddenUris = [];
+        $accountHidden = $accountLimited = false;
+        $hiddenUris = $limitedUris = $bans = $reviews = [];
 
         foreach ($labels as $label) {
             $target = Target::of($label->uri);
+            $effect = $this->policies->effect($label->src, $label->val, $target);
 
-            if (! $this->policies->effect($label->src, $label->val, $target)->hides()) {
-                continue;
-            }
-
-            if ($target === Target::ACCOUNT) {
-                $accountHidden = true;
-            } else {
-                $hiddenUris[] = $label->uri;
-            }
+            match (true) {
+                $target === Target::ACCOUNT && $effect === Effect::Ban => $bans[] = [$label->src, $label->val],
+                $target === Target::ACCOUNT && $effect === Effect::Review => $reviews[] = [$label->src, $label->val],
+                $target === Target::ACCOUNT && $effect === Effect::Hide => $accountHidden = true,
+                $effect->hides() => $hiddenUris[] = $label->uri,
+                $effect === Effect::Review => $limitedUris[] = $label->uri,
+                default => null,
+            };
         }
 
+        $actions = app(AccountActions::class);
+        $actions->fromLabels($did, $bans, $reviews);
+
+        $active = AccountAction::query()->active()->where('did', $did)->pluck('action')->all();
+        $accountHidden = $accountHidden || in_array(AccountAction::BAN, $active, true);
+        $accountLimited = $accountLimited || in_array(AccountAction::REVIEW, $active, true);
+
+        $this->move($connection, $did, 'moderated_at', $accountHidden, $hiddenUris, fn (array $ids, bool $on) => app(RecordValues::class)->hideRecords($connection, $ids, $on));
+        $this->move($connection, $did, 'limited_at', $accountLimited, $limitedUris, fn (array $ids, bool $on) => app(RecordValues::class)->limitRecords($connection, $ids, $on));
+    }
+
+    /**
+     * Set a flag on the records that should have it, clear it from those
+     * that should not, and tell the value index.
+     *
+     * @param  array<int, string>  $uris  Records that should have it, when not the whole account
+     * @param  \Closure(array<int, int>, bool): void  $values
+     */
+    protected function move(Connection $connection, string $did, string $column, bool $whole, array $uris, \Closure $values): void
+    {
         $live = fn () => $connection->table('atp_records')->where('did', $did)->whereNull('deleted_at');
 
-        $want = $accountHidden
-            ? $live()->pluck('id')->all()
-            : ($hiddenUris === [] ? [] : $live()->whereIn('uri', $hiddenUris)->pluck('id')->all());
-        $have = $live()->whereNotNull('moderated_at')->pluck('id')->all();
+        $want = $whole ? $live()->pluck('id')->all() : ($uris === [] ? [] : $live()->whereIn('uri', $uris)->pluck('id')->all());
+        $have = $live()->whereNotNull($column)->pluck('id')->all();
 
-        $hide = array_values(array_diff($want, $have));
-        $show = array_values(array_diff($have, $want));
+        $on = array_map('intval', array_values(array_diff($want, $have)));
+        $off = array_map('intval', array_values(array_diff($have, $want)));
 
-        if ($hide !== []) {
-            $connection->table('atp_records')->whereIn('id', $hide)->update(['moderated_at' => Carbon::now('UTC')->format('Y-m-d H:i:s')]);
-            app(RecordValues::class)->hideRecords($connection, array_map('intval', $hide));
+        if ($on !== []) {
+            $connection->table('atp_records')->whereIn('id', $on)->update([$column => Carbon::now('UTC')->format('Y-m-d H:i:s')]);
+            $values($on, true);
         }
 
-        if ($show !== []) {
-            $connection->table('atp_records')->whereIn('id', $show)->update(['moderated_at' => null]);
-            app(RecordValues::class)->hideRecords($connection, array_map('intval', $show), false);
+        if ($off !== []) {
+            $connection->table('atp_records')->whereIn('id', $off)->update([$column => null]);
+            $values($off, false);
         }
     }
 }

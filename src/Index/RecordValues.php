@@ -124,7 +124,7 @@ class RecordValues
 
         foreach (array_chunk($rows, 500) as $chunk) {
             $stored = $connection->table('atp_records')->whereIn('uri', array_column($chunk, 'uri'))
-                ->get(['id', 'uri', 'did', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'sort_at'])
+                ->get(['id', 'uri', 'did', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at'])
                 ->keyBy('uri');
 
             $want = [];
@@ -195,6 +195,20 @@ class RecordValues
                 ->all());
 
             $affected->update(['hidden' => $hidden]);
+        }
+    }
+
+    /**
+     * Mark the values of single records as needing review, or not, so
+     * discovery leaves them out. Counts are unchanged: the records are still
+     * shown where asked for directly.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function limitRecords(Connection $connection, array $ids, bool $limited = true): void
+    {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $connection->table(self::VALUES)->whereIn('record_id', $chunk)->where('limited', ! $limited)->update(['limited' => $limited]);
         }
     }
 
@@ -298,7 +312,7 @@ class RecordValues
             $records = $connection->table('atp_records')
                 ->where('collection', $field->collection)->whereNull('deleted_at')->where('id', '>', $after)
                 ->orderBy('id')->limit(1000)
-                ->get(['id', 'did', 'record', 'hidden_at', 'moderated_at', 'sort_at']);
+                ->get(['id', 'did', 'record', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at']);
 
             $rows = [];
 
@@ -489,6 +503,7 @@ class RecordValues
                     'value_num' => $item['num'],
                     'sort_at' => $record->sort_at,
                     'hidden' => $hidden,
+                    'limited' => ($record->limited_at ?? null) !== null,
                 ];
             }
         }

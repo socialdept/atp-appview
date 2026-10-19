@@ -76,6 +76,23 @@ final class Decision
     }
 
     /**
+     * With an account's actions in force: a ban hides and bans, a review
+     * needs review.
+     *
+     * @param  array<int, string>  $actions
+     */
+    public function withActions(array $actions): self
+    {
+        if ($actions === []) {
+            return $this;
+        }
+
+        $ban = $this->ban || in_array('ban', $actions, true);
+
+        return new self($this->labels, $this->hide || $ban, $this->review || in_array('review', $actions, true), $ban, $this->warnings, $this->blur, $this->badges, $this->author);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array
