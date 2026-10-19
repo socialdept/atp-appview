@@ -382,6 +382,86 @@ Schedule::command('appview:failed-deliveries --prune')->daily();
 
 `FailedDeliveries::reindex($delivery)` fetches the record from its author's PDS instead, and runs that through ingest. Reindex once the cause was in the record: the author fixed it or deleted it, or Tap delivered it damaged. A record that is gone is tombstoned. Identity events have no record to fetch, so they can only be retried.
 
+### Labels
+
+Labels come from labelers, such as Bluesky's moderation service, through [Tack](https://github.com/socialdept/tack). Tack follows the labelers, verifies every label's signature, fetches the labels an account already has when the app starts tracking it, and delivers labels about the accounts the index knows, the same ways Tap delivers records.
+
+```dotenv
+ATP_APPVIEW_TACK_URL=http://localhost:2490
+ATP_APPVIEW_TACK_PASSWORD=...                # Tack's TACK_ADMIN_PASSWORD
+```
+
+Point Tack's `TACK_WEBHOOK_URL` at `/atp-appview/tack` (`labels.webhook.path`), or leave it unset and run `appview:labels:consume`, which reads Tack's websocket the way `appview:consume` reads Tap's. Labels go through the same ingest as records, failed deliveries included, written by `LabelIndexer`, which is in the default `ingest.handlers`.
+
+Schedule the sync. It registers the accounts the index knows with Tack, with the URIs of their records for labelers that only answer for exact URIs, and drops expired labels:
+
+```php
+Schedule::command('appview:labels:sync')->everyMinute()->withoutOverlapping();
+```
+
+Authors' own labels on their records (`labels.values`, self-labels) count too, with the author as their source. Turn them off with `labels.self_labels`.
+
+**What a label does** is an effect, decided per labeler, value and target. A label on a record is about content, and one on an account, or its profile record, is about the account:
+
+| Effect | Content | Account |
+| --- | --- | --- |
+| `ignore` | Nothing | Nothing |
+| `badge` | Shown, nothing hidden | Shown on the account |
+| `warn` | Shown behind a warning | The profile behind a warning |
+| `blur` | Media, or the whole record, blurred | Avatar and banner blurred |
+| `hide` | Left out of lists and views | Everything the account wrote left out |
+| `review` | Needs review: left out of discovery, shown where asked for directly | The same, for everything it wrote |
+| `ban` | | The account is banned off the app |
+
+The first of these decides:
+
+1. An operator's policy, in `atp_label_policies`, for the labeler, then for any labeler (`*`).
+2. `labels.policies` in config, the same way.
+3. The global values every labeler may use: `!hide`, `!takedown` and `!suspend` hide, `!warn` warns, `!no-promote` needs review.
+4. The labeler's declaration of the value: its `defaultSetting`, what it blurs, its severity.
+5. Defaults for the values Bluesky uses without labelers defining them. On content, `porn` hides, and `sexual`, `nudity`, `graphic-media` and `gore` blur media. On an account they blur its avatar and banner and leave what it wrote alone, as Bluesky does. `needs-review`, Bluesky's label for an account awaiting review, needs review.
+
+Anything else is ignored: still listed on what it labels, doing nothing.
+
+```php
+// config/atp-appview/labels.php
+'policies' => [
+    '*' => ['spam' => ['account' => 'review']],
+    'did:plc:ar7c4by46qjdydhdevvrndac' => ['sexual' => ['content' => 'hide']],
+],
+```
+
+Content a label hides carries `moderated_at`, kept apart from `hidden_at`, which follows the account's status, so one never undoes the other. Queries and counts leave it out through the same indexes. `review` and `ban` are decided now, and applied by account actions.
+
+**In views**, `Labels` gives each record its labels in the shape atproto views carry them, `Labels(author: true)` its author's, and `Moderation` what to do with it:
+
+```php
+'labels' => new Labels(),
+'moderation' => new Moderation(),
+```
+
+```json
+"moderation": {"blur": "media", "warn": [{"src": "did:plc:...", "val": "graphic-media"}], "author": {"review": true}}
+```
+
+`Labels` is the API for everything else:
+
+```php
+use SocialDept\AtpAppview\Labels\Effect;
+use SocialDept\AtpAppview\Labels\Labels;
+use SocialDept\AtpAppview\Labels\Target;
+
+$labels = app(Labels::class);
+
+$labels->decide($record);                              // a Decision: hide, review, ban, warnings, blur, badges, author
+$labels->account('did:plc:...');                       // the same for an account
+$labels->on($uri);                                     // the live labels on a uri or DID
+$labels->set('*', 'spam', Target::ACCOUNT, Effect::Review);   // an operator's policy, applied at once
+$labels->clear('*', 'spam', Target::ACCOUNT);
+$labels->follow('did:plc:...');                        // ask Tack to follow a labeler
+$labels->labelers();                                   // the labelers, with their declarations
+```
+
 ### Backfill status
 
 Tap marks each record event: `live` false while it backfills a repo, true for commits arriving in real time. It exposes no count of repos still waiting, so `IngestStats` reads the stream instead. A backfill is running while backfill events keep arriving.

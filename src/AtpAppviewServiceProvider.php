@@ -33,6 +33,7 @@ use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Console\StatsCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
+use SocialDept\AtpAppview\Http\Controllers\TackWebhookController;
 use SocialDept\AtpAppview\Http\Controllers\TapWebhookController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Images\BlobUrls;
@@ -41,6 +42,7 @@ use SocialDept\AtpAppview\Images\PdsBlobUrls;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
+use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
@@ -95,7 +97,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
         $this->mergeConfig();
 
         $this->app->singleton(TapConsumer::class, fn (Application $app) => new TapConsumer(
-            handlers: array_map(fn (string $class) => $app->make($class), config('atp-appview.ingest.handlers', [])),
+            handlers: Pipeline::handlers($app),
             url: config('atp-appview.ingest.url'),
             password: config('atp-appview.ingest.password'),
             batchSize: (int) config('atp-appview.ingest.batch_size', 200),
@@ -107,6 +109,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
         ));
 
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
+
+        // Policies are read once and kept for the process, re-read every
+        // half minute so workers see an operator's change.
+        $this->app->singleton(\SocialDept\AtpAppview\Labels\Policies::class);
 
         $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
             plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
@@ -167,6 +173,8 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 ResortCommand::class,
                 RestartCommand::class,
                 RoutesCommand::class,
+                \SocialDept\AtpAppview\Console\LabelsConsumeCommand::class,
+                \SocialDept\AtpAppview\Console\LabelsSyncCommand::class,
                 StatsCommand::class,
                 UnblockCommand::class,
             ]);
@@ -187,6 +195,13 @@ class AtpAppviewServiceProvider extends ServiceProvider
                     ->post((string) config('atp-appview.ingest.webhook.path', 'atp-appview/tap'), TapWebhookController::class)
                     ->middleware((array) config('atp-appview.ingest.webhook.middleware', []))
                     ->name('atp-appview.tap-webhook');
+            }
+
+            if (config('atp-appview.labels.webhook.enabled')) {
+                $this->app->make(Router::class)
+                    ->post((string) config('atp-appview.labels.webhook.path', 'atp-appview/tack'), TackWebhookController::class)
+                    ->middleware((array) config('atp-appview.labels.webhook.middleware', []))
+                    ->name('atp-appview.tack-webhook');
             }
 
             // Read when the config is loaded, so route:cache keeps the choice.

@@ -36,7 +36,7 @@ class TapWebhook
         $messages = isset($payload['events']) && is_array($payload['events']) ? $payload['events'] : [$payload];
 
         $buffer = new IngestBuffer(
-            handlers: array_map(fn (string $class) => $this->container->make($class), (array) config('atp-appview.ingest.handlers', [])),
+            handlers: Pipeline::handlers($this->container),
             ack: fn (int $id) => null,
             batchSize: max(1, count($messages)),
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),

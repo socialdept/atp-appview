@@ -15,8 +15,8 @@ use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
  * asked with withTrashed().
  *
  * Records of an account that is deactivated, taken down or suspended are
- * hidden rather than deleted, since the account may come back. Queries skip
- * them unless asked with withHidden().
+ * hidden rather than deleted, since the account may come back, and so are
+ * records moderation hides. Queries skip them unless asked with withHidden().
  *
  * @property string $uri
  * @property string $did
@@ -30,6 +30,7 @@ use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
  * @property \Illuminate\Support\Carbon|null $sort_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
  * @property \Illuminate\Support\Carbon|null $hidden_at
+ * @property \Illuminate\Support\Carbon|null $moderated_at  When moderation hid it: a label or a ban
  *
  * @method static Builder<static> collection(string $nsid)
  * @method static Builder<static> by(string $did)
@@ -71,6 +72,7 @@ class Record extends Model
             'sort_at' => 'datetime',
             'deleted_at' => 'datetime',
             'hidden_at' => 'datetime',
+            'moderated_at' => 'datetime',
         ];
     }
 
