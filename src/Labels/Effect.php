@@ -12,8 +12,9 @@ namespace SocialDept\AtpAppview\Labels;
  * - Blur: media, or the whole record, blurred. On an account, its avatar and
  *   banner.
  * - Hide: left out of lists and views. On an account, every record of it.
- * - Review: the account needs review. Applied with account actions.
- * - Ban: the account is banned off the app. Applied with account actions.
+ * - Review: needs review. Left out of discovery, still shown where asked
+ *   for directly. On an account, everything it wrote.
+ * - Ban: the account is banned off the app. Accounts only.
  */
 enum Effect: string
 {
@@ -50,10 +51,10 @@ enum Effect: string
     }
 
     /**
-     * Whether it can apply to this target: review and ban are about accounts.
+     * Whether it can apply to this target: a ban is about an account.
      */
     public function appliesTo(string $target): bool
     {
-        return $target === Target::ACCOUNT || ! in_array($this, [self::Review, self::Ban], true);
+        return $target === Target::ACCOUNT || $this !== self::Ban;
     }
 }

@@ -108,6 +108,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
 
+        // Policies are read once and kept for the process, re-read every
+        // half minute so workers see an operator's change.
+        $this->app->singleton(\SocialDept\AtpAppview\Labels\Policies::class);
+
         $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
             plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
             ttl: (int) config('atp-appview.blocklist.pds_ttl', 86400),
