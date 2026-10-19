@@ -28,6 +28,15 @@
                     },
                     "actor": {
                         "type": "string"
+                    },
+                    "tag": {
+                        "type": "string"
+                    },
+                    "sort": {
+                        "type": "string",
+                        "knownValues": [
+                            "created"
+                        ]
                     }
                 }
             },

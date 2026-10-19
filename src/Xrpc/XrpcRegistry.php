@@ -119,7 +119,7 @@ class XrpcRegistry
         foreach ((array) config('atp-appview.xrpc.views', []) as $nsid => $view) {
             // A handler class written for the method takes precedence.
             if (! isset($routes[$nsid])) {
-                $routes[(string) $nsid] = ['handler' => ViewQueryHandler::class, 'auth' => Auth::Optional, 'collection' => null, 'attribute' => null, 'view' => (string) $view];
+                $routes[(string) $nsid] = ['handler' => ViewQueryHandler::class, 'auth' => Auth::Optional, 'collection' => null, 'attribute' => null, 'view' => (string) (is_array($view) ? ($view['view'] ?? '') : $view)];
             }
         }
 

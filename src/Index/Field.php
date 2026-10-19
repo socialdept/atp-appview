@@ -73,6 +73,15 @@ final class Field
     }
 
     /**
+     * How the field's values are stored: its type, whether it is a list, and
+     * its case. A field whose signature changes is built again.
+     */
+    public function signature(): string
+    {
+        return $this->type.($this->many ? '[]' : '').($this->exactCase ? ':exact' : '');
+    }
+
+    /**
      * A value to match, as given in a query, normalized as stored.
      */
     public function hashOf(mixed $value): ?int

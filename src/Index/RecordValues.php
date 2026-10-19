@@ -99,7 +99,7 @@ class RecordValues
             $this->connection()->table(self::KEYS)->insertOrIgnore([
                 'collection' => $field->collection,
                 'field' => $field->name,
-                'type' => $field->type.($field->many ? '[]' : ''),
+                'type' => $field->signature(),
             ]);
             $this->keys = $this->loadKeys();
         }
@@ -230,7 +230,7 @@ class RecordValues
             $field = $declared[$name] ?? null;
 
             // Gone, or retyped, so its values no longer match how they are read.
-            if ($field === null || $key->type !== $field->type.($field->many ? '[]' : '')) {
+            if ($field === null || $key->type !== $field->signature()) {
                 $connection->table(self::VALUES)->where('key_id', $key->id)->delete();
                 $connection->table(self::COUNTS)->where('key_id', $key->id)->delete();
                 $connection->table(self::KEYS)->where('id', $key->id)->delete();
@@ -327,6 +327,14 @@ class RecordValues
     }
 
     /**
+     * Values of visible records under an alias, for queries that join them.
+     */
+    public function visibleAs(string $alias): Builder
+    {
+        return $this->connection()->table(self::VALUES." as {$alias}")->where("{$alias}.hidden", false);
+    }
+
+    /**
      * Counts of visible records by value hash, for the (key, hash) pairs asked.
      *
      * @param  array<int, int>  $keys
@@ -344,6 +352,52 @@ class RecordValues
             ->whereIn('value_hash', array_values(array_unique($hashes)))
             ->get(['key_id', 'value_hash', 'total'])
             ->mapWithKeys(fn ($row) => ["{$row->key_id}#{$row->value_hash}" => (int) $row->total])
+            ->all();
+    }
+
+    /**
+     * A field's most common values among visible records, such as top tags.
+     *
+     * @return array<int, array{value: string|null, total: int}>
+     */
+    public function top(string $collection, string $field, int $limit = 20): array
+    {
+        $declared = $this->field($collection, $field)
+            ?? throw new \InvalidArgumentException("{$field} is not an indexed field of {$collection}.");
+
+        return $this->connection()->table(self::COUNTS)
+            ->where('key_id', $this->keyId($declared))->where('total', '>', 0)
+            ->orderByDesc('total')->limit($limit)
+            ->get(['value', 'total'])
+            ->map(fn ($row) => ['value' => $row->value, 'total' => (int) $row->total])
+            ->all();
+    }
+
+    /**
+     * Values of a field starting with what someone has typed, most common
+     * first, for suggestions such as tags. Reads atp_value_counts, which holds
+     * each distinct value once.
+     *
+     * @return array<int, array{value: string|null, total: int}>
+     */
+    public function suggest(string $collection, string $field, string $prefix, int $limit = 10): array
+    {
+        $declared = $this->field($collection, $field)
+            ?? throw new \InvalidArgumentException("{$field} is not an indexed field of {$collection}.");
+        $prefix = $declared->type === 'string' && ! $declared->exactCase ? mb_strtolower(trim($prefix)) : trim($prefix);
+
+        if ($prefix === '') {
+            return $this->top($collection, $field, $limit);
+        }
+
+        return $this->connection()->table(self::COUNTS)
+            ->where('key_id', $this->keyId($declared))->where('total', '>', 0)
+            // A range an index can seek to, then the exact prefix.
+            ->where('value', '>=', $prefix)->where('value', '<', $prefix."\u{10FFFF}")
+            ->whereRaw("value like ? escape '!'", [str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $prefix).'%'])
+            ->orderByDesc('total')->limit($limit)
+            ->get(['value', 'total'])
+            ->map(fn ($row) => ['value' => $row->value, 'total' => (int) $row->total])
             ->all();
     }
 

@@ -40,7 +40,7 @@ return new class () extends Migration {
             $table->smallIncrements('id');
             $table->string('collection', 317);
             $table->string('field', 128);
-            $table->string('type', 16);
+            $table->string('type', 32);
             $table->dateTime('built_at')->nullable();
             $table->unique(['collection', 'field']);
         });
