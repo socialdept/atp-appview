@@ -1008,6 +1008,8 @@ An account with no profile anywhere is its `did` and `handle`, with `displayName
 
 Profiles come from the index for collections it ingests. List them as [companion collections](#companion-collections), so the profiles of followed repos are indexed without following every account that has one. An account the index does not know, or whose profile collection is still being backfilled, is fetched from Slingshot instead, every account on a page at once, and cached for an hour, a missing profile included.
 
+`Profiles::forget($did)` drops an account's fetched profiles, so the next read fetches them again. `IdentityRefresh::refresh($did)` goes further: it reads the account's DID document again, past every cache, stores its PDS, and its handle when the handle resolves back to the DID, then forgets the fetched profile. It returns what changed. Use it when an account shows an old handle, PDS or profile, which otherwise wait for Tap's next identity event or a lookup's TTL.
+
 ### Images
 
 Blobs such as avatars are served through [img.infra.coop](https://img.infra.coop), a free image CDN for atproto that resizes and caches them, so browsers are never handed full-size originals. Each use maps to one of its [presets](https://img.infra.coop/presets): `avatar-sm` for an embedded author or icon, `avatar` and `banner` on a profile. The public instance asks for a small credit linking to [infra.coop](https://infra.coop).
