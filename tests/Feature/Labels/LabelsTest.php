@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Labels;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\AccountStatus;
@@ -14,10 +15,16 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Labels\Effect;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
+use SocialDept\AtpAppview\Labels\Labels as LabelsService;
 use SocialDept\AtpAppview\Labels\Policies;
 use SocialDept\AtpAppview\Labels\Target;
 use SocialDept\AtpAppview\Models\Label;
+use SocialDept\AtpAppview\Models\Labeler;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Views\Hydrator;
+use SocialDept\AtpAppview\Views\Parts\Labels as LabelsPart;
+use SocialDept\AtpAppview\Views\Parts\Moderation as ModerationPart;
+use SocialDept\AtpAppview\Views\View;
 
 class LabelsTest extends TestCase
 {
@@ -92,11 +99,11 @@ class LabelsTest extends TestCase
         (new LabelIndexer())->handle(new Batch([new LabelerEvent(1, self::MOD, 'https://mod.example', ['policies' => ['labelValues' => ['spam']]], false)]));
         $this->label(self::ALICE, 'spam');
 
-        $this->assertSame(['spam'], \SocialDept\AtpAppview\Models\Labeler::query()->sole()->values());
+        $this->assertSame(['spam'], Labeler::query()->sole()->values());
 
         (new LabelIndexer())->handle(new Batch([new LabelerEvent(2, self::MOD, null, null, true)]));
 
-        $this->assertSame(0, \SocialDept\AtpAppview\Models\Labeler::query()->count());
+        $this->assertSame(0, Labeler::query()->count());
         $this->assertSame(0, Label::query()->count());
     }
 
@@ -200,5 +207,75 @@ class LabelsTest extends TestCase
 
         $this->assertSame(0, Label::query()->count(), 'The next version without the label drops it.');
         $this->assertSame(1, Record::query()->count());
+    }
+
+    public function test_a_decision_shows_content_labels_and_carries_what_the_author_labels_do(): void
+    {
+        (new LabelIndexer())->handle(new Batch([new LabelerEvent(1, self::MOD, null, ['policies' => [
+            'labelValues' => ['rude', 'spoiler', 'troll'],
+            'labelValueDefinitions' => [
+                ['identifier' => 'rude', 'severity' => 'alert', 'blurs' => 'none', 'defaultSetting' => 'warn'],
+                ['identifier' => 'spoiler', 'severity' => 'none', 'blurs' => 'content', 'defaultSetting' => 'warn'],
+                ['identifier' => 'troll', 'severity' => 'alert', 'blurs' => 'none', 'defaultSetting' => 'warn'],
+            ],
+        ]], false)]));
+        app(Policies::class)->forget();
+
+        $this->indexPost('a');
+        $this->label($this->uri('a'), 'rude');
+        $this->label($this->uri('a'), 'spoiler');
+        $this->label($this->uri('a'), 'graphic-media');
+        $this->label(self::ALICE, 'troll');
+        $this->policy('needs-review', Target::ACCOUNT, 'review');
+        $this->label(self::ALICE, 'needs-review');
+
+        $decision = app(LabelsService::class)->decide(Record::query()->sole());
+
+        $this->assertFalse($decision->hide);
+        $this->assertTrue($decision->review, 'An account that needs review passes it to its content.');
+        $this->assertSame('content', $decision->blur, 'The widest blur wins.');
+        $this->assertSame(['rude', 'spoiler', 'graphic-media'], array_column($decision->warnings, 'val'));
+        $this->assertSame(['troll'], array_column($decision->author->warnings, 'val'), "The author's warnings stay with the author.");
+        $this->assertSame(['review' => true, 'warn' => [['src' => self::MOD, 'val' => 'troll']]], $decision->author->toArray());
+    }
+
+    public function test_views_carry_labels_and_moderation(): void
+    {
+        $this->indexPost('a');
+        $this->label($this->uri('a'), 'graphic-media');
+        $this->label(self::ALICE, '!warn');
+
+        $view = new class () extends View {
+            public function collection(): string
+            {
+                return 'app.example.post';
+            }
+
+            public function parts(): array
+            {
+                return [
+                    'labels' => new LabelsPart(),
+                    'authorLabels' => new LabelsPart(author: true),
+                    'moderation' => new ModerationPart(),
+                ];
+            }
+        };
+
+        $item = app(Hydrator::class)->one($view, Record::query()->sole());
+
+        $this->assertSame([['src' => self::MOD, 'uri' => $this->uri('a'), 'val' => 'graphic-media', 'cts' => '2026-01-01T00:00:00.000Z']], $item['labels']);
+        $this->assertSame(['!warn'], array_column($item['authorLabels'], 'val'));
+        $this->assertSame('media', $item['moderation']['blur']);
+        $this->assertSame([['src' => self::MOD, 'val' => '!warn']], $item['moderation']['author']['warn']);
+    }
+
+    public function test_the_labels_service_follows_labelers_through_tack(): void
+    {
+        Http::fake();
+        config(['atp-appview.labels.tack.url' => 'http://tack.test', 'atp-appview.labels.tack.password' => 'secret']);
+
+        app(LabelsService::class)->follow('did:plc:new');
+
+        Http::assertSent(fn ($request) => $request->url() === 'http://tack.test/labelers/add' && $request['did'] === 'did:plc:new');
     }
 }
