@@ -118,6 +118,16 @@ class AtpGuardTest extends TestCase
             ->assertJson(['did' => self::CALLER, 'source' => 'session', 'method' => null]);
     }
 
+    public function test_a_banned_account_is_nobody(): void
+    {
+        $this->artisan('migrate')->run();
+        $user = GuardTestUser::create(['did' => self::CALLER]);
+        app(\SocialDept\AtpAppview\Moderation\AccountActions::class)->ban(self::CALLER, 'spam');
+
+        $this->actingAs($user, 'web')->getJson('/dashboard')->assertUnauthorized();
+        $this->bearing($this->mint())->getJson('/xrpc/'.self::METHOD)->assertUnauthorized();
+    }
+
     public function test_a_bad_bearer_never_falls_back_to_the_session(): void
     {
         $user = GuardTestUser::create(['did' => self::CALLER]);
