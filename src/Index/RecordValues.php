@@ -19,7 +19,7 @@ use SocialDept\AtpAppview\Views\Contracts\ReadsRefs;
  *
  * Rows are written from what the records index holds after a batch, so the
  * revision guard, the blocklist and tombstones apply to them. Only live
- * records have rows, and `hidden` mirrors hidden_at, so lists and counts
+ * records have rows, and `hidden` mirrors hidden_at and moderated_at, so lists and counts
  * never read atp_records. Values are stored as 8-byte hashes, matched
  * exactly, and dates and numbers are kept as well, to sort.
  */
@@ -124,7 +124,7 @@ class RecordValues
 
         foreach (array_chunk($rows, 500) as $chunk) {
             $stored = $connection->table('atp_records')->whereIn('uri', array_column($chunk, 'uri'))
-                ->get(['id', 'uri', 'did', 'indexed_at', 'deleted_at', 'hidden_at', 'sort_at'])
+                ->get(['id', 'uri', 'did', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'sort_at'])
                 ->keyBy('uri');
 
             $want = [];
@@ -157,7 +157,37 @@ class RecordValues
     public function hide(Connection $connection, array $dids, bool $hidden = true): void
     {
         foreach (array_chunk($dids, 500) as $chunk) {
-            $affected = $this->ofAccounts($connection, $chunk)->where('hidden', ! $hidden);
+            // Showing an account's records again leaves those moderation hides.
+            $affected = (
+                $hidden
+                ? $this->ofAccounts($connection, $chunk)
+                : $connection->table(self::VALUES)->whereIn('record_id', $this->recordIdsOf($connection, $chunk)->whereNull('moderated_at'))
+            )->where('hidden', ! $hidden);
+
+            $this->adjust($connection, (clone $affected)->groupBy('key_id', 'value_hash')
+                ->selectRaw('key_id, value_hash, count(*) as n')->get()
+                ->map(fn ($row) => [(int) $row->key_id, (int) $row->value_hash, $hidden ? -(int) $row->n : (int) $row->n])
+                ->all());
+
+            $affected->update(['hidden' => $hidden]);
+        }
+    }
+
+    /**
+     * Hide or show the values of single records, as moderation hides them,
+     * moving counts with them. Showing leaves records their account's status
+     * hides.
+     *
+     * @param  array<int, int>  $ids
+     */
+    public function hideRecords(Connection $connection, array $ids, bool $hidden = true): void
+    {
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $affected = (
+                $hidden
+                ? $connection->table(self::VALUES)->whereIn('record_id', $chunk)
+                : $connection->table(self::VALUES)->whereIn('record_id', $connection->table('atp_records')->whereIn('id', $chunk)->whereNull('hidden_at')->select('id'))
+            )->where('hidden', ! $hidden);
 
             $this->adjust($connection, (clone $affected)->groupBy('key_id', 'value_hash')
                 ->selectRaw('key_id, value_hash, count(*) as n')->get()
@@ -268,7 +298,7 @@ class RecordValues
             $records = $connection->table('atp_records')
                 ->where('collection', $field->collection)->whereNull('deleted_at')->where('id', '>', $after)
                 ->orderBy('id')->limit(1000)
-                ->get(['id', 'did', 'record', 'hidden_at', 'sort_at']);
+                ->get(['id', 'did', 'record', 'hidden_at', 'moderated_at', 'sort_at']);
 
             $rows = [];
 
@@ -440,7 +470,8 @@ class RecordValues
     {
         $rows = [];
         $didHash = ValueHash::of($record->did);
-        $hidden = $record->hidden_at !== null;
+        // Hidden for its account's status, or by moderation.
+        $hidden = $record->hidden_at !== null || ($record->moderated_at ?? null) !== null;
 
 
         foreach ($only ?? $this->fields()[$collection] ?? [] as $field) {
