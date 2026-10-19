@@ -42,6 +42,7 @@ class TapWebhook
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
             blocklist: $this->container->make(Blocklist::class),
             stats: $this->container->make(IngestStats::class),
+            failedDeliveries: $this->container->make(FailedDeliveries::class),
         );
 
         $handled = 0;

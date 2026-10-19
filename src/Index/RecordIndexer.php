@@ -21,6 +21,9 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  * - Several events for one record in a batch collapse to the last, which Tap's
  *   per-repo ordering makes the newest.
  *
+ * A record an ingest repair rewrote keeps its repairs and the record as it
+ * is in the repo in the repair column, which is null for every other record.
+ *
  * Records are checked against their lexicon first when
  * atp-appview.index.validate asks for it, through RecordValidation.
  *
@@ -98,6 +101,7 @@ class RecordIndexer implements BatchHandler
                 'rkey' => $event->rkey,
                 'cid' => $deleted ? null : $event->cid,
                 'record' => $deleted || $event->record === null ? null : json_encode(self::withoutNullCharacters($event->record), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                'repair' => $deleted || $event->repairedBy === [] ? null : json_encode(['by' => $event->repairedBy, 'original' => self::withoutNullCharacters($event->original ?? [])], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
                 'indexed_at' => $now,
                 'sort_at' => SortAt::for($deleted ? null : $event->record, $event->rkey, $clock, self::sortFields($event->collection)),
                 'deleted_at' => $deleted ? $now : null,

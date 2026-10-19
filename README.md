@@ -297,6 +297,91 @@ class IndexPosts implements BatchHandler
 
 Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rather than one query per event.
 
+Each attempt at a batch runs in one transaction on the index connection, so an attempt that fails leaves none of its writes behind, whichever handler failed. What a handler does outside the database, such as calling a service, cannot be undone, which is one more reason handlers must take a batch twice without harm.
+
+### Ingest hooks
+
+A hook looks at records before they are indexed and rejects those the app does not want: spam, or records breaking an app rule.
+
+```php
+use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
+
+class RejectSpam implements IngestHook
+{
+    public function reject(array $records): array
+    {
+        $rejected = [];
+
+        foreach ($records as $event) {
+            if (str_contains($event->record['text'] ?? '', 'buy followers')) {
+                $rejected[$event->uri()] = 'spam';
+            }
+        }
+
+        return $rejected;   // uri => reason
+    }
+}
+```
+
+List hooks in `atp-appview.ingest.hooks`. They run in order on the whole batch, after the blocklist and the repairs. Only creates and updates are offered, so a delete always goes through. A hook never changes a record. Rewriting one is what repairs are for. Rejections are tallied by hook, collection and reason, with the latest record, in `atp_ingest_rejections`, once the batch has gone through, and `Rejections::all()` reads them.
+
+### Ingest repairs
+
+A repair rewrites a record the app knows how to fix before it is indexed, such as a date in a format the lexicon does not allow. Without one, such a record fails and is parked as a failed delivery, or is indexed with a value queries cannot use.
+
+```php
+use SocialDept\AtpAppview\Ingest\Contracts\IngestRepair;
+use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+
+class SlashDates implements IngestRepair
+{
+    public function repair(RecordEvent $record): ?array
+    {
+        $date = $record->record['createdAt'] ?? null;
+
+        if (! is_string($date) || ! preg_match('#^(\d{4})/(\d{2})/(\d{2})$#', $date, $parts)) {
+            return null;   // leave it as it is
+        }
+
+        return [...$record->record, 'createdAt' => "{$parts[1]}-{$parts[2]}-{$parts[3]}T00:00:00Z"];
+    }
+}
+```
+
+Repairs are off until listed in `atp-appview.ingest.repairs`. They run in order on every create and update, each seeing the record as the one before left it, after the blocklist and before the hooks, so hooks judge the repaired record.
+
+A repaired record no longer matches its CID, so the index says so. `atp_records.repair` holds the repairs that changed it and the record as it is in the repo, and is null for every other record. The author's next version replaces both. Repairs are tallied by repair and collection in `atp_ingest_repairs`, and `Repairs::all()` reads them.
+
+Fixing records in code rather than by hand means one repair covers every record with the same problem, the ones already parked included: add the repair, then retry the failed deliveries.
+
+### Ingest pipes
+
+The blocklist, the repairs and the hooks are the default `atp-appview.ingest.pipes`: a batch passes through them as through any Laravel pipeline, then the handlers take it. An app can add its own pipe, a class with `handle(Batch $batch, Closure $next)`. Code after `$next()` runs once the handlers have taken the batch.
+
+### Failed deliveries
+
+Without this, one record no handler can take would hold up everything behind it: the worker reconnects without acknowledging the batch and Tap sends it again, or the webhook fails and Tap retries it, forever.
+
+So a batch that still fails after `max_attempts` is split in halves until the events failing on their own are found. Those are parked in `atp_failed_deliveries`, with the event and the error, and the rest of the batch goes through. When every event fails on its own, the cause is more likely the database or a service than the records, so the batch goes back to Tap as before, and an event is parked only once it has failed in `failed_deliveries.max_deliveries` (3) separate deliveries.
+
+```bash
+php artisan appview:failed-deliveries                          # count by collection and error
+php artisan appview:failed-deliveries --retry                  # run them through ingest again, once fixed
+php artisan appview:failed-deliveries --reindex                # fetch each record from its PDS as it is now
+php artisan appview:failed-deliveries --forget --collection=app.example.post
+php artisan appview:failed-deliveries --prune                  # drop those past keep_days and max
+```
+
+How long to keep them depends on how many arrive, so it is configured in `config/atp-appview/failed_deliveries.php`: `keep_days` (90, null to keep them until forgotten) and `max`, a cap with the oldest dropped first. Schedule the prune:
+
+```php
+Schedule::command('appview:failed-deliveries --prune')->daily();
+```
+
+`FailedDeliveries::retry($delivery)` runs one through ingest as configured now, and drops it once it goes through. Retry once the cause is in the app: a bug fixed, a repair added.
+
+`FailedDeliveries::reindex($delivery)` fetches the record from its author's PDS instead, and runs that through ingest. Reindex once the cause was in the record: the author fixed it or deleted it, or Tap delivered it damaged. A record that is gone is tombstoned. Identity events have no record to fetch, so they can only be retried.
+
 ### Backfill status
 
 Tap marks each record event: `live` false while it backfills a repo, true for commits arriving in real time. It exposes no count of repos still waiting, so `IngestStats` reads the stream instead. A backfill is running while backfill events keep arriving.
@@ -743,7 +828,7 @@ POST /xrpc/com.example.syncRecord   {"uri": "at://did:plc:alice/com.example.thin
 → {"uri": "at://did:plc:alice/com.example.thing/3abc", "indexed": true}
 ```
 
-It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. Records a block rule covers answer `indexed: false`.
+It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. The record passes through the same pipeline as Tap's deliveries, repairs and hooks included, so a record a block rule or a hook keeps out answers `indexed: false`.
 
 **Backend mode.** Default procedures write one collection to the viewer's repo through the session the server holds, then index the record before answering:
 

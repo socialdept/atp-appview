@@ -6,7 +6,6 @@ use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\Reconciler;
 use SocialDept\AtpAppview\Index\RecordIndexer;
-use SocialDept\AtpAppview\Index\RecordWriter;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
@@ -224,7 +223,7 @@ class AccountStatusTest extends TestCase
         ]);
         // Written as the previous version did, before the new columns.
         foreach (['gone', 'away'] as $name) {
-            (new RecordWriter(app('db')->connection()))->upsert([[
+            app('db')->connection()->table('atp_records')->insert([[
                 'uri' => "at://did:plc:{$name}/com.example.post/r", 'did' => "did:plc:{$name}", 'collection' => self::POSTS, 'rkey' => 'r',
                 'cid' => 'cid-r', 'record' => '{"text":"r"}', 'indexed_at' => '2026-01-01 00:00:00', 'sort_at' => '2026-01-01 00:00:00', 'deleted_at' => null, 'rev' => self::REV,
             ]]);
