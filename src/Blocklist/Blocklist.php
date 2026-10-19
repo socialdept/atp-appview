@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Models\Block;
@@ -178,9 +179,11 @@ class Blocklist
         $returned = [];
 
         foreach ($batch->events as $event) {
-            // Any event from a repo under a blanket rule means Tap is
-            // following it again.
-            if ($this->matchesRepo($event->did, $pds[$event->did] ?? null)) {
+            // Any event Tap sends from a repo under a blanket rule means Tap
+            // is following it again. Labels come from Tack, not Tap.
+            $fromTap = $event instanceof RecordEvent || $event instanceof IdentityEvent;
+
+            if ($fromTap && $this->matchesRepo($event->did, $pds[$event->did] ?? null)) {
                 $returned[$event->did] = true;
             }
 
