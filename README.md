@@ -297,6 +297,57 @@ class IndexPosts implements BatchHandler
 
 Register handlers in `atp-appview.ingest.handlers`. Write each batch in bulk rather than one query per event.
 
+Each attempt at a batch runs in one transaction on the index connection, so an attempt that fails leaves none of its writes behind, whichever handler failed. What a handler does outside the database, such as calling a service, cannot be undone, which is one more reason handlers must take a batch twice without harm.
+
+### Ingest hooks
+
+A hook looks at records before they are indexed and rejects those the app does not want: spam, or records breaking an app rule.
+
+```php
+use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
+
+class RejectSpam implements IngestHook
+{
+    public function reject(array $records): array
+    {
+        $rejected = [];
+
+        foreach ($records as $event) {
+            if (str_contains($event->record['text'] ?? '', 'buy followers')) {
+                $rejected[$event->uri()] = 'spam';
+            }
+        }
+
+        return $rejected;   // uri => reason
+    }
+}
+```
+
+List hooks in `atp-appview.ingest.hooks`. They run in order on the whole batch, after the blocklist. Only creates and updates are offered, so a delete always goes through. A hook never changes a record, so the index matches what is in the repo. Rejections are tallied by hook, collection and reason, with the latest record, in `atp_ingest_rejections`, once the batch has gone through, and `Rejections::all()` reads them.
+
+The blocklist and the hooks are the default `atp-appview.ingest.pipes`: a batch passes through them as through any Laravel pipeline, then the handlers take it. An app can add its own pipe, a class with `handle(Batch $batch, Closure $next)`. Code after `$next()` runs once the handlers have taken the batch.
+
+### Dead letters
+
+Without them, one record no handler can take holds up everything behind it: the worker reconnects without acknowledging the batch and Tap sends it again, or the webhook fails and Tap retries it, forever.
+
+So a batch that still fails after `max_attempts` is split in halves until the events failing on their own are found. Those are parked in `atp_dead_letters`, with the event and the error, and the rest of the batch goes through. When every event fails on its own, the cause is more likely the database or a service than the records, so the batch goes back to Tap as before, and an event is parked only once it has failed in `dead_letters.max_deliveries` (3) separate deliveries.
+
+```bash
+php artisan appview:dead-letters                          # count by collection and error
+php artisan appview:dead-letters --retry                  # run them through ingest again, once fixed
+php artisan appview:dead-letters --dismiss --collection=app.example.post
+php artisan appview:dead-letters --prune                  # drop those past keep_days and max
+```
+
+How long to keep them depends on how many arrive, so it is configured in `config/atp-appview/dead_letters.php`: `keep_days` (90, null to keep them until dismissed) and `max`, a cap with the oldest dropped first. Schedule the prune:
+
+```php
+Schedule::command('appview:dead-letters --prune')->daily();
+```
+
+`DeadLetters::retry($letter)` runs one through ingest as configured now, and drops it once it goes through.
+
 ### Backfill status
 
 Tap marks each record event: `live` false while it backfills a repo, true for commits arriving in real time. It exposes no count of repos still waiting, so `IngestStats` reads the stream instead. A backfill is running while backfill events keep arriving.

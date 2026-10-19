@@ -150,6 +150,17 @@ return [
             'middleware' => [],
         ],
 
+        // What a batch passes through before the handlers, in order: classes
+        // with handle(Batch $batch, Closure $next), as in a Laravel pipeline.
+        'pipes' => [
+            \SocialDept\AtpAppview\Ingest\Pipes\DropBlocked::class,
+            \SocialDept\AtpAppview\Ingest\Pipes\RunHooks::class,
+        ],
+
+        // Classes implementing IngestHook, which reject records the app does
+        // not want before they are indexed. They never change a record.
+        'hooks' => [],
+
         // Classes implementing BatchHandler, run in order for every batch.
         // RecordIndexer writes the records index.
         'handlers' => [

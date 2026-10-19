@@ -9,6 +9,7 @@ use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
+use SocialDept\AtpAppview\Ingest\Pipes\DropBlocked;
 use Throwable;
 
 /**
@@ -17,8 +18,14 @@ use Throwable;
  *
  * Tap keeps an outbox of unacknowledged events and stops sending once it is
  * full, so acknowledging late is what keeps a backfill from outrunning the
- * database. A batch that keeps failing is never acknowledged, and Tap
- * redelivers it.
+ * database.
+ *
+ * A batch that keeps failing is split until the events failing on their own
+ * are found. They are parked as dead letters and the rest go through, so one
+ * bad record cannot hold up everything behind it. When every event fails on
+ * its own, the cause is more likely the database or a service than the
+ * records, so the batch is left for Tap to redeliver, and only an event that
+ * has failed in several deliveries is parked.
  */
 class IngestBuffer
 {
@@ -40,6 +47,8 @@ class IngestBuffer
      * @param  Closure(int): void|null  $sleep  Waits the given milliseconds between attempts
      * @param  Blocklist|null  $blocklist  Drops blocked records before the handlers see them
      * @param  IngestStats|null  $stats  Counts what Tap delivered, blocked or not
+     * @param  DeadLetters|null  $deadLetters  Parks events that keep failing. Without it, a failing batch is never acknowledged
+     * @param  array<int, class-string|object>|null  $pipes  Null for atp-appview.ingest.pipes
      */
     public function __construct(
         protected array $handlers,
@@ -49,8 +58,20 @@ class IngestBuffer
         protected ?Closure $sleep = null,
         protected ?Blocklist $blocklist = null,
         protected ?IngestStats $stats = null,
+        protected ?DeadLetters $deadLetters = null,
+        ?array $pipes = null,
     ) {
+        // The blocklist pipe uses the Blocklist given, and is left out without one.
+        $pipes = array_values(array_filter(array_map(
+            fn ($pipe) => $pipe === DropBlocked::class ? ($blocklist === null ? null : new DropBlocked($blocklist)) : $pipe,
+            // Outside an application there is no config: only the blocklist.
+            $pipes ?? (app()->bound('config') ? (array) config('atp-appview.ingest.pipes', []) : [DropBlocked::class]),
+        )));
+
+        $this->pipeline = new Pipeline(app(), $handlers, $pipes);
     }
+
+    protected Pipeline $pipeline;
 
     /**
      * Add one delivery. Null stands for a message that needs acknowledging but
@@ -117,22 +138,14 @@ class IngestBuffer
     {
         for ($attempt = 1; ; $attempt++) {
             try {
-                // Inside the retries, since loading rules or looking up a PDS
-                // can fail like any other database or network call.
-                $allowed = $this->blocklist?->filter($batch) ?? $batch;
-
-                if ($allowed->isEmpty()) {
-                    return;
-                }
-
-                foreach ($this->handlers as $handler) {
-                    $handler->handle($allowed);
-                }
+                $this->pipeline->run($batch);
 
                 return;
             } catch (Throwable $e) {
                 if ($attempt >= $this->maxAttempts) {
-                    throw new BatchFailed($attempt, $e);
+                    $this->deadLetter($batch, new BatchFailed($attempt, $e));
+
+                    return;
                 }
 
                 Log::warning('[atp-appview] Batch failed, retrying', [
@@ -144,6 +157,77 @@ class IngestBuffer
                 $this->wait(100 * (2 ** ($attempt - 1)));
             }
         }
+    }
+
+    /**
+     * After the last attempt: park the events that fail on their own and let
+     * the rest through, or give the batch back to Tap.
+     *
+     * @throws BatchFailed when it goes back to Tap
+     */
+    protected function deadLetter(Batch $batch, BatchFailed $failure): void
+    {
+        if ($this->deadLetters === null) {
+            throw $failure;
+        }
+
+        $failed = $this->isolate($batch->events);
+
+        if (count($failed) < $batch->count()) {
+            foreach ($failed as [$event, $error]) {
+                $this->deadLetters->park($event, $error);
+            }
+
+            Log::error('[atp-appview] Parked events that kept failing as dead letters', ['parked' => count($failed), 'events' => $batch->count()]);
+
+            return;
+        }
+
+        // Everything failed on its own: more likely the database or a service.
+        $due = $this->deadLetters->failedDelivery($batch->events);
+
+        if (count($due) < $batch->count()) {
+            throw $failure;
+        }
+
+        foreach ($failed as [$event, $error]) {
+            $this->deadLetters->park($event, $error);
+        }
+
+        Log::error('[atp-appview] Parked a batch that failed in every delivery as dead letters', ['parked' => count($failed)]);
+    }
+
+    /**
+     * The events that fail on their own, with their errors, found by trying
+     * halves in order until single events are left: about two attempts per
+     * failing event for each halving.
+     *
+     * @param  array<int, RecordEvent|IdentityEvent>  $events
+     * @return array<int, array{0: RecordEvent|IdentityEvent, 1: Throwable}>
+     */
+    protected function isolate(array $events): array
+    {
+        if (count($events) === 1) {
+            try {
+                $this->pipeline->run(new Batch($events));
+
+                return [];
+            } catch (Throwable $e) {
+                return [[$events[0], $e]];
+            }
+        }
+
+        $failed = [];
+
+        foreach (array_chunk($events, (int) ceil(count($events) / 2)) as $half) {
+            try {
+                $this->pipeline->run(new Batch($half));
+            } catch (Throwable) {
+                array_push($failed, ...$this->isolate($half));
+            }
+        }
+
+        return $failed;
     }
 
     protected function wait(int $milliseconds): void
