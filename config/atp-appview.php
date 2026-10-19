@@ -172,6 +172,8 @@ return [
         // RecordIndexer writes the records index.
         'handlers' => [
             \SocialDept\AtpAppview\Index\RecordIndexer::class,
+            // Writes the labels and labeler declarations Tack delivers.
+            \SocialDept\AtpAppview\Labels\LabelIndexer::class,
             \SocialDept\AtpAppview\Lexicons\FollowedLexiconsHandler::class,
             // Marks repos delivered as a running backfill's records arrive.
             \SocialDept\AtpAppview\Backfill\BackfillTracker::class,
