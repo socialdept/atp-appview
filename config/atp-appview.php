@@ -98,10 +98,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Tap delivers events in batches to the webhook below, and each batch goes
-    | to the handlers. This needs batched webhooks, which the socialde.pt/tap
-    | fork adds: stock Tap sends one request per event, which floods the
-    | application during a backfill. With stock Tap, run appview:consume,
-    | which reads Tap's acknowledged websocket channel instead.
+    | to the handlers. This needs batched webhooks, which Tab, a fork of Tap
+    | at tangled.org/pds.dad/tab, adds. Stock Tap sends one request per
+    | event, which floods the application during a backfill, so with stock
+    | Tap, run appview:consume, which reads its websocket channel instead.
     |
     */
 
@@ -167,8 +167,8 @@ return [
     |
     | appview:backfill, and appview:backfill:work on a schedule, have Tap
     | backfill collections the index starts ingesting. A Tap with resync
-    | routes, such as the socialde.pt/tap fork, keeps what it already sent;
-    | on any other Tap, repos are removed and added again.
+    | routes, such as Tab, keeps what it already sent. On any other Tap,
+    | repos are removed and added again.
     |
     */
 

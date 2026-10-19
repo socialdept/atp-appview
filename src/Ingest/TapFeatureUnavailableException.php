@@ -11,6 +11,6 @@ class TapFeatureUnavailableException extends RuntimeException
 {
     public static function resync(): self
     {
-        return new self('This Tap cannot resync tracked repos: it has no POST /resync/:did route. The socialde.pt/tap fork adds it.');
+        return new self('This Tap cannot resync tracked repos: it has no POST /resync/:did route. Tab (tangled.org/pds.dad/tab) adds it.');
     }
 }
