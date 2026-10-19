@@ -76,6 +76,17 @@ class Profiles
     }
 
     /**
+     * Drop the profiles fetched for an account, so the next read fetches
+     * them again. Profiles read from the index are always current.
+     */
+    public function forget(string $did): void
+    {
+        foreach ($this->sources as $source) {
+            Cache::forget($this->cacheKey($did, $source));
+        }
+    }
+
+    /**
      * Profiles for these accounts, by DID, with every field.
      *
      * @param  array<int, string>  $dids
