@@ -2,9 +2,9 @@
 
 namespace SocialDept\AtpAppview\Views\Parts;
 
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
-use SocialDept\AtpAppview\Index\Refs;
+use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Views\Contracts\Part;
 use SocialDept\AtpAppview\Views\Contracts\ReadsRefs;
 use SocialDept\AtpAppview\Views\Contracts\ResolvesTogether;
@@ -12,7 +12,7 @@ use SocialDept\AtpAppview\Views\Contracts\ResolvesTogether;
 /**
  * The viewer's own record pointing at each record through a field, such as
  * the viewer's like of a post: its uri, or null. Every one in a view is read
- * in one query from an index alone, and nothing is looked up without a viewer.
+ * in one query, and nothing is looked up without a viewer.
  */
 class ViewerRef implements Part, ReadsRefs, ResolvesTogether
 {
@@ -40,26 +40,27 @@ class ViewerRef implements Part, ReadsRefs, ResolvesTogether
             return $results;
         }
 
-        $rows = app(Refs::class)->visible()
-            ->where('source_did', $viewer)
-            ->where(function (Builder $query) use ($parts) {
-                foreach ($parts as $part) {
-                    $query->orWhere(fn (Builder $query) => $query->where('source_collection', $part->collection)->where('path', $part->path));
-                }
-            })
-            ->whereIn('target_uri', $records->pluck('uri')->all())
-            ->orderBy('source_uri')
-            ->get(['source_collection', 'path', 'target_uri', 'source_uri']);
+        $values = app(RecordValues::class);
+        $keys = array_map(fn (self $part) => $values->keyId($values->field($part->collection, $part->path)), $parts);
+        $uris = $records->mapWithKeys(fn ($record) => [ValueHash::of($record->uri) => $record->uri])->all();
+
+        $rows = $values->visible()
+            ->join('atp_records', 'atp_records.id', '=', RecordValues::VALUES.'.record_id')
+            ->where('did_hash', ValueHash::of($viewer))
+            ->whereIn('key_id', array_values(array_unique($keys)))
+            ->whereIn('value_hash', array_keys($uris))
+            ->orderBy('atp_records.uri')
+            ->get(['key_id', 'value_hash', 'atp_records.uri as source_uri']);
 
         $found = [];
 
         foreach ($rows as $row) {
             // The first of several, in uri order, so the answer is stable.
-            $found["{$row->source_collection}#{$row->path}"][$row->target_uri] ??= $row->source_uri;
+            $found[(int) $row->key_id][$uris[(int) $row->value_hash]] ??= $row->source_uri;
         }
 
-        foreach ($parts as $part) {
-            $results[spl_object_id($part)] = $found["{$part->collection}#{$part->path}"] ?? [];
+        foreach ($parts as $i => $part) {
+            $results[spl_object_id($part)] = $found[$keys[$i]] ?? [];
         }
 
         return $results;

@@ -20,12 +20,12 @@ use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
+use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
-use SocialDept\AtpAppview\Console\RefsCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
 use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
@@ -37,7 +37,7 @@ use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Images\BlobUrls;
 use SocialDept\AtpAppview\Images\InfraCoopBlobUrls;
 use SocialDept\AtpAppview\Images\PdsBlobUrls;
-use SocialDept\AtpAppview\Index\Refs;
+use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -114,7 +114,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         $this->app->singleton(XrpcRegistry::class);
 
-        $this->app->singleton(Refs::class);
+        $this->app->singleton(RecordValues::class);
 
         // One list of profile sources, so fluent changes at boot stick.
         $this->app->singleton(Profiles::class);
@@ -158,7 +158,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsCommand::class,
                 LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
-                RefsCommand::class,
+                FieldsCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
                 RestartCommand::class,

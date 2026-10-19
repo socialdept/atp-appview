@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
-use SocialDept\AtpAppview\Index\Refs;
+use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
@@ -150,7 +150,7 @@ class Blocklist
 
         foreach (array_chunk($dids, 500) as $chunk) {
             $purged += $this->recordsCovered($block, $chunk)->forceDelete();
-            Refs::dropOrphans(DB::connection(config('atp-appview.index.connection')), $chunk);
+            app(RecordValues::class)->dropOrphans(DB::connection(config('atp-appview.index.connection')), $chunk);
         }
 
         return $purged;
