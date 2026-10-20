@@ -5,7 +5,7 @@ namespace SocialDept\AtpAppview\Index;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
-use SocialDept\AtpAppview\Graph\Graph;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Models\Record;
 
 /**
@@ -90,7 +90,7 @@ class RecordQuery
      */
     public function visibleTo(?string $viewer): static
     {
-        $this->hidden = $viewer === null ? [] : app(Graph::class)->hidden($viewer);
+        $this->hidden = $viewer === null ? [] : app(AppView::class)->hidden($viewer);
 
         return $this;
     }

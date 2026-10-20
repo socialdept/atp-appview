@@ -36,6 +36,67 @@ php artisan vendor:publish --tag=atp-appview-config
 
 The config is split: `config/atp-appview.php` holds what is global (auth, ingest, the index, the service identity, XRPC), and `config/atp-appview/` holds a file per feature (`fields.php`, `views.php`, `profiles.php`, `images.php`, `lexicons.php`, `backfill.php`, `blocklist.php`). Laravel loads each as a key of its own, `atp-appview.fields` and so on. Every section keeps the package's defaults for settings it does not mention, so a setting added in a later release reaches a config published before it.
 
+## Features
+
+Beyond the core (ingest, the index, XRPC, auth, views and profiles), an AppView turns on features, listed the way Laravel Fortify lists its own:
+
+```php
+// config/atp-appview.php
+use SocialDept\AtpAppview\Features;
+
+'features' => [
+    Features::moderation(),
+    Features::notifications(['latest' => 5]),
+    Features::graph(),
+    Acme\Search\MeilisearchFeature::class,
+],
+```
+
+A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
+
+All three ship enabled. Moderation, notifications and the graph are still wired in by the package itself and move behind this list in coming releases, so for now leaving one out does not yet turn it off.
+
+### Scheduling
+
+Features never schedule work on their own. To run what the enabled features recommend, opt in with one line, or schedule their commands yourself:
+
+```php
+// routes/console.php
+use SocialDept\AtpAppview\Features;
+
+Features::schedule();
+```
+
+### Writing a feature
+
+A feature is a class implementing `Feature`. It names the features it needs, and registers what it adds through `AppView`:
+
+```php
+use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Feature;
+
+class MeilisearchFeature implements Feature
+{
+    public function requires(): array
+    {
+        return [];
+    }
+
+    public function register(AppView $appview): void
+    {
+        $appview
+            ->config('search', ['index' => 'records'])            // atp-appview.search, with defaults
+            ->migrations(__DIR__.'/../database/migrations')
+            ->handler(IndexForSearch::class)                       // a batch handler after the package's own
+            ->xrpc('com.acme.search.query', SearchHandler::class)
+            ->commands([ReindexCommand::class])
+            ->schedule(fn (Schedule $schedule) => $schedule->command('search:reindex')->daily());
+    }
+}
+```
+
+It can also add fields kept in the index (`field()`), work inside the indexer's transaction on the rows it wrote (`afterWrite()`), routes (`routes()`), and accounts a viewer should not see (`readFilter()`, applied by `visibleTo()`, the built-in XRPC lists and notifications). A feature left out of the list registers nothing, so its migrations, routes and commands stay out of the app. One that needs a feature left out fails at boot, naming it.
+
 ## Frontend and backend mode
 
 Where the user's OAuth tokens live decides how records get written.

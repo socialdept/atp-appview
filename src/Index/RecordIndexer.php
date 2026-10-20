@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Index;
 
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Carbon;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
@@ -79,6 +80,10 @@ class RecordIndexer implements BatchHandler
 
                 // New records of accounts whose labels hide them, hidden too.
                 app(Visibility::class)->arrivals(array_column($records, 'did'), $selfLabeled);
+
+                foreach (app(AppView::class)->afterWriteCallbacks() as $afterWrite) {
+                    $afterWrite($connection, $records, $now);
+                }
             }
         });
     }

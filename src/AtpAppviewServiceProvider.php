@@ -34,6 +34,7 @@ use SocialDept\AtpAppview\Console\RestartCommand;
 use SocialDept\AtpAppview\Console\RoutesCommand;
 use SocialDept\AtpAppview\Console\StatsCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
 use SocialDept\AtpAppview\Http\Controllers\TackWebhookController;
 use SocialDept\AtpAppview\Http\Controllers\TapWebhookController;
@@ -97,6 +98,15 @@ class AtpAppviewServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfig();
+
+        // Features load the first time they are asked for, at boot at the
+        // latest, once every config value an app or test sets is in place.
+        $this->app->singleton(AppView::class, function (Application $app) {
+            $appview = new AppView();
+            $appview->load(Features::all(), $app);
+
+            return $appview;
+        });
 
         $this->app->singleton(TapConsumer::class, fn (Application $app) => new TapConsumer(
             handlers: Pipeline::handlers($app),
@@ -184,9 +194,12 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 StatsCommand::class,
                 UnblockCommand::class,
             ]);
+
+            $this->commands($this->app->make(AppView::class)->commandClasses());
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom($this->app->make(AppView::class)->migrationPaths());
 
         $this->registerGuard();
 
@@ -208,6 +221,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
                     ->post((string) config('atp-appview.labels.webhook.path', 'atp-appview/tack'), TackWebhookController::class)
                     ->middleware((array) config('atp-appview.labels.webhook.middleware', []))
                     ->name('atp-appview.tack-webhook');
+            }
+
+            foreach ($this->app->make(AppView::class)->routeCallbacks() as $routes) {
+                $routes($this->app->make(Router::class));
             }
 
             // Read when the config is loaded, so route:cache keeps the choice.

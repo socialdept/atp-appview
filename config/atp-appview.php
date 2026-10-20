@@ -1,6 +1,30 @@
 <?php
 
+use SocialDept\AtpAppview\Features;
+
 return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Features
+    |--------------------------------------------------------------------------
+    |
+    | What this AppView turns on beyond the core, as Laravel Fortify lists
+    | its features. A feature's helper takes options for its config section:
+    | Features::notifications(['latest' => 5]). A third party's feature is
+    | listed by its class name. Leaving one out keeps its routes, tables and
+    | commands out of the app, as each feature moves behind this list.
+    |
+    | Call Features::schedule() in routes/console.php to schedule what the
+    | enabled features recommend, or schedule their commands yourself.
+    |
+    */
+
+    'features' => [
+        Features::moderation(),
+        Features::notifications(),
+        Features::graph(),
+    ],
 
     'auth' => [
 
