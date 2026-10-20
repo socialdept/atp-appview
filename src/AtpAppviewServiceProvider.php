@@ -8,6 +8,7 @@ use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use SocialDept\AtpAppview\Auth\AtpGuard;
 use SocialDept\AtpAppview\Auth\FrontendAuth;
@@ -193,6 +194,10 @@ class AtpAppviewServiceProvider extends ServiceProvider
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadMigrationsFrom($this->app->make(AppView::class)->migrationPaths());
+
+        foreach ($this->app->make(AppView::class)->listeners() as [$event, $listener]) {
+            Event::listen($event, $listener);
+        }
 
         $this->registerGuard();
 

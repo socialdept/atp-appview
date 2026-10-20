@@ -47,6 +47,9 @@ class AppView
     /** @var array<int, Closure> */
     protected array $schedules = [];
 
+    /** @var array<int, array{0: string, 1: Closure|string}> */
+    protected array $listeners = [];
+
     /**
      * Make and register each feature, after checking what they require.
      *
@@ -213,6 +216,16 @@ class AppView
     }
 
     /**
+     * A listener for an event, registered while the feature is on.
+     */
+    public function listen(string $event, Closure|string $listener): static
+    {
+        $this->listeners[] = [$event, $listener];
+
+        return $this;
+    }
+
+    /**
      * Everyone whose records the viewer should not see, from every read
      * filter, such as the graph's blocks and mutes.
      *
@@ -271,6 +284,12 @@ class AppView
     public function commandClasses(): array
     {
         return $this->commands;
+    }
+
+    /** @return array<int, array{0: string, 1: Closure|string}> */
+    public function listeners(): array
+    {
+        return $this->listeners;
     }
 
     /** @return array<int, Closure> */

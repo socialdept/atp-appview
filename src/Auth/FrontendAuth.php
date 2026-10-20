@@ -7,6 +7,7 @@ use Illuminate\Routing\Router;
 use SocialDept\AtpAppview\Http\Controllers\Auth\OAuthController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SessionController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SignInViewController;
+use SocialDept\AtpAppview\Push\Push;
 use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 
 /**
@@ -85,6 +86,12 @@ class FrontendAuth
             'xrpcPrefix' => '/'.trim((string) config('atp-appview.xrpc.prefix', 'xrpc'), '/'),
             'syncRecord' => config('atp-appview.xrpc.sync_record'),
             'proxy' => app(ServiceIdentity::class)->publishable(),
+            // What the browser subscribes to push with, when the app has it.
+            'push' => Push::configured() ? [
+                'publicKey' => config('atp-appview.push.public_key'),
+                'subscribe' => config('atp-appview.push.xrpc.subscribe'),
+                'unsubscribe' => config('atp-appview.push.xrpc.unsubscribe'),
+            ] : null,
         ];
     }
 

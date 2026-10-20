@@ -316,7 +316,7 @@ class FrontendSignInTest extends TestCase
 
     public function test_the_browser_config_and_providers_leave_servers_out(): void
     {
-        $this->assertSame(['sessionMethod' => self::METHOD, 'audience' => self::AUDIENCE, 'xrpcPrefix' => '/xrpc', 'syncRecord' => null, 'proxy' => false], FrontendAuth::browserConfig());
+        $this->assertSame(['sessionMethod' => self::METHOD, 'audience' => self::AUDIENCE, 'xrpcPrefix' => '/xrpc', 'syncRecord' => null, 'proxy' => false, 'push' => null], FrontendAuth::browserConfig());
         $this->assertSame([['key' => 'bluesky', 'name' => 'Bluesky']], FrontendAuth::providers());
     }
 }
