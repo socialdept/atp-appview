@@ -15,8 +15,11 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
+use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Notifications\Contracts\Notifier;
 use SocialDept\AtpAppview\Notifications\Events\NotificationCreated;
 use SocialDept\AtpAppview\Notifications\Notifications;
+use SocialDept\AtpAppview\Notifications\Notify;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
@@ -81,20 +84,20 @@ class NotificationsTest extends TestCase
         }
     }
 
-    protected function index(string $did, string $collection, string $rkey, ?array $record, string $rev = '3l2aaaaaaaaaa'): string
+    protected function index(string $did, string $collection, string $rkey, ?array $record, string $rev = '3l2aaaaaaaaaa', bool $live = true): string
     {
         $action = $record === null ? RecordAction::Delete : RecordAction::Create;
 
         Pipeline::fromConfig(app())->run(new Batch([
-            new RecordEvent(++$this->id, $did, $collection, $rkey, $action, $record === null ? null : "bafy-{$rkey}-{$rev}", $rev, $record, true),
+            new RecordEvent(++$this->id, $did, $collection, $rkey, $action, $record === null ? null : "bafy-{$rkey}-{$rev}", $rev, $record, $live),
         ]));
 
         return "at://{$did}/{$collection}/{$rkey}";
     }
 
-    protected function thing(string $did, string $rkey, array $extra = []): string
+    protected function thing(string $did, string $rkey, array $extra = [], string $rev = '3l2aaaaaaaaaa', bool $live = true): string
     {
-        return $this->index($did, self::THING, $rkey, ['text' => $rkey, 'createdAt' => '2026-10-01T00:00:00Z', ...$extra]);
+        return $this->index($did, self::THING, $rkey, ['text' => $rkey, 'createdAt' => '2026-10-01T00:00:00Z', ...$extra], $rev, $live);
     }
 
     protected function like(string $did, string $rkey, string $subject): string
@@ -263,6 +266,62 @@ class NotificationsTest extends TestCase
         $this->assertSame(1, DB::table('atp_notifications')->count(), 'Building twice adds nothing.');
     }
 
+    public function test_a_notifier_notifies_whoever_it_finds_for_records_arriving_live(): void
+    {
+        config()->set('atp-appview.notifications.notifiers', [SameTextNotifier::class]);
+        $alices = $this->thing(self::ALICE, 'a', ['text' => 'hi']);
+        Event::fake([NotificationCreated::class]);
+
+        $bobs = $this->thing(self::BOB, 'b', ['text' => 'hi']);
+        $this->thing(self::CAROL, 'c', ['text' => 'hi'], live: false);
+
+        $rows = DB::table('atp_notifications')->get();
+        $this->assertCount(1, $rows, 'A backfilled record notifies nobody, and nobody is notified of their own.');
+        $this->assertSame([self::ALICE, 'same', $alices, self::BOB, $bobs, 'notifier'], [$rows[0]->recipient_did, $rows[0]->reason, $rows[0]->subject, $rows[0]->actor_did, $rows[0]->source_uri, $rows[0]->origin]);
+        Event::assertDispatchedTimes(NotificationCreated::class, 1);
+
+        // Replayed from a backfill once Alice moved on, Bob's record keeps what it gave.
+        $this->thing(self::ALICE, 'a', ['text' => 'bye'], rev: '3l2bbbbbbbbbb');
+        $this->thing(self::BOB, 'b', ['text' => 'hi'], live: false);
+        $this->assertSame([(int) $rows[0]->id], DB::table('atp_notifications')->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        // Changed live, it gives what the notifier says now.
+        $this->thing(self::BOB, 'b', ['text' => 'bye'], rev: '3l2cccccccccc');
+        $this->assertSame([[self::ALICE, $alices]], DB::table('atp_notifications')->get()->map(fn ($row) => [$row->recipient_did, $row->subject])->all());
+
+        $this->index(self::BOB, self::THING, 'b', null, '3l2dddddddddd');
+        $this->assertSame(0, DB::table('atp_notifications')->count(), 'Deleting the record removes them.');
+    }
+
+    public function test_a_notifier_and_a_reason_giving_the_same_notification_make_one(): void
+    {
+        config()->set('atp-appview.notifications.notifiers', [MentionAgainNotifier::class]);
+        $this->thing(self::ALICE, 'post', ['facets' => [['features' => [['did' => self::BOB]]]]]);
+
+        $this->assertSame([['mention', 'reason']], DB::table('atp_notifications')->get()->map(fn ($row) => [$row->reason, $row->origin])->all());
+    }
+
+    public function test_send_notifies_once_about_a_record_and_goes_with_it(): void
+    {
+        $post = $this->thing(self::ALICE, 'post');
+        Event::fake([NotificationCreated::class]);
+
+        $id = $this->notifications()->send(self::ALICE, 'trending', $post);
+
+        $this->assertNotNull($id);
+        $this->assertNull($this->notifications()->send(self::ALICE, 'trending', $post), 'Sending again adds nothing.');
+        $this->assertNull($this->notifications()->send(self::ALICE, 'trending', 'at://did:plc:alice/com.example.thing/missing'));
+        Event::assertDispatchedTimes(NotificationCreated::class, 1);
+        $this->assertSame('trending', $this->notifications()->one($id)['reason'], 'Its own author can be notified.');
+        $this->assertSame(self::ALICE, $this->notifications()->one($id)['subject']);
+
+        $this->thing(self::ALICE, 'post', ['text' => 'edited'], rev: '3l2bbbbbbbbbb');
+        $this->assertSame(1, DB::table('atp_notifications')->count(), 'Its record changing keeps it.');
+
+        $this->index(self::ALICE, self::THING, 'post', null, '3l2cccccccccc');
+        $this->assertSame(0, DB::table('atp_notifications')->count());
+    }
+
     public function test_the_xrpc_methods_serve_the_signed_in_viewer(): void
     {
         $post = $this->thing(self::ALICE, 'post');
@@ -300,5 +359,54 @@ class NotificationsUser extends Authenticatable implements HasAtpSession
     public function getAtpDid(): ?string
     {
         return $this->did;
+    }
+}
+
+/**
+ * Notifies the authors of other things with the same text, about theirs.
+ */
+class SameTextNotifier implements Notifier
+{
+    public function collections(): array
+    {
+        return ['com.example.thing'];
+    }
+
+    public function notify(array $records): iterable
+    {
+        foreach ($records as $record) {
+            $others = Record::query()
+                ->where('collection', 'com.example.thing')
+                ->whereNull('deleted_at')
+                ->where('uri', '!=', $record->uri)
+                ->get()
+                ->filter(fn (Record $other) => ($other->record['text'] ?? null) === ($record->record['text'] ?? null));
+
+            foreach ($others as $other) {
+                yield new Notify($record->uri, $other->did, 'same', $other->uri);
+            }
+        }
+    }
+}
+
+/**
+ * Gives the mentions the configured reason already gives.
+ */
+class MentionAgainNotifier implements Notifier
+{
+    public function collections(): array
+    {
+        return ['com.example.thing'];
+    }
+
+    public function notify(array $records): iterable
+    {
+        foreach ($records as $record) {
+            foreach ($record->record['facets'] ?? [] as $facet) {
+                foreach ($facet['features'] as $feature) {
+                    yield new Notify($record->uri, $feature['did'], 'mention', $feature['did']);
+                }
+            }
+        }
     }
 }

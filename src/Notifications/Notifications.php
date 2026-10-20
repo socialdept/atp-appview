@@ -9,6 +9,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Notifications\Contracts\Notifier;
+use SocialDept\AtpAppview\Notifications\Events\NotificationCreated;
 use SocialDept\AtpAppview\Profiles\Profiles;
 use SocialDept\AtpAppview\Views\Hydrator;
 use SocialDept\AtpAppview\Views\View;
@@ -48,6 +50,26 @@ class Notifications
     }
 
     /**
+     * The configured notifiers, by each collection they read.
+     *
+     * @return array<string, array<int, Notifier>>
+     */
+    public static function notifiers(): array
+    {
+        $byCollection = [];
+
+        foreach ((array) config('atp-appview.notifications.notifiers', []) as $class) {
+            $notifier = app($class);
+
+            foreach ($notifier->collections() as $collection) {
+                $byCollection[$collection][] = $notifier;
+            }
+        }
+
+        return $byCollection;
+    }
+
+    /**
      * What notifications share a group by: the reason and subject, or for a
      * separate reason the notifying record too.
      */
@@ -56,6 +78,51 @@ class Notifications
         return in_array($reason, (array) config('atp-appview.notifications.separate', []), true)
             ? sha1("{$reason}\n{$source}")
             : sha1("{$reason}\n{$subject}");
+    }
+
+    /**
+     * Notify someone of something no record says on its own, such as a
+     * scheduled digest or a milestone. The source is the record it is about,
+     * whose author is the actor and whose visibility it follows, and the
+     * subject defaults to the recipient. Unlike a reason or a notifier, it
+     * may notify the source's own author. Sending the same again adds
+     * nothing, and deleting the source removes it.
+     *
+     * @return int|null The new notification, or null when it was already sent or the source is not indexed
+     */
+    public function send(string $recipient, string $reason, string $source, ?string $subject = null): ?int
+    {
+        $subject ??= $recipient;
+        $record = $this->connection()->table('atp_records')->where('uri', $source)->whereNull('deleted_at')->first(['uri', 'did', 'hidden_at', 'moderated_at', 'limited_at']);
+
+        if ($record === null) {
+            return null;
+        }
+
+        $inserted = $this->connection()->table('atp_notifications')->insertOrIgnore([
+            'recipient_did' => $recipient,
+            'reason' => $reason,
+            'subject' => $subject,
+            'group_key' => self::groupKey($reason, $subject, $source),
+            'actor_did' => $record->did,
+            'source_uri' => $source,
+            'indexed_at' => Carbon::now('UTC')->format('Y-m-d H:i:s'),
+            'origin' => 'sent',
+        ]);
+
+        if ($inserted === 0) {
+            return null;
+        }
+
+        $row = $this->connection()->table('atp_notifications')
+            ->where(['source_uri' => $source, 'recipient_did' => $recipient, 'reason' => $reason, 'subject' => $subject])
+            ->first();
+
+        if ($record->hidden_at === null && $record->moderated_at === null && $record->limited_at === null) {
+            $this->connection()->afterCommit(fn () => event(NotificationCreated::fromRow($row)));
+        }
+
+        return (int) $row->id;
     }
 
     /**

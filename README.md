@@ -1289,6 +1289,46 @@ The same is served over XRPC under NSIDs in the app's own namespace. A lexicon f
 ],
 ```
 
+### Notifiers
+
+When no field of a record names who it notifies, a notifier decides: everyone who replied in a thread, everyone sharing a status, the members of a group. List classes implementing `Notifier` in `notifications.notifiers`. Each names the collections it reads and is given their records as they arrive, already indexed, so its queries see them:
+
+```php
+use SocialDept\AtpAppview\Notifications\Contracts\Notifier;
+use SocialDept\AtpAppview\Notifications\Notify;
+
+class ThreadNotifier implements Notifier
+{
+    public function collections(): array
+    {
+        return ['xyz.statusphere.status'];
+    }
+
+    public function notify(array $records): iterable
+    {
+        foreach ($records as $reply) {
+            foreach ($this->participants($reply->record['reply']['root']['uri'] ?? null) as $did) {
+                yield new Notify($reply->uri, $did, 'thread', $reply->record['reply']['root']['uri']);
+            }
+        }
+    }
+}
+```
+
+A `Notify` names the record that notifies, the recipient, the reason and the subject it groups by, which defaults to the recipient. Nobody is notified about their own records, and one a configured reason already gives is kept once.
+
+Only records arriving live are offered. A backfill or a replay keeps what a record gave before, so a notifier can ask about the present ("who has this status now") without old records notifying again. A record changed live is offered again and its notifications brought to what the notifier says now. Deleting it removes them. `appview:notifications:build` does not run notifiers.
+
+### Sending one
+
+For what no record does on its own, such as a scheduled digest or a milestone, send a notification about a record. Its author is the actor, it shows while the record does, and it goes when the record is deleted. Unlike a reason or a notifier, it may notify the record's own author:
+
+```php
+$notifications->send($did, 'trending', source: $statusUri, subject: $statusUri);
+```
+
+Sending the same reason, subject and record to someone again adds nothing, so a scheduled job can run twice. `send()` returns the new notification's id, or null when nothing was added.
+
 ### Delivering them
 
 `NotificationCreated` is dispatched after commit for each new notification whose record shows. Push, email and anything else outside the app hang off it, and `Notifications::one($event->id)` gives it hydrated:
