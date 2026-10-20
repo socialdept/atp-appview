@@ -7,7 +7,8 @@ use SocialDept\AtpAppview\Xrpc\XrpcRequest;
 
 /**
  * How many notifications the viewer has not seen, served under
- * atp-appview.notifications.xrpc.unread_count. Answers {count}.
+ * atp-appview.notifications.xrpc.unread_count, for the reasons given (repeated
+ * for several) or all. Answers {count}.
  */
 class GetUnreadCountHandler
 {
@@ -23,6 +24,6 @@ class GetUnreadCountHandler
      */
     public function __invoke(XrpcRequest $request): array
     {
-        return ['count' => $this->notifications->unreadCount($this->recipient($request))];
+        return ['count' => $this->notifications->unreadCount($this->recipient($request), $this->reasons($request))];
     }
 }

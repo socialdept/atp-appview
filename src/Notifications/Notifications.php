@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Notifications\Contracts\Notifier;
 use SocialDept\AtpAppview\Notifications\Events\NotificationCreated;
@@ -106,6 +107,7 @@ class Notifications
             'subject' => $subject,
             'group_key' => self::groupKey($reason, $subject, $source),
             'actor_did' => $record->did,
+            'actor_hash' => ValueHash::of($record->did),
             'source_uri' => $source,
             'indexed_at' => Carbon::now('UTC')->format('Y-m-d H:i:s'),
             'origin' => 'sent',
@@ -130,13 +132,14 @@ class Notifications
      * A page of groups, newest first.
      *
      * @return array{notifications: array<int, array<string, mixed>>, cursor: string|null, seenAt: string|null}
+     * @param  array<int, string>|null  $reasons  Only these reasons, such as a tab of mentions
      */
-    public function groups(string $did, int $limit = 50, ?string $cursor = null): array
+    public function groups(string $did, int $limit = 50, ?string $cursor = null, ?array $reasons = null): array
     {
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $seen = $this->seenAt($did);
 
-        $query = $this->visible($did)
+        $query = $this->visible($did, $reasons)
             ->select('n.group_key', 'n.reason', 'n.subject')
             ->selectRaw('count(*) as total, count(distinct n.actor_did) as people, max(n.id) as newest, max(n.indexed_at) as newest_at')
             ->selectRaw('sum(case when n.indexed_at > ? then 1 else 0 end) as unread', [$this->since($seen)])
@@ -152,7 +155,7 @@ class Notifications
         $groups = $query->get();
         $more = $groups->count() > $limit;
         $groups = $groups->take($limit);
-        $latest = $this->latest($did, $groups->pluck('group_key')->all());
+        $latest = $this->latest($did, $groups->pluck('group_key')->all(), $reasons);
 
         $views = $this->views([
             ...$groups->pluck('subject')->all(),
@@ -217,13 +220,14 @@ class Notifications
      * group key.
      *
      * @return array{notifications: array<int, array<string, mixed>>, cursor: string|null, seenAt: string|null}
+     * @param  array<int, string>|null  $reasons  Only these reasons, such as a tab of mentions
      */
-    public function list(string $did, int $limit = 50, ?string $cursor = null): array
+    public function list(string $did, int $limit = 50, ?string $cursor = null, ?array $reasons = null): array
     {
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $seen = $this->seenAt($did);
 
-        $query = $this->visible($did)->select('n.*')->orderByDesc('n.indexed_at')->orderByDesc('n.id')->limit($limit + 1);
+        $query = $this->visible($did, $reasons)->select('n.*')->orderByDesc('n.indexed_at')->orderByDesc('n.id')->limit($limit + 1);
 
         if (($after = self::parseCursor($cursor)) !== null) {
             $query->where(fn (Builder $query) => $query
@@ -261,11 +265,12 @@ class Notifications
 
     /**
      * How many notifications arrived since the recipient last looked.
+     * @param  array<int, string>|null  $reasons  Only these reasons, such as a tab of mentions
      */
-    public function unreadCount(string $did): int
+    public function unreadCount(string $did, ?array $reasons = null): int
     {
         $seen = $this->seenAt($did);
-        $query = $this->visible($did);
+        $query = $this->visible($did, $reasons);
 
         if ($seen !== null) {
             $query->where('n.indexed_at', '>', $this->since($seen));
@@ -332,13 +337,13 @@ class Notifications
      * @param  array<int, string>  $keys
      * @return Collection<int, object>
      */
-    protected function latest(string $did, array $keys): Collection
+    protected function latest(string $did, array $keys, ?array $reasons = null): Collection
     {
         if ($keys === []) {
             return new Collection();
         }
 
-        $ranked = $this->visible($did)
+        $ranked = $this->visible($did, $reasons)
             ->whereIn('n.group_key', $keys)
             ->select('n.id', 'n.group_key', 'n.actor_did', 'n.source_uri', 'n.indexed_at')
             ->selectRaw('row_number() over (partition by n.group_key order by n.indexed_at desc, n.id desc) as nth');
@@ -401,17 +406,23 @@ class Notifications
     }
 
     /**
-     * A recipient's notifications whose record still shows.
+     * A recipient's notifications whose record still shows, as their
+     * preferences allow, and only for these reasons when given.
+     *
+     * @param  array<int, string>|null  $reasons
      */
-    protected function visible(string $did): Builder
+    protected function visible(string $did, ?array $reasons = null): Builder
     {
-        return $this->connection()->table('atp_notifications', 'n')
+        $query = $this->connection()->table('atp_notifications', 'n')
             ->join('atp_records as r', 'r.uri', '=', 'n.source_uri')
             ->where('n.recipient_did', $did)
             ->whereNull('r.deleted_at')
             ->whereNull('r.hidden_at')
             ->whereNull('r.moderated_at')
-            ->whereNull('r.limited_at');
+            ->whereNull('r.limited_at')
+            ->when($reasons !== null, fn (Builder $query) => $query->whereIn('n.reason', array_values($reasons)));
+
+        return app(NotificationPreferences::class)->apply($query, $did);
     }
 
     /**

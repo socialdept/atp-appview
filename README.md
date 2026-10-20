@@ -1290,6 +1290,46 @@ The same is served over XRPC under NSIDs in the app's own namespace. A lexicon f
 ],
 ```
 
+### Choices
+
+Each account chooses, per reason, whether it shows in the app, whether it is pushed, and whether from everyone or only the accounts they follow. A reason nobody chose for is shown, pushed and from everyone:
+
+```php
+use SocialDept\AtpAppview\Notifications\NotificationPreferences;
+
+$preferences = app(NotificationPreferences::class);
+
+$preferences->for($did, ['like', 'reply']);              // ['like' => ['inApp' => true, 'push' => true, 'from' => 'everyone'], ...]
+$preferences->set($did, 'like', inApp: false);            // the rest stay as they were
+$preferences->set($did, 'reply', from: NotificationPreferences::FOLLOWS);
+```
+
+Choices apply as notifications are read, so turning a reason off leaves it out of lists and the unread count, and turning it back on brings back what it held. The app lists the reasons and their labels, since a notifier's reasons only exist in app code.
+
+Pushing is the app's own, and `wantsPush()` answers for a `NotificationCreated` listener:
+
+```php
+Event::listen(function (NotificationCreated $event) use ($preferences) {
+    if ($preferences->wantsPush($event->recipient, $event->reason, $event->actor)) {
+        // send it
+    }
+});
+```
+
+"Only the accounts they follow" reads follows from the index. Name the collection and field a follow keeps its subject in, and run `appview:fields`, which keeps that field for follows already indexed:
+
+```php
+'follows' => ['collection' => 'app.bsky.graph.follow', 'path' => 'subject'],
+```
+
+The follows must be indexed, for instance as a [companion collection](#companion-collections). Without `follows`, every notification counts as from everyone.
+
+To show only some reasons, such as a tab of mentions, pass them to `groups()`, `list()` or `unreadCount()`, or as `reasons` to the XRPC methods (repeated for several):
+
+```php
+$notifications->groups($did, reasons: ['mention']);
+```
+
 ### Notifiers
 
 When no field of a record names who it notifies, a notifier decides: everyone who replied in a thread, everyone sharing a status, the members of a group. List classes implementing `Notifier` in `notifications.notifiers`. Each names the collections it reads and is given their records as they arrive, already indexed, so its queries see them:

@@ -36,6 +36,14 @@ return [
     // sharing a status. They see records as they arrive live.
     'notifiers' => [],
 
+    // Where a follow names who it follows, so an account can choose to hear
+    // about a reason only from accounts they follow. The field is kept in the
+    // index for you: run appview:fields after setting it. Null leaves the
+    // choice out, and every notification counts as from everyone.
+    //
+    //     'follows' => ['collection' => 'app.bsky.graph.follow', 'path' => 'subject'],
+    'follows' => null,
+
     // The newest notifications a group shows, with their actors.
     'latest' => 3,
 
