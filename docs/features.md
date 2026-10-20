@@ -18,6 +18,8 @@ use SocialDept\AtpAppview\Features;
 
 A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
 
+Push is a fourth, `Features::push()`, off unless listed. See [Push](push.md).
+
 All three ship enabled, and leaving one out turns it off: its tables are not created, its routes, commands and XRPC methods are not registered, and nothing is kept for it as records are indexed. Left out, the graph answers as though nobody follows, blocks or mutes anyone. Left out, moderation applies no labels and nobody counts as banned or under review, and the `Moderation` and `Labels` view parts are neutral. The notifications, notification preferences, mutes, label policy and account action APIs refuse when their feature is off, naming the feature to add.
 
 ## Scheduling

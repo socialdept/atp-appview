@@ -42,6 +42,13 @@ export interface AtprotoConfig {
     syncRecord?: string | null;
     // Whether a PDS can reach this AppView. False keeps calls same origin.
     proxy?: boolean;
+    // What the browser subscribes to push with, when the app has the push
+    // feature and VAPID keys. Null otherwise.
+    push?: {
+        publicKey: string;
+        subscribe: string | null;
+        unsubscribe: string | null;
+    } | null;
     // Prefixes the browser storage the library uses, so two apps on one
     // origin keep their sessions apart.
     namespace?: string;

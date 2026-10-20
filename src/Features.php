@@ -7,6 +7,7 @@ use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Features\Graph;
 use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
+use SocialDept\AtpAppview\Features\Push;
 
 /**
  * The features an app turns on, listed in atp-appview.features as Laravel
@@ -57,6 +58,16 @@ class Features
     public static function graph(array $options = []): string
     {
         return static::feature(Graph::class, $options);
+    }
+
+    /**
+     * Web Push to the browsers people turn it on in.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.push
+     */
+    public static function push(array $options = []): string
+    {
+        return static::feature(Push::class, $options);
     }
 
     /**
