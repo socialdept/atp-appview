@@ -953,6 +953,39 @@ await pdsFetch(did, '/xrpc/com.example.getThings', {
 
 The endpoint must be reachable from the internet, since the PDS makes the call. Only `/.well-known/did.json` and the XRPC routes need to be.
 
+### Calling methods
+
+One call shape for every XRPC method, whoever answers it. In PHP, this AppView's own methods are answered in-process, through the same handler, auth and lexicon validation as over HTTP, with no request made. That suits a page's first render: the props are what the browser gets from the same method later.
+
+```php
+use SocialDept\AtpAppview\Facades\Xrpc;
+
+Xrpc::as($request->viewer())->query('com.example.notification.listNotifications', ['limit' => 30]);
+Xrpc::query('com.example.getThings');                                  // anonymous
+Xrpc::as($did)->service('did:web:api.bsky.app#bsky_appview')->query('app.bsky.feed.getTimeline');
+```
+
+`as()` takes a `Viewer`, a user or a DID. Another service is called through the account's PDS with `atproto-proxy`, which needs the session the server holds for them, so it works in backend mode. In frontend mode only the browser holds tokens, and the call answers `SessionRequired`: make it from the browser. Without anyone to call as, another service is called directly, at the endpoint its DID document gives. Errors are thrown as `XrpcException` with the method's error name, whoever answered.
+
+The browser library has the same shape, and picks how to authenticate:
+
+```ts
+import { xrpc, XrpcError } from '@socialdept/atp-appview';
+
+await xrpc.query('com.example.notification.getUnreadCount');
+await xrpc.procedure('com.example.notification.updateSeen', {});
+await xrpc.query('app.bsky.feed.getTimeline', {}, { service: 'did:web:api.bsky.app#bsky_appview' });
+```
+
+| Calling | Signed in | Sent |
+| --- | --- | --- |
+| This AppView | with a server session | same origin, with the cookie and CSRF header |
+| This AppView | browser tokens only, or the cookie ran out | through the account's PDS, proxied to `audience` |
+| Another service | yes | through the account's PDS, proxied to that service |
+| Anything | no | directly, unauthenticated |
+
+It reads `audience` and `xrpcPrefix` from `FrontendAuth::browserConfig()`, passed to `configureAtproto()`. A call through the PDS can throw `SessionExpiredError`: wrap one the user started in `withSession()` to offer reconnecting, and leave background calls, such as polling, bare.
+
 ### Writing records
 
 **Frontend mode.** The browser writes to its own PDS, and Tap delivers the record within seconds. To show the author their record straight away, turn on the sync procedure and have the browser call it, through its PDS, right after writing:

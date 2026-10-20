@@ -79,6 +79,14 @@ let serverUser: ServerUser | null = null;
 const rebuilding = new Set<string>();
 
 /**
+ * The account the server session is for, as the page last reported it to
+ * reconcile(), or null.
+ */
+export function serverDid(): string | null {
+    return serverUser?.did ?? null;
+}
+
+/**
  * Compare the two sessions and fix what can be fixed without the user.
  * Runs on every page load and navigation, and when another tab changes the
  * browser session.

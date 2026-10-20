@@ -16,7 +16,7 @@ trait ReadsNotificationViewer
         $viewer = $request->viewer();
 
         if ($viewer === null || $viewer->isService()) {
-            throw new XrpcException('AuthRequired', 'Notifications belong to a signed-in account.', 401);
+            throw new XrpcException('AuthenticationRequired', 'Notifications belong to a signed-in account.', 401);
         }
 
         return $viewer->did;
