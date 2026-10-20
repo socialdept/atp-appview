@@ -7,6 +7,7 @@ use Illuminate\Pipeline\Pipeline as LaravelPipeline;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
+use SocialDept\AtpAppview\Notifications\NotificationIndexer;
 
 /**
  * One attempt at a batch: it passes through the pipes in
@@ -44,11 +45,12 @@ class Pipeline
     }
 
     /**
-     * The handlers in atp-appview.ingest.handlers, with LabelIndexer added
-     * when the list leaves it out. An app's published config lists the
-     * handlers of the version it was published from, and labels would be
-     * acknowledged and dropped without it. RecordIndexer and LabelIndexer
-     * each ignore the other's events.
+     * The handlers in atp-appview.ingest.handlers, with LabelIndexer and
+     * NotificationIndexer added when the list leaves them out. An app's
+     * published config lists the handlers of the version it was published
+     * from, and labels would be acknowledged and dropped without it.
+     * RecordIndexer and LabelIndexer each ignore the other's events.
+     * NotificationIndexer reads what RecordIndexer stored, so it runs last.
      *
      * @return array<int, BatchHandler>
      */
@@ -56,8 +58,10 @@ class Pipeline
     {
         $classes = (array) config('atp-appview.ingest.handlers', []);
 
-        if (! in_array(LabelIndexer::class, $classes, true)) {
-            $classes[] = LabelIndexer::class;
+        foreach ([LabelIndexer::class, NotificationIndexer::class] as $class) {
+            if (! in_array($class, $classes, true)) {
+                $classes[] = $class;
+            }
         }
 
         return array_map(fn (string $class) => $container->make($class), $classes);

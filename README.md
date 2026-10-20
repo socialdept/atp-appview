@@ -1162,6 +1162,60 @@ ATP_APPVIEW_IMAGES_URL=https://img.infra.coop    # or a private deployment
 
 `Blobs::url($blob, $did, 'icon')` builds one in a view's `summary()`.
 
+## Notifications
+
+Records that point at an account or a record notify that account. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
+
+```php
+// config/atp-appview/notifications.php
+'reasons' => [
+    'xyz.statusphere.like' => ['subject.uri' => 'like'],
+    'xyz.statusphere.status' => ['reply.parent.uri' => 'reply', 'facets.*.features.*.did' => 'mention'],
+    'xyz.statusphere.graph.follow' => ['subject' => 'follow'],
+],
+'separate' => ['reply', 'mention'],
+```
+
+A field holding a DID notifies that account, one holding an AT-URI the account in it. Nobody is notified about their own records. `NotificationIndexer` keeps `atp_notifications` as records are indexed: one row per recipient, removed with its record, untouched when the same record is delivered again. `php artisan appview:notifications:build` adds notifications for records indexed before their reasons were configured, without announcing them.
+
+Every notification carries its `reason`, its `subject` (the record acted on, or the recipient for a follow) and a `groupKey` made of the two, so "Alice and 4 others liked your status" is one group, and a client showing them one at a time can still join them. Reasons in `separate` give each notification its own group, as replies usually want.
+
+Only notifications whose record shows are read: not deleted, not hidden with its account, not hidden by moderation and not needing review. Lifting an action brings them back.
+
+```php
+use SocialDept\AtpAppview\Notifications\Notifications;
+
+$notifications = app(Notifications::class);
+
+$notifications->groups($did, limit: 30, cursor: null);   // grouped, newest group first
+$notifications->list($did);                              // one at a time
+$notifications->unreadCount($did);
+$notifications->markSeen($did);                          // now, or a time. Never moves back
+```
+
+A group has `groupKey`, `reason`, `subject`, `subjectView`, `count`, `unreadCount`, `isRead`, `indexedAt` and `latest`: the newest few notifications (`notifications.latest`, 3 by default), each with its `uri`, `actor` profile and `view`. Subjects and notifying records are hydrated with their collection's view, as the recipient sees them.
+
+The same is served over XRPC under NSIDs in the app's own namespace. A lexicon for each is optional:
+
+```php
+'xrpc' => [
+    'list' => 'com.example.notification.listNotifications',      // ?grouped=false for one at a time
+    'unread_count' => 'com.example.notification.getUnreadCount',
+    'update_seen' => 'com.example.notification.updateSeen',     // {seenAt?}
+],
+```
+
+### Delivering them
+
+`NotificationCreated` is dispatched after commit for each new notification whose record shows. Push, email and anything else outside the app hang off it, and `Notifications::one($event->id)` gives it hydrated:
+
+```php
+Event::listen(function (NotificationCreated $event) {
+    $user = User::firstWhere('did', $event->recipient);
+    $user?->notify(new SomethingHappened(app(Notifications::class)->one($event->id)));
+});
+```
+
 ## License
 
 The MIT License (MIT). Please see [LICENSE](LICENSE) for more information.
