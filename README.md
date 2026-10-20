@@ -325,6 +325,8 @@ class RejectSpam implements IngestHook
 
 List hooks in `atp-appview.ingest.hooks`. They run in order on the whole batch, after the blocklist and the repairs. Only creates and updates are offered, so a delete always goes through. A hook never changes a record. Rewriting one is what repairs are for. Rejections are tallied by hook, collection and reason, with the latest record, in `atp_ingest_rejections`, once the batch has gone through, and `Rejections::all()` reads them.
 
+A hook only sees records as they arrive. To apply a new or changed hook to records already indexed, run `php artisan appview:hooks:apply [collection]`. Each rejected record is removed as a delete at its stored rev, so its values, notifications and labels go with it, and the rejection is tallied. `--dry-run` counts what would go without removing anything.
+
 ### Ingest repairs
 
 A repair rewrites a record the app knows how to fix before it is indexed, such as a date in a format the lexicon does not allow. Without one, such a record fails and is parked as a failed delivery, or is indexed with a value queries cannot use.
