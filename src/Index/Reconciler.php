@@ -74,9 +74,15 @@ class Reconciler
     }
 
     /**
+     * Only the collections given when there are some, which need not be ones
+     * the index ingests: an app can keep a collection in step for chosen
+     * repos alone, such as the follows of its own users.
+     *
+     * @param  array<int, string>|null  $collections
+     *
      * @throws RuntimeException when the PDS cannot be read
      */
-    public function reconcile(string $did, bool $dryRun = false): ReconcileResult
+    public function reconcile(string $did, bool $dryRun = false, ?array $collections = null): ReconcileResult
     {
         $identity = Identity::query()->find($did, ['did', 'active', 'status']);
 
@@ -93,7 +99,7 @@ class Reconciler
         }
 
         $collections = array_values(array_filter(
-            Collections::all(),
+            $collections ?? Collections::all(),
             fn (string $collection) => $this->blocklist->ruleFor($did, $collection, $host) === null,
         ));
 

@@ -1322,7 +1322,7 @@ Event::listen(function (NotificationCreated $event) use ($preferences) {
 'follows' => ['collection' => 'app.bsky.graph.follow', 'path' => 'subject'],
 ```
 
-The follows must be indexed, for instance as a [companion collection](#companion-collections). Without `follows`, every notification counts as from everyone.
+The follows must be indexed. A [companion collection](#companion-collections) indexes them for every followed repo. To keep only your own users' follows, reconcile that collection for them, on sign-in and on a schedule: `app(Reconciler::class)->reconcile($did, collections: ['app.bsky.graph.follow'])`. A collection the index does not ingest is never followed by Tap, so only those repos are read. Without `follows`, every notification counts as from everyone.
 
 To show only some reasons, such as a tab of mentions, pass them to `groups()`, `list()` or `unreadCount()`, or as `reasons` to the XRPC methods (repeated for several):
 
