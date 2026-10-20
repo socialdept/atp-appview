@@ -54,7 +54,7 @@ use SocialDept\AtpAppview\Features;
 
 A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
 
-All three ship enabled. Moderation, notifications and the graph are still wired in by the package itself and move behind this list in coming releases, so for now leaving one out does not yet turn it off.
+All three ship enabled. Leaving the graph out turns it off: no follow or block fields, no mutes table, nothing filtered. Moderation and notifications are still wired in by the package itself and move behind this list in coming releases, so for now leaving either out does not yet turn it off.
 
 ### Scheduling
 
@@ -1309,7 +1309,7 @@ ATP_APPVIEW_IMAGES_URL=https://img.infra.coop    # or a private deployment
 
 ## Social graph
 
-Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself.
+Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself. It is a [feature](#features), `Features::graph()`, on by default. Left out, nobody follows, blocks or mutes anyone, and `mute()` refuses.
 
 ```php
 // config/atp-appview/graph.php
