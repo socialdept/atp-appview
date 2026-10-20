@@ -159,11 +159,16 @@ function localUrl(nsid: string, search: string): string {
     return `${prefix.replace(/\/$/, '')}/${nsid}${search ? `?${search}` : ''}`;
 }
 
-// What atproto-proxy names: the service asked for, or this AppView.
+// What atproto-proxy names: the service asked for, or this AppView when a
+// PDS can reach it.
 function proxyTarget(options: XrpcOptions): string | null {
-    return isLocal(options.service)
-        ? (configured()?.audience ?? null)
-        : (options.service ?? null);
+    if (!isLocal(options.service)) {
+        return options.service ?? null;
+    }
+
+    const config = configured();
+
+    return config?.proxy === false ? null : (config?.audience ?? null);
 }
 
 async function read<T>(response: Response): Promise<T> {

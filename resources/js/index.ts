@@ -50,3 +50,18 @@ export type { ReconnectState, ServerUser } from './reconnect';
 
 export { isLocal, procedure, query, xrpc, XrpcError } from './xrpc';
 export type { XrpcOptions } from './xrpc';
+
+export { createRecord, deleteRecord, RecordWriteError } from './records';
+export type { WriteOptions } from './records';
+
+export {
+    authorLabels,
+    badges,
+    hiddenFromGuests,
+    labelName,
+    warnings,
+} from './moderation';
+export type { Moderation, NamedLabel } from './moderation';
+
+export { authorHandle, authorName } from './views';
+export type { Author } from './views';

@@ -7,6 +7,7 @@ use Illuminate\Routing\Router;
 use SocialDept\AtpAppview\Http\Controllers\Auth\OAuthController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SessionController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SignInViewController;
+use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 
 /**
  * Frontend-mode sign-in: the routes the browser library talks to, the
@@ -69,10 +70,12 @@ class FrontendAuth
     }
 
     /**
-     * What the browser needs to start a server session from its own tokens.
-     * Share it with every page, such as through Inertia's shared props.
+     * What the browser needs to start a server session from its own tokens,
+     * call XRPC methods and sync the records it writes. Share it with every
+     * page, such as through Inertia's shared props. `proxy` says whether a PDS
+     * can reach this AppView, so calls go through one, or stay same origin.
      *
-     * @return array{sessionMethod: string|null, audience: string|null}
+     * @return array{sessionMethod: string|null, audience: string|null, xrpcPrefix: string, syncRecord: string|null, proxy: bool}
      */
     public static function browserConfig(): array
     {
@@ -80,6 +83,8 @@ class FrontendAuth
             'sessionMethod' => config('atp-appview.auth.frontend.session_method'),
             'audience' => config('atp-client.service_auth.audience'),
             'xrpcPrefix' => '/'.trim((string) config('atp-appview.xrpc.prefix', 'xrpc'), '/'),
+            'syncRecord' => config('atp-appview.xrpc.sync_record'),
+            'proxy' => app(ServiceIdentity::class)->publishable(),
         ];
     }
 
