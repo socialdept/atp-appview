@@ -36,29 +36,87 @@ class SelfLabels
                 continue;
             }
 
-            $removed = $connection->table('atp_labels')->where('self', true)->whereIn('uri', array_column($written, 'uri'));
+            $changed += array_fill_keys($this->replace($connection, $written, fn () => str_replace(' ', 'T', $now).'.000Z'), true);
+        }
 
-            foreach ((clone $removed)->distinct()->pluck('subject') as $did) {
-                $changed[$did] = true;
-            }
+        return array_keys($changed);
+    }
 
-            $removed->delete();
+    /**
+     * Read the self-labels of records indexed before they were kept, or while
+     * labels.self_labels was off. Safe to run again: each record's labels are
+     * replaced, not added to.
+     *
+     * @param  \Closure(int): void|null  $progress  Called with the records read so far
+     * @return array<int, string> Accounts whose self-labels changed
+     */
+    public function rebuild(Connection $connection, ?string $collection = null, ?\Closure $progress = null): array
+    {
+        $changed = [];
+        $read = 0;
 
-            $labels = [];
+        $connection->table('atp_records')
+            ->when($collection !== null, fn ($query) => $query->where('collection', $collection))
+            ->whereNull('deleted_at')
+            ->select(['uri', 'did', 'cid', 'record', 'indexed_at'])
+            ->orderBy('uri')
+            ->chunk(500, function ($rows) use ($connection, $progress, &$changed, &$read) {
+                $rows = array_map(fn ($row) => (array) $row, $rows->all());
+                $changed += array_fill_keys($connection->transaction(fn () => $this->replace(
+                    $connection,
+                    $rows,
+                    fn (array $row) => str_replace(' ', 'T', substr((string) $row['indexed_at'], 0, 19)).'.000Z',
+                )), true);
+                $read += count($rows);
 
-            foreach ($written as $row) {
-                foreach (self::values($row['record'] === null ? null : json_decode((string) $row['record'], true)) as $val) {
-                    $changed[$row['did']] = true;
-                    $labels[] = [
-                        'src' => $row['did'], 'uri' => $row['uri'], 'subject' => $row['did'], 'cid' => $row['cid'],
-                        'val' => $val, 'cts' => str_replace(' ', 'T', $now).'.000Z', 'exp' => null, 'verified' => true, 'self' => true,
-                    ];
+                if ($progress !== null) {
+                    $progress($read);
                 }
+            });
+
+        return array_keys($changed);
+    }
+
+    /**
+     * Swap the stored self-labels of these records for the ones their bodies carry.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  \Closure(array<string, mixed>): string  $cts
+     * @return array<int, string> Accounts whose self-labels changed
+     */
+    protected function replace(Connection $connection, array $rows, \Closure $cts): array
+    {
+        $changed = [];
+        $removed = $connection->table('atp_labels')->where('self', true)->whereIn('uri', array_column($rows, 'uri'));
+        $before = [];
+
+        foreach ((clone $removed)->get(['uri', 'val', 'subject']) as $label) {
+            $before[$label->uri][$label->val] = $label->subject;
+        }
+
+        $removed->delete();
+
+        $labels = [];
+
+        foreach ($rows as $row) {
+            $values = self::values($row['record'] === null ? null : json_decode((string) $row['record'], true));
+
+            $had = $before[$row['uri']] ?? [];
+
+            if (array_diff($values, array_keys($had)) !== [] || array_diff(array_keys($had), $values) !== []) {
+                $changed += array_fill_keys([$row['did'], ...array_values($had)], true);
             }
 
-            if ($labels !== []) {
-                $connection->table('atp_labels')->insertOrIgnore($labels);
+            foreach ($values as $val) {
+                $labels[] = [
+                    'src' => $row['did'], 'uri' => $row['uri'], 'subject' => $row['did'], 'cid' => $row['cid'],
+                    'val' => $val, 'cts' => $cts($row), 'exp' => null, 'verified' => true, 'self' => true,
+                ];
             }
+        }
+
+        if ($labels !== []) {
+            $connection->table('atp_labels')->insertOrIgnore($labels);
         }
 
         return array_keys($changed);
