@@ -643,7 +643,7 @@ The first time the worker runs it has no history, so collections that already ho
 php artisan appview:backfill app.example.like    # start one by hand
 ```
 
-`Backfills::progress()` reports each running backfill, and those that ended in the last hour, for a status page or admin panel. `active()` returns only the running ones, so a page can tell people that some records may be missing for now. `BackfillStarted` and `BackfillFinished` events fire as they start and end.
+`Backfills::progress()` reports each running backfill, and those that ended in the last hour, for a status page or admin panel. `active()` returns only the running ones, so a page can tell people that some records may be missing for now. `summary()` adds the running ones up for that notice: repos to read, read so far, the percent, and the longest estimate left, or null when nothing is running. `BackfillStarted` and `BackfillFinished` events fire as they start and end.
 
 ## Blocklist
 
