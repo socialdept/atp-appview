@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Views\Parts;
 
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Labels\Target;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Record;
@@ -24,6 +25,10 @@ class Labels implements Part
 
     public function resolve(Collection $records, ?string $viewer): array
     {
+        if (! ModerationFeature::on()) {
+            return [];
+        }
+
         if ($this->author) {
             $labels = Label::query()->live()->whereIn('subject', $records->pluck('did')->unique()->all())->orderBy('cts')->get()
                 ->filter(fn (Label $label) => Target::of($label->uri) === Target::ACCOUNT)

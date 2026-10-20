@@ -7,6 +7,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Labels\Visibility;
 use SocialDept\AtpAppview\Models\AccountAction;
@@ -36,6 +37,8 @@ class AccountActions
 
     public function ban(string $did, ?string $reason = null, ?string $actor = null): AccountAction
     {
+        ModerationFeature::ensureOn();
+
         $days = config('atp-appview.moderation.prune_banned_after_days', 365);
 
         return $this->apply($did, AccountAction::BAN, AccountAction::MANUAL, $reason, $actor, [
@@ -49,6 +52,8 @@ class AccountActions
      */
     public function unban(string $did, ?string $actor = null): int
     {
+        ModerationFeature::ensureOn();
+
         $lifted = $this->lift($did, AccountAction::BAN, $actor);
 
         if ($lifted > 0) {
@@ -64,11 +69,15 @@ class AccountActions
 
     public function review(string $did, ?string $reason = null, ?string $actor = null): AccountAction
     {
+        ModerationFeature::ensureOn();
+
         return $this->apply($did, AccountAction::REVIEW, AccountAction::MANUAL, $reason, $actor);
     }
 
     public function unreview(string $did, ?string $actor = null): int
     {
+        ModerationFeature::ensureOn();
+
         return $this->lift($did, AccountAction::REVIEW, $actor);
     }
 
@@ -79,6 +88,8 @@ class AccountActions
      */
     public function takedown(string $did, ?string $reason = null, ?string $actor = null): AccountAction
     {
+        ModerationFeature::ensureOn();
+
         $driver = $this->hosts->for($did) ?? throw new RuntimeException("{$did} is not hosted on a PDS in atp-appview.pds.hosts.");
 
         $action = $this->apply($did, AccountAction::TAKEDOWN, AccountAction::MANUAL, $reason, $actor, ['pds' => $this->hosts->urlFor($did)], refresh: false);
@@ -89,6 +100,8 @@ class AccountActions
 
     public function restore(string $did, ?string $actor = null): int
     {
+        ModerationFeature::ensureOn();
+
         $driver = $this->hosts->for($did) ?? throw new RuntimeException("{$did} is not hosted on a PDS in atp-appview.pds.hosts.");
         $driver->restore($did);
 
@@ -100,11 +113,15 @@ class AccountActions
      */
     public function cancelPrune(string $did): void
     {
+        ModerationFeature::ensureOn();
+
         AccountAction::query()->active()->where('did', $did)->where('action', AccountAction::BAN)->update(['prune_cancelled' => true]);
     }
 
     public function resumePrune(string $did): void
     {
+        ModerationFeature::ensureOn();
+
         AccountAction::query()->active()->where('did', $did)->where('action', AccountAction::BAN)->update(['prune_cancelled' => false]);
     }
 
@@ -114,6 +131,10 @@ class AccountActions
      */
     public function banned(string $did): bool
     {
+        if (! ModerationFeature::on()) {
+            return false;
+        }
+
         try {
             return AccountAction::query()->active()->where('did', $did)->where('action', AccountAction::BAN)->exists();
         } catch (QueryException) {
@@ -123,6 +144,10 @@ class AccountActions
 
     public function reviewed(string $did): bool
     {
+        if (! ModerationFeature::on()) {
+            return false;
+        }
+
         return $this->active($did)->contains('action', AccountAction::REVIEW);
     }
 
@@ -134,6 +159,10 @@ class AccountActions
      */
     public function bannedAmong(array $dids): array
     {
+        if (! ModerationFeature::on()) {
+            return [];
+        }
+
         if ($dids === []) {
             return [];
         }
@@ -150,6 +179,10 @@ class AccountActions
      */
     public function active(string $did): Collection
     {
+        if (! ModerationFeature::on()) {
+            return new Collection();
+        }
+
         return AccountAction::query()->active()->where('did', $did)->get();
     }
 
@@ -158,6 +191,10 @@ class AccountActions
      */
     public function history(string $did): Collection
     {
+        if (! ModerationFeature::on()) {
+            return new Collection();
+        }
+
         return AccountAction::query()->where('did', $did)->orderByDesc('id')->get();
     }
 
@@ -171,6 +208,8 @@ class AccountActions
      */
     public function fromLabels(string $did, array $bans, array $reviews): void
     {
+        ModerationFeature::ensureOn();
+
         $days = config('atp-appview.moderation.prune_banned_after_days', 365);
 
         foreach ([AccountAction::BAN => $bans, AccountAction::REVIEW => $reviews] as $action => $labels) {

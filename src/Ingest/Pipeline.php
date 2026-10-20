@@ -7,6 +7,7 @@ use Illuminate\Pipeline\Pipeline as LaravelPipeline;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
@@ -48,13 +49,11 @@ class Pipeline
     }
 
     /**
-     * The handlers in atp-appview.ingest.handlers, with LabelIndexer added
-     * when the list leaves it out, then those enabled features add. An app's
-     * published config lists the handlers of the version it was published
-     * from, and labels would be acknowledged and dropped without it.
-     * RecordIndexer and LabelIndexer each ignore the other's events. Feature
-     * handlers such as NotificationIndexer read what RecordIndexer stored,
-     * so they run after the package's own.
+     * The handlers in atp-appview.ingest.handlers, then those enabled
+     * features add, such as moderation's LabelIndexer and notifications'
+     * NotificationIndexer. RecordIndexer and LabelIndexer each ignore the
+     * other's events. Feature handlers read what RecordIndexer stored, so
+     * they run after the package's own.
      *
      * @return array<int, BatchHandler>
      */
@@ -62,14 +61,12 @@ class Pipeline
     {
         $classes = (array) config('atp-appview.ingest.handlers', []);
 
-        if (! in_array(LabelIndexer::class, $classes, true)) {
-            $classes[] = LabelIndexer::class;
-        }
-
-        // A config published before notifications were a feature lists their
-        // indexer, which must not run while the feature is off.
-        if (! Features::enabled(NotificationsFeature::class)) {
-            $classes = array_values(array_diff($classes, [NotificationIndexer::class]));
+        // A config published before these were features lists their
+        // indexers, which must not run while the feature is off.
+        foreach ([ModerationFeature::class => LabelIndexer::class, NotificationsFeature::class => NotificationIndexer::class] as $feature => $indexer) {
+            if (! Features::enabled($feature)) {
+                $classes = array_values(array_diff($classes, [$indexer]));
+            }
         }
 
         // Then what enabled features add, after the package's own.

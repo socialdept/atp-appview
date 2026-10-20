@@ -10,8 +10,6 @@ use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
-use SocialDept\AtpAppview\Labels\SelfLabels;
-use SocialDept\AtpAppview\Labels\Visibility;
 
 /**
  * Writes every ingested batch to atp_records and atp_identities.
@@ -76,11 +74,8 @@ class RecordIndexer implements BatchHandler
                 // After hiding, so new references of an inactive account are hidden too.
                 app(RecordValues::class)->rewrite($connection, $records, $now);
 
-                $selfLabeled = config('atp-appview.labels.self_labels', true) ? app(SelfLabels::class)->sync($connection, $records, $now) : [];
-
-                // New records of accounts whose labels hide them, hidden too.
-                app(Visibility::class)->arrivals(array_column($records, 'did'), $selfLabeled);
-
+                // Features' work on what was written, such as moderation's
+                // self-labels and hiding the arrivals of hidden accounts.
                 foreach (app(AppView::class)->afterWriteCallbacks() as $afterWrite) {
                     $afterWrite($connection, $records, $now);
                 }
