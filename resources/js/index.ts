@@ -41,8 +41,12 @@ export {
     ReconnectCanceledError,
     reconnected,
     reconnectState,
+    serverDid,
     signOut,
     syncSessions,
     withSession,
 } from './reconnect';
 export type { ReconnectState, ServerUser } from './reconnect';
+
+export { isLocal, procedure, query, xrpc, XrpcError } from './xrpc';
+export type { XrpcOptions } from './xrpc';

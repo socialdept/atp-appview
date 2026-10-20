@@ -36,6 +36,8 @@ export interface AtprotoConfig {
     // From FrontendAuth::browserConfig() on the server.
     sessionMethod: string | null;
     audience: string | null;
+    // Where this AppView's XRPC routes are, /xrpc by default.
+    xrpcPrefix?: string;
     // Prefixes the browser storage the library uses, so two apps on one
     // origin keep their sessions apart.
     namespace?: string;
@@ -52,6 +54,14 @@ export function config(): AtprotoConfig {
         throw new Error('Call configureAtproto() before signing in.');
     }
 
+    return current;
+}
+
+/**
+ * The configuration, or null before configureAtproto(), for helpers that
+ * work without it.
+ */
+export function configured(): AtprotoConfig | null {
     return current;
 }
 

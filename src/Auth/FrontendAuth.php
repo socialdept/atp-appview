@@ -79,6 +79,7 @@ class FrontendAuth
         return [
             'sessionMethod' => config('atp-appview.auth.frontend.session_method'),
             'audience' => config('atp-client.service_auth.audience'),
+            'xrpcPrefix' => '/'.trim((string) config('atp-appview.xrpc.prefix', 'xrpc'), '/'),
         ];
     }
 
