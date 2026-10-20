@@ -24,7 +24,8 @@ use SocialDept\AtpAppview\Views\View;
  * Lifting an action brings them back.
  *
  * A group is every notification with the same reason and subject, newest
- * first by its newest notification:
+ * first by its newest notification's time. Times, not ids, order them, since
+ * notifications built for older records arrive with those records' times:
  *
  *     ['groupKey' => '…', 'reason' => 'like', 'subject' => 'at://…',
  *      'subjectView' => [...], 'count' => 5, 'unreadCount' => 2,
@@ -140,11 +141,12 @@ class Notifications
             ->selectRaw('count(*) as total, max(n.id) as newest, max(n.indexed_at) as newest_at')
             ->selectRaw('sum(case when n.indexed_at > ? then 1 else 0 end) as unread', [$this->since($seen)])
             ->groupBy('n.group_key', 'n.reason', 'n.subject')
+            ->orderByDesc('newest_at')
             ->orderByDesc('newest')
             ->limit($limit + 1);
 
-        if (is_numeric($cursor)) {
-            $query->havingRaw('max(n.id) < ?', [(int) $cursor]);
+        if (($after = self::parseCursor($cursor)) !== null) {
+            $query->havingRaw('(max(n.indexed_at) < ? or (max(n.indexed_at) = ? and max(n.id) < ?))', [$after[0], $after[0], $after[1]]);
         }
 
         $groups = $query->get();
@@ -177,7 +179,7 @@ class Notifications
 
         return [
             'notifications' => $items,
-            'cursor' => $more ? (string) $groups->last()->newest : null,
+            'cursor' => $more ? self::cursor($groups->last()->newest_at, $groups->last()->newest) : null,
             'seenAt' => $seen === null ? null : self::time($seen),
         ];
     }
@@ -193,10 +195,12 @@ class Notifications
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $seen = $this->seenAt($did);
 
-        $query = $this->visible($did)->select('n.*')->orderByDesc('n.id')->limit($limit + 1);
+        $query = $this->visible($did)->select('n.*')->orderByDesc('n.indexed_at')->orderByDesc('n.id')->limit($limit + 1);
 
-        if (is_numeric($cursor)) {
-            $query->where('n.id', '<', (int) $cursor);
+        if (($after = self::parseCursor($cursor)) !== null) {
+            $query->where(fn (Builder $query) => $query
+                ->where('n.indexed_at', '<', $after[0])
+                ->orWhere(fn (Builder $query) => $query->where('n.indexed_at', $after[0])->where('n.id', '<', $after[1])));
         }
 
         $rows = $query->get();
@@ -205,7 +209,7 @@ class Notifications
 
         return [
             'notifications' => $this->present($rows, $did, $seen),
-            'cursor' => $more ? (string) $rows->last()->id : null,
+            'cursor' => $more ? self::cursor($rows->last()->indexed_at, $rows->last()->id) : null,
             'seenAt' => $seen === null ? null : self::time($seen),
         ];
     }
@@ -309,11 +313,12 @@ class Notifications
         $ranked = $this->visible($did)
             ->whereIn('n.group_key', $keys)
             ->select('n.id', 'n.group_key', 'n.actor_did', 'n.source_uri', 'n.indexed_at')
-            ->selectRaw('row_number() over (partition by n.group_key order by n.id desc) as nth');
+            ->selectRaw('row_number() over (partition by n.group_key order by n.indexed_at desc, n.id desc) as nth');
 
         return $this->connection()->query()
             ->fromSub($ranked, 'ranked')
             ->where('nth', '<=', max(1, (int) config('atp-appview.notifications.latest', 3)))
+            ->orderByDesc('indexed_at')
             ->orderByDesc('id')
             ->get();
     }
@@ -379,6 +384,27 @@ class Notifications
             ->whereNull('r.hidden_at')
             ->whereNull('r.moderated_at')
             ->whereNull('r.limited_at');
+    }
+
+    /**
+     * Where a page ends, newest first: a notification's time and its id,
+     * which breaks ties between notifications of the same second.
+     */
+    protected static function cursor(mixed $indexedAt, mixed $id): string
+    {
+        return Carbon::parse($indexedAt, 'UTC')->getTimestamp().'-'.(int) $id;
+    }
+
+    /**
+     * @return array{0: string, 1: int}|null The time as stored, and the id
+     */
+    protected static function parseCursor(?string $cursor): ?array
+    {
+        if ($cursor === null || ! preg_match('/^(\d+)-(\d+)$/', $cursor, $match)) {
+            return null;
+        }
+
+        return [Carbon::createFromTimestamp((int) $match[1], 'UTC')->format('Y-m-d H:i:s'), (int) $match[2]];
     }
 
     protected function since(?Carbon $seen): string

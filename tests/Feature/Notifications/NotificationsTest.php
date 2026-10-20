@@ -204,6 +204,35 @@ class NotificationsTest extends TestCase
         $this->assertNull($second['cursor']);
     }
 
+    public function test_notifications_are_ordered_by_time_even_when_built_out_of_order(): void
+    {
+        $times = ['a' => '2026-10-03 00:00:00', 'b' => '2026-10-01 00:00:00', 'c' => '2026-10-02 00:00:00', 'd' => '2026-10-02 00:00:00'];
+
+        foreach ($times as $rkey => $time) {
+            $like = $this->like(self::BOB, "l{$rkey}", $this->thing(self::ALICE, $rkey));
+            // As appview:notifications:build gives them: the record's time, in whatever order it reads them.
+            DB::table('atp_notifications')->where('source_uri', $like)->update(['indexed_at' => $time]);
+        }
+
+        $walk = function (string $method) {
+            $seen = [];
+            $cursor = null;
+
+            do {
+                $page = $this->notifications()->{$method}(self::ALICE, 1, $cursor);
+                $seen[] = substr($page['notifications'][0]['subject'], -1);
+                $cursor = $page['cursor'];
+            } while ($cursor !== null && count($seen) < 10);
+
+            return $seen;
+        };
+
+        // Newest first, and the same second newest id first.
+        $this->assertSame(['a', 'd', 'c', 'b'], array_map(fn ($group) => substr($group['subject'], -1), $this->notifications()->groups(self::ALICE)['notifications']));
+        $this->assertSame(['a', 'd', 'c', 'b'], $walk('groups'));
+        $this->assertSame(['a', 'd', 'c', 'b'], $walk('list'));
+    }
+
     public function test_seen_marks_what_came_before_it_read(): void
     {
         $post = $this->thing(self::ALICE, 'post');
