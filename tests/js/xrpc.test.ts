@@ -98,6 +98,22 @@ describe('xrpc', () => {
         expect(appFetch).not.toHaveBeenCalled();
     });
 
+    it('stays same origin when no PDS can reach this AppView', async () => {
+        browser = { did: 'did:plc:alice' };
+        configureAtproto({
+            routes: {} as never,
+            sessionMethod: null,
+            audience: AUDIENCE,
+            proxy: false,
+        });
+        appFetch.mockResolvedValue(json({ count: 2 }));
+
+        expect(await xrpc.query('com.example.getUnreadCount')).toEqual({
+            count: 2,
+        });
+        expect(pdsFetch).not.toHaveBeenCalled();
+    });
+
     it('calls another service through the PDS even with a server session', async () => {
         server = 'did:plc:alice';
         browser = { did: 'did:plc:alice' };

@@ -446,6 +446,21 @@ Content a label hides carries `moderated_at`, kept apart from `hidden_at`, which
 "moderation": {"blur": "media", "warn": [{"src": "did:plc:...", "val": "graphic-media"}], "author": {"review": true}}
 ```
 
+The browser library has the part's type and helpers for showing it, so a moderation gate does not redefine them. A content warning covers what was written, and an author's account labels never do:
+
+```ts
+import { authorLabels, badges, hiddenFromGuests, labelName, warnings } from '@socialdept/atp-appview';
+import type { Moderation } from '@socialdept/atp-appview';
+
+warnings(view.moderation);           // the content's own warnings, which cover it
+badges(view.moderation);             // its badges
+authorLabels(view.moderation);       // the author's account labels, as notes
+hiddenFromGuests(view.moderation);   // hidden only because the author asked to be, so offer a sign-in
+labelName('graphic-media');          // "graphic media"
+```
+
+`authorName()` and `authorHandle()` do the same for the `Author` part: the display name, else `@handle`, else the DID.
+
 `Labels` is the API for everything else:
 
 ```php
@@ -1001,6 +1016,17 @@ It reads `audience` and `xrpcPrefix` from `FrontendAuth::browserConfig()`, passe
 POST /xrpc/com.example.syncRecord   {"uri": "at://did:plc:alice/com.example.thing/3abc"}
 → {"uri": "at://did:plc:alice/com.example.thing/3abc", "indexed": true}
 ```
+
+In the browser, `createRecord()` and `deleteRecord()` do both steps: write to the signed-in account's PDS, then call the sync procedure through the [xrpc helper](#calling-methods), same origin or through the PDS as it can. Each step runs in `withSession()` on its own, so a dead session offers to reconnect and only the step that never happened runs again. Errors are `RecordWriteError` with the PDS's message and status:
+
+```ts
+import { createRecord, deleteRecord } from '@socialdept/atp-appview';
+
+const { uri } = await createRecord('com.example.thing', { text: 'hi', createdAt: new Date().toISOString() });
+await deleteRecord(uri);
+```
+
+They read `syncRecord` and `proxy` from `FrontendAuth::browserConfig()`, passed to `configureAtproto()`. `proxy` is whether a PDS can reach this AppView, which needs a published service DID. Without one, calls stay same origin.
 
 It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. The record passes through the same pipeline as Tap's deliveries, repairs and hooks included, so a record a block rule or a hook keeps out answers `indexed: false`.
 
