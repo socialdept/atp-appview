@@ -213,7 +213,8 @@ class AccountStatusTest extends TestCase
     public function test_upgrading_applies_the_status_of_accounts_already_inactive(): void
     {
         // Back to before the account status migration, however many follow it.
-        $migrations = array_map('basename', glob(__DIR__.'/../../../database/migrations/*.php'));
+        // Features keep theirs in folders of their own, run alongside.
+        $migrations = array_map('basename', glob(__DIR__.'/../../../database/migrations/{,*/}*.php', GLOB_BRACE));
         sort($migrations);
         $step = count($migrations) - array_search('2026_10_17_000008_add_account_status_to_atp_records_and_identities.php', $migrations, true);
         $this->artisan('migrate:rollback', ['--step' => $step])->run();

@@ -6,7 +6,6 @@ use Closure;
 use Illuminate\Contracts\Container\Container;
 use InvalidArgumentException;
 use SocialDept\AtpAppview\Features;
-use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Xrpc\Auth;
 
 /**
@@ -214,8 +213,8 @@ class AppView
     }
 
     /**
-     * Everyone whose records the viewer should not see, from the graph and
-     * every read filter.
+     * Everyone whose records the viewer should not see, from every read
+     * filter, such as the graph's blocks and mutes.
      *
      * @return array<int, string>
      */
@@ -223,7 +222,7 @@ class AppView
     {
         // Not kept between calls: this registrar lives as long as the app,
         // and a block or mute can change between requests.
-        $hidden = app(Graph::class)->hidden($viewer);
+        $hidden = [];
 
         foreach ($this->readFilters as $filter) {
             array_push($hidden, ...array_values(array_filter((array) $filter($viewer), 'is_string')));

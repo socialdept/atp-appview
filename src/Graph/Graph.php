@@ -5,6 +5,9 @@ namespace SocialDept\AtpAppview\Graph;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use LogicException;
+use SocialDept\AtpAppview\Features;
+use SocialDept\AtpAppview\Features\Graph as GraphFeature;
 use SocialDept\AtpAppview\Index\Field;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
@@ -20,6 +23,9 @@ use SocialDept\AtpAppview\Index\ValueHash;
  * Blocks apply both ways: neither account sees the other's records. Mutes
  * apply only to the muter. hidden() gives both at once, for leaving records
  * out of what a viewer reads.
+ *
+ * Needs the graph feature (Features::graph()). Without it nobody follows,
+ * blocks or mutes anyone, and mute() refuses.
  */
 class Graph
 {
@@ -38,6 +44,10 @@ class Graph
      */
     public static function relation(string $kind): ?array
     {
+        if (! self::on()) {
+            return null;
+        }
+
         $relation = (array) config("atp-appview.graph.{$kind}", []);
 
         // Before the graph had its own config, notifications named follows.
@@ -113,11 +123,19 @@ class Graph
      */
     public function muted(string $did): array
     {
+        if (! self::on()) {
+            return [];
+        }
+
         return $this->connection()->table('atp_mutes')->where('did', $did)->pluck('subject')->all();
     }
 
     public function mute(string $did, string $subject): void
     {
+        if (! self::on()) {
+            throw new LogicException('Mutes need the graph feature: add Features::graph() to atp-appview.features.');
+        }
+
         if ($did === $subject) {
             return;
         }
@@ -133,6 +151,10 @@ class Graph
 
     public function unmute(string $did, string $subject): void
     {
+        if (! self::on()) {
+            return;
+        }
+
         $this->connection()->table('atp_mutes')->where('did', $did)->where('subject', $subject)->delete();
 
         unset($this->hidden[$did]);
@@ -171,7 +193,7 @@ class Graph
         $followedBy = array_flip($this->pointingAt(self::FOLLOWS, $viewer, $dids));
         $blocking = array_flip($this->pointingFrom(self::BLOCKS, $viewer, $dids));
         $blockedBy = array_flip($this->pointingAt(self::BLOCKS, $viewer, $dids));
-        $muted = array_flip($this->connection()->table('atp_mutes')->where('did', $viewer)->whereIn('subject', $dids)->pluck('subject')->all());
+        $muted = array_flip(self::on() ? $this->connection()->table('atp_mutes')->where('did', $viewer)->whereIn('subject', $dids)->pluck('subject')->all() : []);
 
         $relationships = [];
 
@@ -186,6 +208,14 @@ class Graph
         }
 
         return $relationships;
+    }
+
+    /**
+     * Whether the graph feature is on.
+     */
+    public static function on(): bool
+    {
+        return Features::enabled(GraphFeature::class);
     }
 
     /**
