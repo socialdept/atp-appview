@@ -122,6 +122,8 @@ Sending the same reason, subject and record to someone again adds nothing, so a 
 
 ## Delivering them
 
+The [push](push.md) feature does this for Web Push, with no library to install. To deliver another way:
+
 `NotificationCreated` is dispatched after commit for each new notification whose record shows. Push, email and anything else outside the app hang off it, and `Notifications::one($event->id)` gives it hydrated:
 
 ```php
