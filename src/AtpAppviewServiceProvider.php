@@ -22,6 +22,7 @@ use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\FailedDeliveriesCommand;
 use SocialDept\AtpAppview\Console\FieldsCommand;
+use SocialDept\AtpAppview\Console\HooksApplyCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
@@ -170,6 +171,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
                 FieldsCommand::class,
+                HooksApplyCommand::class,
                 NotificationsBuildCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,

@@ -175,6 +175,23 @@ class FailedDeliveriesTest extends TestCase
         $this->assertSame(0, Record::query()->count());
     }
 
+    public function test_hooks_can_be_applied_to_records_indexed_before_them(): void
+    {
+        $this->deliverThroughConfig([$this->event(1, 'a'), $this->event(2, 'spam', record: ['text' => 'buy now'])]);
+        config(['atp-appview.ingest.hooks' => [Spammy::class]]);
+
+        $this->artisan('appview:hooks:apply', ['--dry-run' => true])->expectsOutputToContain('Would remove 1 records')->assertSuccessful();
+        $this->assertSame(['a', 'spam'], Record::query()->orderBy('rkey')->pluck('rkey')->all(), 'A dry run removes nothing.');
+        $this->assertSame([], app(Rejections::class)->all());
+
+        $this->artisan('appview:hooks:apply')->expectsOutputToContain('Removed 1 records')->assertSuccessful();
+        $this->assertSame(['a'], Record::query()->pluck('rkey')->all());
+        $this->assertNotNull(Record::query()->withTrashed()->where('rkey', 'spam')->value('deleted_at'), 'Removed as a delete, so what depends on it goes too.');
+        $this->assertSame(1, app(Rejections::class)->all()[0]['total']);
+
+        $this->artisan('appview:hooks:apply')->expectsOutputToContain('Removed 0 records')->assertSuccessful();
+    }
+
     public function test_a_rejection_is_tallied_only_once_the_batch_goes_through(): void
     {
         config(['atp-appview.ingest.hooks' => [Spammy::class]]);
