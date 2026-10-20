@@ -59,7 +59,9 @@ class DefaultQueryHandler
         $reverse = $request->param('reverse') === true;
         $direction = $reverse ? 'asc' : 'desc';
 
+        // Nothing by accounts the viewer blocks, is blocked by, or muted.
         $query = Record::collection($collection)
+            ->visibleTo($request->viewer()?->did)
             ->orderBy('sort_at', $direction)
             ->orderBy('uri', $direction);
 

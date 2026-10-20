@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Index;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
+use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Models\Record;
 
 /**
@@ -43,6 +44,9 @@ class RecordQuery
 
     protected ?string $did = null;
 
+    /** @var array<int, string> Authors left out */
+    protected array $hidden = [];
+
     protected ?string $cursor = null;
 
     protected int $limit = 50;
@@ -76,6 +80,17 @@ class RecordQuery
     public function by(string $did): static
     {
         $this->did = $did;
+
+        return $this;
+    }
+
+    /**
+     * Leave out records by accounts the viewer blocks, is blocked by, or
+     * muted. A null viewer sees everything.
+     */
+    public function visibleTo(?string $viewer): static
+    {
+        $this->hidden = $viewer === null ? [] : app(Graph::class)->hidden($viewer);
 
         return $this;
     }
@@ -178,6 +193,13 @@ class RecordQuery
             $query->whereExists(fn (Builder $exists) => $exists->selectRaw('1')->from(RecordValues::VALUES.' as f')
                 ->whereColumn('f.record_id', 'd.record_id')
                 ->where('f.key_id', $filter['key'])->where('f.value_hash', $filter['hash']));
+        }
+
+        // By the records' author, since only reference values carry its hash.
+        if ($this->hidden !== []) {
+            $query->whereNotExists(fn (Builder $records) => $records->selectRaw('1')->from('atp_records as hidden')
+                ->whereColumn('hidden.id', 'd.record_id')
+                ->whereIn('hidden.did', $this->hidden));
         }
 
         // Across accounts is discovery: what needs review is left out. One

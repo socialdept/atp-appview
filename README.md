@@ -1246,6 +1246,47 @@ ATP_APPVIEW_IMAGES_URL=https://img.infra.coop    # or a private deployment
 
 `Blobs::url($blob, $did, 'icon')` builds one in a view's `summary()`.
 
+## Social graph
+
+Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself.
+
+```php
+// config/atp-appview/graph.php
+'follows' => ['collection' => 'com.example.graph.follow', 'path' => 'subject'],
+'blocks' => ['collection' => 'com.example.graph.block', 'path' => 'subject'],
+```
+
+The fields are kept in the index like references, so run `appview:fields` after setting them. An app with no graph of its own can name Bluesky's, `app.bsky.graph.follow` and `app.bsky.graph.block`. Either way the records must be indexed: ingested, a [companion collection](#companion-collections), or reconciled for your own users with `Reconciler::reconcile($did, collections: [...])`.
+
+```php
+use SocialDept\AtpAppview\Graph\Graph;
+
+$graph = app(Graph::class);
+
+$graph->follows($alice, $bob);        // does Alice follow Bob
+$graph->following($alice);            // who Alice follows
+$graph->followers($bob);              // who follows Bob, newest first
+$graph->blocking($alice);             // who Alice blocks
+$graph->blockedBy($alice);            // who blocks Alice
+$graph->mute($alice, $bob);           // and unmute(), muted()
+$graph->hidden($alice);               // blocked either way, or muted
+```
+
+Blocks apply both ways and mutes only to the muter, wherever records are listed for a viewer:
+
+| Where | How |
+| --- | --- |
+| Your own queries | `Record::query()->visibleTo($viewer)`, and `->followedBy($viewer)` for a following feed |
+| Filtered queries | `RecordQuery::in($collection)->visibleTo($viewer)` |
+| Built-in XRPC lists | The signed-in viewer, automatically |
+| Notifications | Nothing from hidden accounts. Unblocking or unmuting brings them back |
+
+The `Relationship` view part tells a view how the viewer stands with each record's author, null without a viewer and for the viewer's own records:
+
+```php
+'viewer' => new Relationship(),   // {following, followedBy, blocking, blockedBy, muted}
+```
+
 ## Notifications
 
 Records that point at an account or a record notify that account. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
@@ -1316,13 +1357,9 @@ Event::listen(function (NotificationCreated $event) use ($preferences) {
 });
 ```
 
-"Only the accounts they follow" reads follows from the index. Name the collection and field a follow keeps its subject in, and run `appview:fields`, which keeps that field for follows already indexed:
+"Only the accounts they follow" reads follows from the [social graph](#social-graph). Without follows configured there, every notification counts as from everyone. (`notifications.follows`, where this lived before the graph, is still read when `graph.follows` is not set.)
 
-```php
-'follows' => ['collection' => 'app.bsky.graph.follow', 'path' => 'subject'],
-```
-
-The follows must be indexed. A [companion collection](#companion-collections) indexes them for every followed repo. To keep only your own users' follows, reconcile that collection for them, on sign-in and on a schedule: `app(Reconciler::class)->reconcile($did, collections: ['app.bsky.graph.follow'])`. A collection the index does not ingest is never followed by Tap, so only those repos are read. Without `follows`, every notification counts as from everyone.
+The follows must be indexed. A [companion collection](#companion-collections) indexes them for every followed repo. To keep only your own users' follows, reconcile that collection for them, on sign-in and on a schedule: `app(Reconciler::class)->reconcile($did, collections: ['app.bsky.graph.follow'])`. A collection the index does not ingest is never followed by Tap, so only those repos are read.
 
 To show only some reasons, such as a tab of mentions, pass them to `groups()`, `list()` or `unreadCount()`, or as `reasons` to the XRPC methods (repeated for several):
 

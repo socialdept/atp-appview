@@ -7,6 +7,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Views\Contracts\ReadsRefs;
 
 /**
@@ -64,12 +65,11 @@ class RecordValues
             }
         }
 
-        // The field follows name their subject in, for notifications from
-        // followed accounts only.
-        $follows = (array) config('atp-appview.notifications.follows', []);
-
-        if (isset($follows['collection'], $follows['path'])) {
-            $fields[$follows['collection']][$follows['path']] ??= new Field($follows['collection'], $follows['path'], 'uri', $follows['path'], many: true);
+        // The fields follows and blocks name their subject in, for the graph.
+        foreach ([Graph::FOLLOWS, Graph::BLOCKS] as $kind) {
+            if (($relation = Graph::relation($kind)) !== null) {
+                $fields[$relation['collection']][$relation['path']] ??= new Field($relation['collection'], $relation['path'], 'uri', $relation['path'], many: true);
+            }
         }
 
         foreach (self::views() as $view) {
