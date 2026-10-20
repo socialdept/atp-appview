@@ -1168,6 +1168,15 @@ $values->top('com.example.post', 'tags', 20);          // [['value' => 'php', 't
 $values->suggest('com.example.post', 'tags', 'lar');   // tags starting with "lar", most used first
 ```
 
+For a window such as "trending this week", pass `since`. That counts the values of records sorted since then, leaving out records held back from discovery, so it reads `atp_record_values` instead of the kept totals. `authors()` names the latest few accounts holding each value:
+
+```php
+$week = now()->subWeek();
+
+$values->top('com.example.post', 'tags', 5, since: $week);            // the week's top 5
+$values->authors('com.example.post', 'tags', ['php', 'rust'], 3, $week); // ['php' => [did, did, did], 'rust' => [...]]
+```
+
 #### How fields are stored
 
 Every value is a row in `atp_record_values`: a 2-byte id for the collection and field, the record's 8-byte id, the value as an 8-byte hash, the date or number when there is one, and the record's `sort_at` and whether its account is hidden. So a filtered page reads one index range and never joins `atp_records`. Matching is exact, which is what filters need: there is no alphabetical sort or substring match on strings. Search comes from a search index, and anything else can be built from the records themselves.

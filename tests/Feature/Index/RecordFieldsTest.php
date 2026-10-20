@@ -13,6 +13,7 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -165,6 +166,22 @@ class RecordFieldsTest extends TestCase
 
         $this->index(new IdentityEvent(++$this->eventId, 'did:plc:bob', 'bob.test', true, 'active'));
         $this->assertSame(2, collect($values->top(self::THING, 'tags'))->firstWhere('value', 'laravel')['total']);
+    }
+
+    public function test_top_values_since_a_date_and_who_holds_them(): void
+    {
+        $this->seedThings();
+        $values = app(RecordValues::class);
+        $since = new \DateTimeImmutable('2026-01-02T12:00:00Z');
+
+        // a (Jan 3) and d (no usable date, so sorted when indexed) are recent. b and c are not.
+        $this->assertSame([['value' => 'php', 'total' => 2], ['value' => 'laravel', 'total' => 1]], $values->top(self::THING, 'tags', since: $since));
+        $this->assertSame(['php' => ['did:plc:bob', 'did:plc:alice'], 'rust' => []], $values->authors(self::THING, 'tags', ['php', 'rust'], since: $since));
+        $this->assertSame(['PHP' => ['did:plc:bob']], $values->authors(self::THING, 'tags', ['PHP'], per: 1), 'Values match as stored, keyed as asked, up to $per accounts each.');
+
+        $values->limitRecords(DB::connection(), [Record::query()->where('rkey', 'a')->value('id')]);
+
+        $this->assertSame([['value' => 'php', 'total' => 1]], $values->top(self::THING, 'tags', since: $since), 'Records left out of discovery do not count.');
     }
 
     public function test_suggestions_come_from_the_counts_most_common_first(): void
