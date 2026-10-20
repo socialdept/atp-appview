@@ -7,6 +7,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
@@ -21,8 +22,9 @@ use SocialDept\AtpAppview\Views\View;
  * would see them, with what they have seen.
  *
  * Only notifications whose record is visible are read: not deleted, not
- * hidden with its account, not hidden by moderation and not needing review.
- * Lifting an action brings them back.
+ * hidden with its account, not hidden by moderation and not needing review,
+ * and not from an account blocked either way or muted. Lifting an action, a
+ * block or a mute brings them back.
  *
  * A group is every notification with the same reason and subject, newest
  * first by its newest notification's time. Times, not ids, order them, since
@@ -421,6 +423,11 @@ class Notifications
             ->whereNull('r.moderated_at')
             ->whereNull('r.limited_at')
             ->when($reasons !== null, fn (Builder $query) => $query->whereIn('n.reason', array_values($reasons)));
+
+        // Nothing from accounts blocked either way, or muted.
+        if (($hidden = app(Graph::class)->hidden($did)) !== []) {
+            $query->whereNotIn('n.actor_did', $hidden);
+        }
 
         return app(NotificationPreferences::class)->apply($query, $did);
     }

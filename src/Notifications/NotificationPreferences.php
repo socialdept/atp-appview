@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Notifications;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 
@@ -18,9 +19,8 @@ use SocialDept\AtpAppview\Index\ValueHash;
  * list and unread count already hold, both ways. Pushing is up to the app:
  * a NotificationCreated listener asks wantsPush().
  *
- * "Only the accounts they follow" needs atp-appview.notifications.follows,
- * the collection and field a follow names its subject in. Without it every
- * notification counts as from everyone.
+ * "Only the accounts they follow" reads follows from atp-appview.graph.
+ * Without them every notification counts as from everyone.
  */
 class NotificationPreferences
 {
@@ -95,17 +95,7 @@ class NotificationPreferences
      */
     public function follows(string $did, string $actor): bool
     {
-        $follows = $this->followKey();
-
-        if ($follows === null) {
-            return true;
-        }
-
-        return app(RecordValues::class)->visible()
-            ->where('did_hash', ValueHash::of($did))
-            ->where('key_id', $follows)
-            ->where('value_hash', ValueHash::of($actor))
-            ->exists();
+        return Graph::relation(Graph::FOLLOWS) === null || app(Graph::class)->follows($did, $actor);
     }
 
     /**
@@ -160,9 +150,9 @@ class NotificationPreferences
      */
     protected function followKey(): ?int
     {
-        $follows = (array) config('atp-appview.notifications.follows', []);
+        $follows = Graph::relation(Graph::FOLLOWS);
 
-        if (! isset($follows['collection'], $follows['path'])) {
+        if ($follows === null) {
             return null;
         }
 

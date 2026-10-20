@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Models\Casts\PreciseDateTime;
 use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
 
@@ -90,6 +91,29 @@ class Record extends Model
     public function scopeDiscoverable(Builder $query): void
     {
         $query->whereNull($query->getModel()->qualifyColumn('limited_at'));
+    }
+
+    /**
+     * Records the viewer may see: none by accounts blocked either way, or
+     * muted. A null viewer sees everything.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeVisibleTo(Builder $query, ?string $viewer): void
+    {
+        if ($viewer !== null && ($hidden = app(Graph::class)->hidden($viewer)) !== []) {
+            $query->whereNotIn($query->getModel()->qualifyColumn('did'), $hidden);
+        }
+    }
+
+    /**
+     * Records by the accounts the viewer follows.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeFollowedBy(Builder $query, string $viewer): void
+    {
+        $query->whereIn($query->getModel()->qualifyColumn('did'), app(Graph::class)->following($viewer));
     }
 
     /**

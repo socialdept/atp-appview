@@ -64,7 +64,10 @@ class ViewQueryHandler extends DefaultQueryHandler
             return parent::list($request, $collection);
         }
 
-        $query = RecordQuery::in($collection)->limit($this->limit($request))->after($request->param('cursor'));
+        $query = RecordQuery::in($collection)
+            ->visibleTo($this->viewer)
+            ->limit($this->limit($request))
+            ->after($request->param('cursor'));
 
         foreach ($filters as $param => $field) {
             $query->where($field, $request->param($param));
