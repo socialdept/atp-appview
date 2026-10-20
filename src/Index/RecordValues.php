@@ -396,19 +396,88 @@ class RecordValues
     /**
      * A field's most common values among visible records, such as top tags.
      *
+     * With $since, only records sorted at or after it count, such as what is
+     * trending this week, and records left out of discovery are skipped.
+     * That reads atp_record_values instead of the kept totals, so keep the
+     * window short on a large index.
+     *
      * @return array<int, array{value: string|null, total: int}>
      */
-    public function top(string $collection, string $field, int $limit = 20): array
+    public function top(string $collection, string $field, int $limit = 20, ?\DateTimeInterface $since = null): array
     {
         $declared = $this->field($collection, $field)
             ?? throw new \InvalidArgumentException("{$field} is not an indexed field of {$collection}.");
+        $key = $this->keyId($declared);
 
-        return $this->connection()->table(self::COUNTS)
-            ->where('key_id', $this->keyId($declared))->where('total', '>', 0)
-            ->orderByDesc('total')->limit($limit)
-            ->get(['value', 'total'])
-            ->map(fn ($row) => ['value' => $row->value, 'total' => (int) $row->total])
-            ->all();
+        if ($since === null) {
+            return $this->connection()->table(self::COUNTS)
+                ->where('key_id', $key)->where('total', '>', 0)
+                ->orderByDesc('total')->limit($limit)
+                ->get(['value', 'total'])
+                ->map(fn ($row) => ['value' => $row->value, 'total' => (int) $row->total])
+                ->all();
+        }
+
+        $top = $this->visible()
+            ->where('key_id', $key)->where('limited', false)
+            ->where('sort_at', '>=', Carbon::instance($since)->utc()->format('Y-m-d H:i:s.u'))
+            ->groupBy('value_hash')
+            ->select('value_hash')->selectRaw('count(*) as total')
+            ->orderByDesc('total')->orderBy('value_hash')->limit($limit)
+            ->get();
+
+        $values = $this->connection()->table(self::COUNTS)
+            ->where('key_id', $key)->whereIn('value_hash', $top->pluck('value_hash')->all())
+            ->pluck('value', 'value_hash');
+
+        return $top->map(fn ($row) => ['value' => $values[$row->value_hash] ?? null, 'total' => (int) $row->total])->all();
+    }
+
+    /**
+     * The latest few accounts whose visible, discoverable records hold each of
+     * these values, newest first, such as who set a trending emoji. Reads one
+     * bounded page of the newest matches, so a value whose recent records all
+     * come from one account may list fewer.
+     *
+     * @param  array<int, mixed>  $values
+     * @return array<string, array<int, string>> DIDs by value, as asked
+     */
+    public function authors(string $collection, string $field, array $values, int $per = 3, ?\DateTimeInterface $since = null): array
+    {
+        $declared = $this->field($collection, $field)
+            ?? throw new \InvalidArgumentException("{$field} is not an indexed field of {$collection}.");
+        $byHash = [];
+
+        foreach ($values as $value) {
+            if (($hash = $declared->hashOf($value)) !== null) {
+                $byHash[$hash] = (string) $value;
+            }
+        }
+
+        if ($byHash === []) {
+            return [];
+        }
+
+        $rows = $this->visibleAs('v')
+            ->join('atp_records as r', 'r.id', '=', 'v.record_id')
+            ->where('v.key_id', $this->keyId($declared))->where('v.limited', false)
+            ->whereIn('v.value_hash', array_keys($byHash))
+            ->when($since !== null, fn ($query) => $query->where('v.sort_at', '>=', Carbon::instance($since)->utc()->format('Y-m-d H:i:s.u')))
+            ->orderByDesc('v.sort_at')
+            ->limit(count($byHash) * $per * 10)
+            ->get(['v.value_hash', 'r.did']);
+
+        $authors = array_fill_keys(array_values($byHash), []);
+
+        foreach ($rows as $row) {
+            $value = $byHash[(int) $row->value_hash];
+
+            if (count($authors[$value]) < $per && ! in_array($row->did, $authors[$value], true)) {
+                $authors[$value][] = $row->did;
+            }
+        }
+
+        return $authors;
     }
 
     /**
