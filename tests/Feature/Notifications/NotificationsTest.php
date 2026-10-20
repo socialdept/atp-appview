@@ -18,6 +18,7 @@ use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Notifications\Contracts\Notifier;
 use SocialDept\AtpAppview\Notifications\Events\NotificationCreated;
+use SocialDept\AtpAppview\Notifications\NotificationPreferences;
 use SocialDept\AtpAppview\Notifications\Notifications;
 use SocialDept\AtpAppview\Notifications\Notify;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
@@ -58,6 +59,7 @@ class NotificationsTest extends TestCase
             self::FOLLOW => ['subject' => 'follow'],
         ]);
         $app['config']->set('atp-appview.notifications.separate', ['reply', 'mention']);
+        $app['config']->set('atp-appview.notifications.follows', ['collection' => self::FOLLOW, 'path' => 'subject']);
         $app['config']->set('atp-appview.notifications.xrpc', [
             'list' => 'com.example.listNotifications',
             'unread_count' => 'com.example.getUnreadCount',
@@ -246,6 +248,63 @@ class NotificationsTest extends TestCase
         $this->assertSame([3, 2], [$group['count'], $group['people']], 'Bob liked twice.');
         $this->assertSame([self::BOB, self::CAROL], array_column(array_column($this->notifications()->people(self::ALICE, $group['groupKey']), 'actor'), 'did'));
         $this->assertSame([], $this->notifications()->people(self::BOB, $group['groupKey']), 'Only the recipient reads their groups.');
+    }
+
+    public function test_reasons_narrow_lists_groups_and_counts(): void
+    {
+        $post = $this->thing(self::ALICE, 'post');
+        $this->like(self::BOB, 'l1', $post);
+        $this->thing(self::BOB, 'reply', ['reply' => ['parent' => ['uri' => $post]]]);
+
+        $this->assertSame(['reply'], array_column($this->notifications()->groups(self::ALICE, reasons: ['reply'])['notifications'], 'reason'));
+        $this->assertSame(['like'], array_column($this->notifications()->list(self::ALICE, reasons: ['like'])['notifications'], 'reason'));
+        $this->assertSame(1, $this->notifications()->unreadCount(self::ALICE, ['reply']));
+        $this->assertSame(2, $this->notifications()->unreadCount(self::ALICE));
+
+        $alice = NotificationsUser::create(['did' => self::ALICE]);
+        $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getUnreadCount?reasons=like&reasons=reply')->assertExactJson(['count' => 2]);
+        $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.listNotifications?reasons=like')
+            ->assertJsonCount(1, 'notifications')
+            ->assertJsonPath('notifications.0.reason', 'like');
+    }
+
+    public function test_a_reason_turned_off_in_the_app_is_left_out_until_turned_back_on(): void
+    {
+        $post = $this->thing(self::ALICE, 'post');
+        $this->like(self::BOB, 'l1', $post);
+        $preferences = app(NotificationPreferences::class);
+
+        $this->assertSame(['like' => NotificationPreferences::defaults()], $preferences->for(self::ALICE, ['like']));
+
+        $preferences->set(self::ALICE, 'like', inApp: false);
+        $this->assertSame([], $this->notifications()->groups(self::ALICE)['notifications']);
+        $this->assertSame(0, $this->notifications()->unreadCount(self::ALICE));
+        $this->assertTrue($preferences->wantsPush(self::ALICE, 'like', self::BOB), 'Push is its own choice.');
+
+        $preferences->set(self::ALICE, 'like', inApp: true, push: false);
+        $this->assertSame(1, $this->notifications()->unreadCount(self::ALICE));
+        $this->assertFalse(app(NotificationPreferences::class)->wantsPush(self::ALICE, 'like', self::BOB));
+        $this->assertSame(['inApp' => true, 'push' => false, 'from' => 'everyone'], app(NotificationPreferences::class)->for(self::ALICE, ['like'])['like']);
+    }
+
+    public function test_a_reason_can_be_limited_to_followed_accounts(): void
+    {
+        $post = $this->thing(self::ALICE, 'post');
+        $this->like(self::BOB, 'l1', $post);
+        $this->like(self::CAROL, 'l2', $post);
+        $this->index(self::ALICE, self::FOLLOW, 'f1', ['subject' => self::BOB, 'createdAt' => '2026-10-01T00:00:00Z']);
+
+        app(NotificationPreferences::class)->set(self::ALICE, 'like', from: NotificationPreferences::FOLLOWS);
+        $preferences = app(NotificationPreferences::class);
+
+        $this->assertSame([self::BOB], array_map(fn (array $latest) => $latest['actor']['did'], $this->notifications()->groups(self::ALICE)['notifications'][0]['latest']));
+        $this->assertSame(1, $this->notifications()->unreadCount(self::ALICE));
+        $this->assertTrue($preferences->wantsPush(self::ALICE, 'like', self::BOB));
+        $this->assertFalse($preferences->wantsPush(self::ALICE, 'like', self::CAROL));
+
+        // Unfollowing takes Bob's away too.
+        $this->index(self::ALICE, self::FOLLOW, 'f1', null, '3l2bbbbbbbbbb');
+        $this->assertSame(0, $this->notifications()->unreadCount(self::ALICE));
     }
 
     public function test_seen_marks_what_came_before_it_read(): void

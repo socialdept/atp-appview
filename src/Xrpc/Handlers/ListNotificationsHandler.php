@@ -10,7 +10,8 @@ use SocialDept\AtpAppview\Xrpc\XrpcRequest;
  * atp-appview.notifications.xrpc.list. Grouped by reason and subject unless
  * called with grouped=false, then one at a time, each with its group key.
  *
- * Parameters limit (1 to 100, 50 by default), cursor and grouped. Answers
+ * Parameters limit (1 to 100, 50 by default), cursor, grouped and reasons
+ * (only these, repeated for several). Answers
  * {notifications, cursor, seenAt}.
  */
 class ListNotificationsHandler
@@ -33,9 +34,11 @@ class ListNotificationsHandler
         $cursor = is_scalar($cursor) ? (string) $cursor : null;
         $grouped = ! in_array($request->param('grouped'), [false, 'false', '0', 0], true);
 
+        $reasons = $this->reasons($request);
+
         $page = $grouped
-            ? $this->notifications->groups($did, $limit, $cursor)
-            : $this->notifications->list($did, $limit, $cursor);
+            ? $this->notifications->groups($did, $limit, $cursor, $reasons)
+            : $this->notifications->list($did, $limit, $cursor, $reasons);
 
         return array_filter($page, fn ($value) => $value !== null);
     }

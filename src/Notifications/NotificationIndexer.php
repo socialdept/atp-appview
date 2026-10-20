@@ -7,6 +7,7 @@ use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
@@ -278,7 +279,7 @@ class NotificationIndexer implements BatchHandler
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, mixed>
      */
     protected function row(object $record, string $recipient, string $reason, string $subject, string $origin, ?string $now): array
     {
@@ -288,6 +289,7 @@ class NotificationIndexer implements BatchHandler
             'subject' => $subject,
             'group_key' => Notifications::groupKey($reason, $subject, $record->uri),
             'actor_did' => $record->did,
+            'actor_hash' => ValueHash::of($record->did),
             'source_uri' => $record->uri,
             'indexed_at' => $now ?? Carbon::parse($record->indexed_at, 'UTC')->format('Y-m-d H:i:s'),
             'origin' => $origin,

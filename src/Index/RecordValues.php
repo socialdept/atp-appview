@@ -64,6 +64,14 @@ class RecordValues
             }
         }
 
+        // The field follows name their subject in, for notifications from
+        // followed accounts only.
+        $follows = (array) config('atp-appview.notifications.follows', []);
+
+        if (isset($follows['collection'], $follows['path'])) {
+            $fields[$follows['collection']][$follows['path']] ??= new Field($follows['collection'], $follows['path'], 'uri', $follows['path'], many: true);
+        }
+
         foreach (self::views() as $view) {
             foreach (self::refsIn(app($view)->parts()) as [$collection, $path]) {
                 $fields[$collection][$path] ??= new Field($collection, $path, 'uri', $path, many: true);
