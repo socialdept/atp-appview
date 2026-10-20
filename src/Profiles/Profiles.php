@@ -164,7 +164,10 @@ class Profiles
     {
         $records = [];
         $missing = [];
-        $backfilling = array_column(app(Backfills::class)->active(), 'collection');
+        // Read only when an account the index knows has no record, which is
+        // the only case a running backfill changes. Most pages find every
+        // profile and never ask.
+        $backfilling = null;
 
         foreach ($this->sources as $collection => $source) {
             // The index answers only for accounts it knows, in collections it
@@ -182,7 +185,13 @@ class Profiles
 
             // Nor does it while the collection is still being backfilled: an
             // account the index has no record for yet is fetched instead.
-            $trusted = in_array($collection, $backfilling, true) ? [] : $indexed;
+            $unanswered = array_filter($indexed, fn (string $did) => ! isset($records[$did][$collection]));
+
+            if ($unanswered !== []) {
+                $backfilling ??= array_column(app(Backfills::class)->active(), 'collection');
+            }
+
+            $trusted = $unanswered !== [] && in_array($collection, $backfilling ?? [], true) ? [] : $indexed;
 
             foreach (array_diff($dids, $trusted) as $did) {
                 if (! isset($records[$did][$collection])) {
