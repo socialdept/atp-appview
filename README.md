@@ -1260,7 +1260,7 @@ Records that point at an account or a record notify that account. Which ones is 
 'separate' => ['reply', 'mention'],
 ```
 
-A field holding a DID notifies that account, one holding an AT-URI the account in it. Nobody is notified about their own records. `NotificationIndexer` keeps `atp_notifications` as records are indexed: one row per recipient, removed with its record, untouched when the same record is delivered again. `php artisan appview:notifications:build` adds notifications for records indexed before their reasons were configured, without announcing them.
+A field holding a DID notifies that account, one holding an AT-URI the account in it. Nobody is notified about their own records. `NotificationIndexer` keeps `atp_notifications` as records are indexed: one row per recipient, removed with its record, untouched when the same record is delivered again. `php artisan appview:notifications:build` adds notifications for records indexed before their reasons were configured, without announcing them. Each takes its record's time, and lists are ordered by time, so they fall where they belong.
 
 Every notification carries its `reason`, its `subject` (the record acted on, or the recipient for a follow) and a `groupKey` made of the two, so "Alice and 4 others liked your status" is one group, and a client showing them one at a time can still join them. Reasons in `separate` give each notification its own group, as replies usually want.
 
