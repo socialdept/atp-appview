@@ -7,7 +7,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use SocialDept\AtpAppview\Graph\Graph;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
@@ -425,7 +425,7 @@ class Notifications
             ->when($reasons !== null, fn (Builder $query) => $query->whereIn('n.reason', array_values($reasons)));
 
         // Nothing from accounts blocked either way, or muted.
-        if (($hidden = app(Graph::class)->hidden($did)) !== []) {
+        if (($hidden = app(AppView::class)->hidden($did)) !== []) {
             $query->whereNotIn('n.actor_did', $hidden);
         }
 

@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Ingest;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Pipeline\Pipeline as LaravelPipeline;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Notifications\NotificationIndexer;
@@ -59,6 +60,13 @@ class Pipeline
         $classes = (array) config('atp-appview.ingest.handlers', []);
 
         foreach ([LabelIndexer::class, NotificationIndexer::class] as $class) {
+            if (! in_array($class, $classes, true)) {
+                $classes[] = $class;
+            }
+        }
+
+        // Then what enabled features add, after the package's own.
+        foreach ($container->bound(AppView::class) ? $container->make(AppView::class)->handlers() : [] as $class) {
             if (! in_array($class, $classes, true)) {
                 $classes[] = $class;
             }

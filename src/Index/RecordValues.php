@@ -7,6 +7,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Views\Contracts\ReadsRefs;
 
@@ -70,6 +71,10 @@ class RecordValues
             if (($relation = Graph::relation($kind)) !== null) {
                 $fields[$relation['collection']][$relation['path']] ??= new Field($relation['collection'], $relation['path'], 'uri', $relation['path'], many: true);
             }
+        }
+
+        foreach (app(AppView::class)->fields() as $field) {
+            $fields[$field['collection']][$field['name']] ??= Field::declared($field['collection'], $field['name'], $field['declared']);
         }
 
         foreach (self::views() as $view) {

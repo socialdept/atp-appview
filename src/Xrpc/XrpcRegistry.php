@@ -6,6 +6,7 @@ use InvalidArgumentException;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Views\View;
 use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultProcedureHandler;
@@ -98,6 +99,9 @@ class XrpcRegistry
 
         return $this->methods[$nsid] = match (true) {
             isset($route['view']) => $this->viewMethodFor($nsid, $route['view']),
+            isset($route['feature']) => $route['feature'] === 'procedure'
+                ? new XrpcMethod($nsid, $route['handler'], 'procedure', $route['auth'], $this->procedureLexicon($nsid))
+                : $this->builtInQueryFor($nsid, $route['handler'], $route['auth']),
             isset($route['action']) && $route['collection'] !== null => $this->defaultProcedureFor($nsid, $route['collection'], $route['action']),
             in_array($route['handler'], [SyncRecordHandler::class, UpdateSeenHandler::class], true) => $this->builtInProcedureFor($nsid, $route['handler']),
             in_array($route['handler'], [ListNotificationsHandler::class, GetUnreadCountHandler::class], true) => $this->builtInQueryFor($nsid, $route['handler']),
@@ -161,6 +165,13 @@ class XrpcRegistry
             }
         }
 
+        // Methods enabled features serve.
+        foreach (app(AppView::class)->xrpcMethods() as $nsid => $method) {
+            if (! isset($routes[$nsid])) {
+                $routes[$nsid] = ['handler' => $method['handler'], 'auth' => $method['auth'], 'collection' => null, 'attribute' => null, 'feature' => $method['type']];
+            }
+        }
+
         ksort($routes);
 
         return $routes;
@@ -203,7 +214,7 @@ class XrpcRegistry
      *
      * @param  class-string  $handler
      */
-    protected function builtInQueryFor(string $nsid, string $handler): XrpcMethod
+    protected function builtInQueryFor(string $nsid, string $handler, Auth $auth = Auth::Required): XrpcMethod
     {
         $lexicon = Schema::find($nsid);
 
@@ -211,7 +222,7 @@ class XrpcRegistry
             throw new InvalidArgumentException("{$nsid} is a {$lexicon->getLexiconType()}, but it is configured as a query.");
         }
 
-        return new XrpcMethod($nsid, $handler, 'query', Auth::Required, $lexicon);
+        return new XrpcMethod($nsid, $handler, 'query', $auth, $lexicon);
     }
 
     protected function procedureLexicon(string $nsid): ?LexiconDocument

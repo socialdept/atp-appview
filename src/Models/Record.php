@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Models\Casts\PreciseDateTime;
 use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
@@ -101,7 +102,7 @@ class Record extends Model
      */
     public function scopeVisibleTo(Builder $query, ?string $viewer): void
     {
-        if ($viewer !== null && ($hidden = app(Graph::class)->hidden($viewer)) !== []) {
+        if ($viewer !== null && ($hidden = app(AppView::class)->hidden($viewer)) !== []) {
             $query->whereNotIn($query->getModel()->qualifyColumn('did'), $hidden);
         }
     }
