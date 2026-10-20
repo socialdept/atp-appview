@@ -145,6 +145,19 @@ class ReconcilerTest extends TestCase
         $this->assertNull($this->record(self::LIKES, 'back')->deleted_at);
     }
 
+    public function test_only_the_collections_asked_for_are_reconciled_ingested_or_not(): void
+    {
+        $this->onPds(self::POSTS, 'missed', 'cid-missed');
+        $this->onPds('com.example.follow', 'f1', 'cid-f1', ['subject' => 'did:plc:bob']);
+        $this->indexed('com.example.follow', 'gone', 'cid-gone', self::BEFORE);
+
+        $result = app(Reconciler::class)->reconcile(self::DID, collections: ['com.example.follow']);
+
+        $this->assertSame(['at://did:plc:alice/com.example.follow/f1'], $result->indexed);
+        $this->assertSame(['at://did:plc:alice/com.example.follow/gone'], $result->tombstoned);
+        $this->assertNull($this->record(self::POSTS, 'missed'), 'Collections not asked for are left alone.');
+    }
+
     public function test_a_collection_the_repo_no_longer_has_is_emptied_without_listing_it(): void
     {
         $this->onPds(self::POSTS, 'a', 'cid-a');
