@@ -176,6 +176,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 RestartCommand::class,
                 RoutesCommand::class,
                 \SocialDept\AtpAppview\Console\LabelsConsumeCommand::class,
+                \SocialDept\AtpAppview\Console\LabelsSelfCommand::class,
                 \SocialDept\AtpAppview\Console\LabelsSyncCommand::class,
                 \SocialDept\AtpAppview\Console\ModerationPruneCommand::class,
                 StatsCommand::class,

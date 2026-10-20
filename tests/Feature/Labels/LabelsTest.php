@@ -310,4 +310,24 @@ class LabelsTest extends TestCase
         $this->assertTrue($labels->decide($record, 'did:plc:viewer')->noUnauthenticated);
         $this->assertSame(1, Record::query()->where('rkey', 'a')->count(), 'Nothing is hidden from queries: it is about who views it.');
     }
+
+    public function test_self_labels_of_records_indexed_before_they_were_kept_can_be_read_again(): void
+    {
+        config(['atp-appview.labels.self_labels' => false]);
+        $this->indexPost('a', ['labels' => ['$type' => 'com.atproto.label.defs#selfLabels', 'values' => [['val' => 'porn']]]]);
+        $this->indexPost('b');
+        $this->assertSame(0, Label::query()->count());
+        $this->assertSame(2, Record::query()->count());
+
+        config(['atp-appview.labels.self_labels' => true]);
+        $this->artisan('appview:labels:self')->expectsOutputToContain('Self-labels changed for 1 accounts')->assertSuccessful();
+
+        $label = Label::query()->sole();
+        $this->assertTrue($label->self);
+        $this->assertSame($this->uri('a'), $label->uri);
+        $this->assertSame(['b'], Record::query()->pluck('rkey')->all(), 'The labeled record is hidden as if the label had arrived with it.');
+
+        $this->artisan('appview:labels:self')->expectsOutputToContain('Self-labels changed for 0 accounts')->assertSuccessful();
+        $this->assertSame(1, Label::query()->count(), 'Running it again changes nothing.');
+    }
 }

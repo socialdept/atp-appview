@@ -399,7 +399,7 @@ Schedule the sync. It registers the accounts the index knows with Tack, with the
 Schedule::command('appview:labels:sync')->everyMinute()->withoutOverlapping();
 ```
 
-Authors' own labels on their records (`labels.values`, self-labels) count too, with the author as their source. Turn them off with `labels.self_labels`.
+Authors' own labels on their records (`labels.values`, self-labels) count too, with the author as their source. Turn them off with `labels.self_labels`. Records indexed before self-labels were kept, or while they were off, get theirs from `php artisan appview:labels:self`, which is safe to run again.
 
 **What a label does** is an effect, decided per labeler, value and target. A label on a record is about content, and one on an account, or its profile record, is about the account:
 
