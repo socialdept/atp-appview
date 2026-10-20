@@ -172,6 +172,17 @@ class BackfillsTest extends TestCase
         $this->assertSame(1, $this->backfills()->progress()[0]['unreachable']);
     }
 
+    public function test_the_summary_adds_up_running_backfills_for_a_catching_up_notice(): void
+    {
+        $this->assertNull($this->backfills()->summary(), 'Nothing running, nothing to say.');
+
+        $this->backfillWith(['did:plc:a' => null, 'did:plc:b' => null, 'did:plc:c' => null]);
+        $this->app->make(BackfillTracker::class)->handle(new Batch([$this->backfilled('did:plc:a', '1')]));
+        $this->backfills()->forget();
+
+        $this->assertSame(['repos' => 3, 'delivered' => 1, 'percent' => 33, 'etaMinutes' => $this->backfills()->active()[0]['etaMinutes']], $this->backfills()->summary());
+    }
+
     public function test_a_backfill_tap_takes_none_of_fails(): void
     {
         $this->tracked = [];

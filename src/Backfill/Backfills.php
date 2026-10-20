@@ -329,6 +329,33 @@ class Backfills
         return array_values(array_filter($this->progress(), fn (array $b) => $b['status'] === Backfill::RUNNING));
     }
 
+    /**
+     * The running backfills as one, for a "still catching up" notice: repos
+     * to read and read so far, how far along, and the longest estimate left.
+     * Null when nothing is running.
+     *
+     * @return array{repos: int, delivered: int, percent: int, etaMinutes: int|null}|null
+     */
+    public function summary(): ?array
+    {
+        $active = $this->active();
+
+        if ($active === []) {
+            return null;
+        }
+
+        $repos = array_sum(array_column($active, 'repos'));
+        $delivered = array_sum(array_column($active, 'delivered'));
+        $etas = array_filter(array_column($active, 'etaMinutes'), fn ($eta) => $eta !== null);
+
+        return [
+            'repos' => $repos,
+            'delivered' => $delivered,
+            'percent' => $repos > 0 ? (int) floor($delivered / $repos * 100) : 0,
+            'etaMinutes' => $etas === [] ? null : max($etas),
+        ];
+    }
+
     public function forget(): void
     {
         $this->cache->forget(self::PROGRESS);
