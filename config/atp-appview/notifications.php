@@ -31,6 +31,11 @@ return [
 
     'separate' => [],
 
+    // Classes implementing Notifications\Contracts\Notifier, for who a
+    // record notifies when no field says: everyone in a thread, everyone
+    // sharing a status. They see records as they arrive live.
+    'notifiers' => [],
+
     // The newest notifications a group shows, with their actors.
     'latest' => 3,
 
