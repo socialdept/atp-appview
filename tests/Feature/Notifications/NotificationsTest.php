@@ -233,6 +233,21 @@ class NotificationsTest extends TestCase
         $this->assertSame(['a', 'd', 'c', 'b'], $walk('list'));
     }
 
+    public function test_a_group_lists_everyone_in_it_once_newest_first(): void
+    {
+        $post = $this->thing(self::ALICE, 'post');
+        $this->like(self::BOB, 'l1', $post);
+        $this->like(self::CAROL, 'l2', $post);
+        DB::table('atp_notifications')->where('actor_did', self::CAROL)->update(['indexed_at' => '2026-01-01 00:00:00']);
+        $this->index(self::BOB, self::LIKE, 'l3', ['subject' => ['uri' => $post, 'cid' => 'bafy'], 'createdAt' => '2026-10-01T00:00:00Z']);
+
+        $group = $this->notifications()->groups(self::ALICE)['notifications'][0];
+
+        $this->assertSame([3, 2], [$group['count'], $group['people']], 'Bob liked twice.');
+        $this->assertSame([self::BOB, self::CAROL], array_column(array_column($this->notifications()->people(self::ALICE, $group['groupKey']), 'actor'), 'did'));
+        $this->assertSame([], $this->notifications()->people(self::BOB, $group['groupKey']), 'Only the recipient reads their groups.');
+    }
+
     public function test_seen_marks_what_came_before_it_read(): void
     {
         $post = $this->thing(self::ALICE, 'post');

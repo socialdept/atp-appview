@@ -28,7 +28,7 @@ use SocialDept\AtpAppview\Views\View;
  * notifications built for older records arrive with those records' times:
  *
  *     ['groupKey' => '…', 'reason' => 'like', 'subject' => 'at://…',
- *      'subjectView' => [...], 'count' => 5, 'unreadCount' => 2,
+ *      'subjectView' => [...], 'count' => 5, 'people' => 4, 'unreadCount' => 2,
  *      'isRead' => false, 'indexedAt' => '…',
  *      'latest' => [['uri' => '…', 'actor' => [...], 'view' => [...], 'indexedAt' => '…']]]
  */
@@ -138,7 +138,7 @@ class Notifications
 
         $query = $this->visible($did)
             ->select('n.group_key', 'n.reason', 'n.subject')
-            ->selectRaw('count(*) as total, max(n.id) as newest, max(n.indexed_at) as newest_at')
+            ->selectRaw('count(*) as total, count(distinct n.actor_did) as people, max(n.id) as newest, max(n.indexed_at) as newest_at')
             ->selectRaw('sum(case when n.indexed_at > ? then 1 else 0 end) as unread', [$this->since($seen)])
             ->groupBy('n.group_key', 'n.reason', 'n.subject')
             ->orderByDesc('newest_at')
@@ -166,6 +166,7 @@ class Notifications
             'subject' => $group->subject,
             'subjectView' => $views[$group->subject] ?? null,
             'count' => (int) $group->total,
+            'people' => (int) $group->people,
             'unreadCount' => (int) $group->unread,
             'isRead' => (int) $group->unread === 0,
             'indexedAt' => self::time($group->newest_at),
@@ -182,6 +183,33 @@ class Notifications
             'cursor' => $more ? self::cursor($groups->last()->newest_at, $groups->last()->newest) : null,
             'seenAt' => $seen === null ? null : self::time($seen),
         ];
+    }
+
+    /**
+     * Everyone in one of the recipient's groups, newest first, each once with
+     * their profile and when they last notified, for a group opened to show
+     * who is in it.
+     *
+     * @return array<int, array{actor: array<string, mixed>, indexedAt: string}>
+     */
+    public function people(string $did, string $groupKey, int $limit = 50): array
+    {
+        $rows = $this->visible($did)
+            ->where('n.group_key', $groupKey)
+            ->groupBy('n.actor_did')
+            ->select('n.actor_did')
+            ->selectRaw('max(n.indexed_at) as latest_at, max(n.id) as latest')
+            ->orderByDesc('latest_at')
+            ->orderByDesc('latest')
+            ->limit(max(1, min($limit, self::MAX_LIMIT)))
+            ->get();
+
+        $profiles = app(Profiles::class)->basic($rows->pluck('actor_did')->all());
+
+        return $rows->map(fn ($row) => [
+            'actor' => $profiles[$row->actor_did] ?? ['did' => $row->actor_did],
+            'indexedAt' => self::time($row->latest_at),
+        ])->values()->all();
     }
 
     /**

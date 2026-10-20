@@ -1275,9 +1275,10 @@ $notifications->groups($did, limit: 30, cursor: null);   // grouped, newest grou
 $notifications->list($did);                              // one at a time
 $notifications->unreadCount($did);
 $notifications->markSeen($did);                          // now, or a time. Never moves back
+$notifications->people($did, $groupKey);                 // everyone in a group, once each, newest first
 ```
 
-A group has `groupKey`, `reason`, `subject`, `subjectView`, `count`, `unreadCount`, `isRead`, `indexedAt` and `latest`: the newest few notifications (`notifications.latest`, 3 by default), each with its `uri`, `actor` profile and `view`. Subjects and notifying records are hydrated with their collection's view, as the recipient sees them.
+A group has `groupKey`, `reason`, `subject`, `subjectView`, `count`, `people` (how many different accounts), `unreadCount`, `isRead`, `indexedAt` and `latest`: the newest few notifications (`notifications.latest`, 3 by default), each with its `uri`, `actor` profile and `view`. Subjects and notifying records are hydrated with their collection's view, as the recipient sees them.
 
 The same is served over XRPC under NSIDs in the app's own namespace. A lexicon for each is optional:
 
