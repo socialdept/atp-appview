@@ -35,7 +35,6 @@ use SocialDept\AtpAppview\Console\StatsCommand;
 use SocialDept\AtpAppview\Console\UnblockCommand;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Http\Controllers\DidDocumentController;
-use SocialDept\AtpAppview\Http\Controllers\TackWebhookController;
 use SocialDept\AtpAppview\Http\Controllers\TapWebhookController;
 use SocialDept\AtpAppview\Http\Middleware\ResolveViewer;
 use SocialDept\AtpAppview\Images\BlobUrls;
@@ -185,10 +184,6 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 ResortCommand::class,
                 RestartCommand::class,
                 RoutesCommand::class,
-                \SocialDept\AtpAppview\Console\LabelsConsumeCommand::class,
-                \SocialDept\AtpAppview\Console\LabelsSelfCommand::class,
-                \SocialDept\AtpAppview\Console\LabelsSyncCommand::class,
-                \SocialDept\AtpAppview\Console\ModerationPruneCommand::class,
                 StatsCommand::class,
                 UnblockCommand::class,
             ]);
@@ -212,13 +207,6 @@ class AtpAppviewServiceProvider extends ServiceProvider
                     ->post((string) config('atp-appview.ingest.webhook.path', 'atp-appview/tap'), TapWebhookController::class)
                     ->middleware((array) config('atp-appview.ingest.webhook.middleware', []))
                     ->name('atp-appview.tap-webhook');
-            }
-
-            if (config('atp-appview.labels.webhook.enabled')) {
-                $this->app->make(Router::class)
-                    ->post((string) config('atp-appview.labels.webhook.path', 'atp-appview/tack'), TackWebhookController::class)
-                    ->middleware((array) config('atp-appview.labels.webhook.middleware', []))
-                    ->name('atp-appview.tack-webhook');
             }
 
             foreach ($this->app->make(AppView::class)->routeCallbacks() as $routes) {

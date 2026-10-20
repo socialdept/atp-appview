@@ -10,37 +10,14 @@ return new class () extends Migration {
         return config('atp-appview.index.connection');
     }
 
+    /**
+     * The columns account actions keep on core tables. The account actions
+     * table moved to the moderation feature's migrations, and this file
+     * keeps its name so installs that ran it before do not run it again.
+     */
     public function up(): void
     {
         $schema = Schema::connection($this->getConnection());
-
-        // What was done to an account, by an operator or because of a label,
-        // and when it was lifted. Rows are never deleted, so this is also the
-        // record of moderation.
-        $schema->create('atp_account_actions', function (Blueprint $table) {
-            $table->id();
-            $table->string('did', 255);
-            // ban, review or takedown.
-            $table->string('action', 16);
-            // manual, or label for one a label applied.
-            $table->string('source', 16)->default('manual');
-            $table->text('reason')->nullable();
-            $table->string('label_src', 255)->nullable();
-            $table->string('label_val', 128)->nullable();
-            $table->string('actor', 255)->nullable();
-            // The PDS a takedown was sent to.
-            $table->string('pds', 512)->nullable();
-            // When a ban's records are pruned, unless the pruning is cancelled.
-            $table->dateTime('prune_at')->nullable();
-            $table->boolean('prune_cancelled')->default(false);
-            $table->dateTime('pruned_at')->nullable();
-            $table->timestamps();
-            $table->dateTime('lifted_at')->nullable();
-            $table->string('lifted_by', 255)->nullable();
-
-            $table->index(['did', 'action', 'lifted_at']);
-            $table->index(['action', 'lifted_at']);
-        });
 
         // Records that need review: shown where asked for directly, left out
         // of discovery. Kept beside moderated_at and hidden_at.
@@ -58,6 +35,5 @@ return new class () extends Migration {
         $schema = Schema::connection($this->getConnection());
         $schema->table('atp_record_values', fn (Blueprint $table) => $table->dropColumn('limited'));
         $schema->table('atp_records', fn (Blueprint $table) => $table->dropColumn('limited_at'));
-        $schema->dropIfExists('atp_account_actions');
     }
 };

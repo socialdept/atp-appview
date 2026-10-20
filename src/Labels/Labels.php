@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Labels;
 
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Models\AccountAction;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
@@ -33,6 +34,10 @@ class Labels
      */
     public function on(string|array $uris): Collection
     {
+        if (! ModerationFeature::on()) {
+            return new Collection();
+        }
+
         return Label::query()->live()->whereIn('uri', (array) $uris)->orderBy('cts')->get()->groupBy('uri');
     }
 
@@ -43,6 +48,10 @@ class Labels
      */
     public function about(string $did): Collection
     {
+        if (! ModerationFeature::on()) {
+            return new Collection();
+        }
+
         return Label::query()->live()->where('subject', $did)->orderBy('cts')->get();
     }
 
@@ -61,6 +70,10 @@ class Labels
      */
     public function accounts(array $dids): array
     {
+        if (! ModerationFeature::on()) {
+            return array_fill_keys(array_values(array_unique($dids)), new Decision());
+        }
+
         $dids = array_values(array_unique($dids));
         $labels = Label::query()->live()->whereIn('subject', $dids)->get()
             ->filter(fn (Label $label) => Target::of($label->uri) === Target::ACCOUNT)
@@ -95,6 +108,10 @@ class Labels
      */
     public function decideMany(Collection $records, ?string $viewer = null): array
     {
+        if (! ModerationFeature::on()) {
+            return $records->mapWithKeys(fn (Record $record) => [$record->uri => new Decision()])->all();
+        }
+
         if ($records->isEmpty()) {
             return [];
         }
@@ -121,6 +138,8 @@ class Labels
      */
     public function set(string $labeler, string $value, string $target, Effect $effect): void
     {
+        ModerationFeature::ensureOn();
+
         $this->policies->set($labeler, $value, $target, $effect);
     }
 
@@ -129,6 +148,8 @@ class Labels
      */
     public function clear(string $labeler, string $value, string $target): void
     {
+        ModerationFeature::ensureOn();
+
         $this->policies->clear($labeler, $value, $target);
     }
 
@@ -139,6 +160,10 @@ class Labels
      */
     public function labelers(): Collection
     {
+        if (! ModerationFeature::on()) {
+            return new Collection();
+        }
+
         return Labeler::query()->orderBy('did')->get();
     }
 
@@ -147,6 +172,8 @@ class Labels
      */
     public function follow(string $did): void
     {
+        ModerationFeature::ensureOn();
+
         app(Tack::class)->addLabeler($did);
     }
 
@@ -155,6 +182,8 @@ class Labels
      */
     public function unfollow(string $did): void
     {
+        ModerationFeature::ensureOn();
+
         app(Tack::class)->removeLabeler($did);
     }
 
@@ -165,6 +194,8 @@ class Labels
      */
     public function refresh(array $dids): void
     {
+        ModerationFeature::ensureOn();
+
         $this->visibility->refresh($dids);
     }
 }

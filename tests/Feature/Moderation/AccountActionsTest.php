@@ -72,6 +72,18 @@ class AccountActionsTest extends TestCase
         return app(AccountActions::class);
     }
 
+    public function test_an_install_from_before_moderation_was_a_feature_keeps_its_tables(): void
+    {
+        app(AccountActions::class)->ban('did:plc:bob', 'spam');
+
+        // Such an install made the tables in core migrations, and meets the
+        // moderation feature's own migrations for the first time.
+        DB::table('migrations')->where('migration', 'like', '2026_10_26_%')->delete();
+        $this->artisan('migrate')->assertSuccessful();
+
+        $this->assertTrue(app(AccountActions::class)->banned('did:plc:bob'), 'Nothing made again, nothing lost.');
+    }
+
     public function test_a_ban_hides_everything_the_account_wrote_and_drops_what_comes_next(): void
     {
         Http::fake();

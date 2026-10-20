@@ -54,7 +54,7 @@ use SocialDept\AtpAppview\Features;
 
 A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
 
-All three ship enabled. Leaving the graph out turns it off: no follow or block fields, no mutes table, nothing filtered. Leaving notifications out keeps no notifications, serves none of their XRPC methods and creates none of their tables, and their APIs refuse. Moderation is still wired in by the package itself and moves behind this list in a coming release, so for now leaving it out does not yet turn it off.
+All three ship enabled, and leaving one out turns it off: its tables are not created, its routes, commands and XRPC methods are not registered, and nothing is kept for it as records are indexed. Left out, the graph answers as though nobody follows, blocks or mutes anyone. Left out, moderation applies no labels and nobody counts as banned or under review, and the `Moderation` and `Labels` view parts are neutral. The notifications, notification preferences, mutes, label policy and account action APIs refuse when their feature is off, naming the feature to add.
 
 ### Scheduling
 
@@ -447,7 +447,7 @@ Schedule::command('appview:failed-deliveries --prune')->daily();
 
 ### Labels
 
-Labels come from labelers, such as Bluesky's moderation service, through [Tack](https://github.com/socialdept/tack). Tack follows the labelers, verifies every label's signature, fetches the labels an account already has when the app starts tracking it, and delivers labels about the accounts the index knows, the same ways Tap delivers records.
+Labels and account actions are the moderation [feature](#features), `Features::moderation()`, on by default. Labels come from labelers, such as Bluesky's moderation service, through [Tack](https://github.com/socialdept/tack). Tack follows the labelers, verifies every label's signature, fetches the labels an account already has when the app starts tracking it, and delivers labels about the accounts the index knows, the same ways Tap delivers records.
 
 ```dotenv
 ATP_APPVIEW_TACK_URL=http://localhost:2490
