@@ -18,6 +18,7 @@ use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpAppview\Views\Hydrator;
+use SocialDept\AtpAppview\Views\ViewPage;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -272,5 +273,22 @@ class HydratedViewsTest extends TestCase
         $queries(1);
 
         $this->assertSame($queries(2), $queries(25));
+    }
+
+    public function test_a_view_page_hydrates_a_cursor_page_and_keeps_its_cursor(): void
+    {
+        // Indexed in one batch without dates, so all five share a sort_at down to the microsecond.
+        $this->things(5);
+        $this->index($this->like('did:plc:alice', 5));
+        $query = fn () => Record::query()->where('collection', 'com.example.thing')->orderByDesc('sort_at')->orderByDesc('uri');
+        $page = fn (?string $cursor) => ViewPage::of(app(ThingView::class), $query()->cursorPaginate(2, cursor: $cursor), 'did:plc:alice')
+            ->present(fn (array $view) => ['uri' => $view['uri'], 'liked' => $view['viewer']['like'] !== null])
+            ->toResponse(request())->getData(true);
+
+        $first = $page(null);
+
+        $this->assertSame([['uri' => $this->thing(5), 'liked' => true], ['uri' => $this->thing(4), 'liked' => false]], $first['data']);
+        $this->assertNotNull($first['meta']['next_cursor'], 'The paginator still has its records to read the cursor from.');
+        $this->assertSame([$this->thing(3), $this->thing(2)], array_column($page($first['meta']['next_cursor'])['data'], 'uri'));
     }
 }

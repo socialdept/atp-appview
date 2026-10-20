@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use SocialDept\AtpAppview\Models\Casts\PreciseDateTime;
 use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
 
 /**
@@ -71,7 +72,7 @@ class Record extends Model
             'record' => 'array',
             'repair' => 'array',
             'indexed_at' => 'datetime',
-            'sort_at' => 'datetime',
+            'sort_at' => PreciseDateTime::class,
             'deleted_at' => 'datetime',
             'hidden_at' => 'datetime',
             'moderated_at' => 'datetime',

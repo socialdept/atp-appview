@@ -1114,6 +1114,20 @@ It pages, filters by `did` or `actor` and looks up one `uri` exactly as a defaul
 
 So a page costs the same number of queries whatever its size, and adding a count to a view adds no query. Paths are dot paths, and a field may hold one at-uri or a list. Override `summary()` to embed a short form, and `base()` to change the fields every view starts with.
 
+For a page of your own, such as an Inertia infinite scroll or a JSON endpoint, `ViewPage` hydrates a paginator's records together and keeps the paginator intact, which a cursor paginator needs to read its next cursor. `present()` shapes each view first:
+
+```php
+use SocialDept\AtpAppview\Views\ViewPage;
+
+Inertia::scroll(fn () => ViewPage::of(
+    app(PostView::class),
+    Record::query()->collection('com.example.post')->discoverable()->orderByDesc('sort_at')->orderByDesc('uri')->cursorPaginate(30),
+    $request->user()?->did,
+)->present(fn (array $view) => ['uri' => $view['uri'], 'author' => $view['author'], 'text' => $view['record']['text'] ?? '']));
+```
+
+`Record::$sort_at` keeps its microseconds as a string, so cursors over it never skip records that share a second.
+
 ### Fields
 
 Records can be filtered, sorted and counted by their own fields, declared per collection in `config/atp-appview/fields.php`:
