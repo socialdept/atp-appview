@@ -25,6 +25,7 @@ use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
+use SocialDept\AtpAppview\Console\NotificationsBuildCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
@@ -169,6 +170,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsSyncCommand::class,
                 PurgeInactiveCommand::class,
                 FieldsCommand::class,
+                NotificationsBuildCommand::class,
                 ReconcileCommand::class,
                 ResortCommand::class,
                 RestartCommand::class,
