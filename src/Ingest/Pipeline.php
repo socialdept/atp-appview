@@ -5,7 +5,9 @@ namespace SocialDept\AtpAppview\Ingest;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Pipeline\Pipeline as LaravelPipeline;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Notifications\NotificationIndexer;
@@ -46,12 +48,13 @@ class Pipeline
     }
 
     /**
-     * The handlers in atp-appview.ingest.handlers, with LabelIndexer and
-     * NotificationIndexer added when the list leaves them out. An app's
+     * The handlers in atp-appview.ingest.handlers, with LabelIndexer added
+     * when the list leaves it out, then those enabled features add. An app's
      * published config lists the handlers of the version it was published
      * from, and labels would be acknowledged and dropped without it.
-     * RecordIndexer and LabelIndexer each ignore the other's events.
-     * NotificationIndexer reads what RecordIndexer stored, so it runs last.
+     * RecordIndexer and LabelIndexer each ignore the other's events. Feature
+     * handlers such as NotificationIndexer read what RecordIndexer stored,
+     * so they run after the package's own.
      *
      * @return array<int, BatchHandler>
      */
@@ -59,10 +62,14 @@ class Pipeline
     {
         $classes = (array) config('atp-appview.ingest.handlers', []);
 
-        foreach ([LabelIndexer::class, NotificationIndexer::class] as $class) {
-            if (! in_array($class, $classes, true)) {
-                $classes[] = $class;
-            }
+        if (! in_array(LabelIndexer::class, $classes, true)) {
+            $classes[] = LabelIndexer::class;
+        }
+
+        // A config published before notifications were a feature lists their
+        // indexer, which must not run while the feature is off.
+        if (! Features::enabled(NotificationsFeature::class)) {
+            $classes = array_values(array_diff($classes, [NotificationIndexer::class]));
         }
 
         // Then what enabled features add, after the package's own.

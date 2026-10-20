@@ -54,7 +54,7 @@ use SocialDept\AtpAppview\Features;
 
 A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
 
-All three ship enabled. Leaving the graph out turns it off: no follow or block fields, no mutes table, nothing filtered. Moderation and notifications are still wired in by the package itself and move behind this list in coming releases, so for now leaving either out does not yet turn it off.
+All three ship enabled. Leaving the graph out turns it off: no follow or block fields, no mutes table, nothing filtered. Leaving notifications out keeps no notifications, serves none of their XRPC methods and creates none of their tables, and their APIs refuse. Moderation is still wired in by the package itself and moves behind this list in a coming release, so for now leaving it out does not yet turn it off.
 
 ### Scheduling
 
@@ -1350,7 +1350,7 @@ The `Relationship` view part tells a view how the viewer stands with each record
 
 ## Notifications
 
-Records that point at an account or a record notify that account. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
+Records that point at an account or a record notify that account. Notifications are a [feature](#features), `Features::notifications()`, on by default. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
 
 ```php
 // config/atp-appview/notifications.php
