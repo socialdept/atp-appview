@@ -11,10 +11,7 @@ use SocialDept\AtpAppview\Views\View;
 use SocialDept\AtpAppview\Xrpc\Attributes\Xrpc;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultProcedureHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultQueryHandler;
-use SocialDept\AtpAppview\Xrpc\Handlers\GetUnreadCountHandler;
-use SocialDept\AtpAppview\Xrpc\Handlers\ListNotificationsHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\SyncRecordHandler;
-use SocialDept\AtpAppview\Xrpc\Handlers\UpdateSeenHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\ViewQueryHandler;
 use SocialDept\AtpSchema\Data\LexiconDocument;
 use SocialDept\AtpSchema\Facades\Schema;
@@ -29,16 +26,6 @@ use SocialDept\AtpSchema\Facades\Schema;
  */
 class XrpcRegistry
 {
-    /**
-     * The built-in notification methods, by their key in
-     * atp-appview.notifications.xrpc.
-     */
-    protected const NOTIFICATION_HANDLERS = [
-        'list' => ListNotificationsHandler::class,
-        'unread_count' => GetUnreadCountHandler::class,
-        'update_seen' => UpdateSeenHandler::class,
-    ];
-
     /**
      * Every method's NSID, handler and auth, read without loading lexicons.
      *
@@ -103,8 +90,7 @@ class XrpcRegistry
                 ? new XrpcMethod($nsid, $route['handler'], 'procedure', $route['auth'], $this->procedureLexicon($nsid))
                 : $this->builtInQueryFor($nsid, $route['handler'], $route['auth']),
             isset($route['action']) && $route['collection'] !== null => $this->defaultProcedureFor($nsid, $route['collection'], $route['action']),
-            in_array($route['handler'], [SyncRecordHandler::class, UpdateSeenHandler::class], true) => $this->builtInProcedureFor($nsid, $route['handler']),
-            in_array($route['handler'], [ListNotificationsHandler::class, GetUnreadCountHandler::class], true) => $this->builtInQueryFor($nsid, $route['handler']),
+            $route['handler'] === SyncRecordHandler::class => $this->builtInProcedureFor($nsid, $route['handler']),
             $route['collection'] !== null => $this->defaultMethodFor($nsid, $route['collection']),
             default => $this->methodFor($route['handler'], $route['attribute']),
         };
@@ -156,13 +142,6 @@ class XrpcRegistry
 
         if (is_string($sync = config('atp-appview.xrpc.sync_record')) && $sync !== '' && ! isset($routes[$sync])) {
             $routes[$sync] = ['handler' => SyncRecordHandler::class, 'auth' => Auth::Required, 'collection' => null, 'attribute' => null];
-        }
-
-        // The notification methods, each under the NSID the app gives it.
-        foreach (self::NOTIFICATION_HANDLERS as $key => $handler) {
-            if (is_string($nsid = config("atp-appview.notifications.xrpc.{$key}")) && $nsid !== '' && ! isset($routes[$nsid])) {
-                $routes[$nsid] = ['handler' => $handler, 'auth' => Auth::Required, 'collection' => null, 'attribute' => null];
-            }
         }
 
         // Methods enabled features serve.

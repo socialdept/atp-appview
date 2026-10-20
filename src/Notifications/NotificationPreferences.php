@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Notifications;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
@@ -39,6 +40,8 @@ class NotificationPreferences
      */
     public function for(string $did, array $reasons): array
     {
+        NotificationsFeature::ensureOn();
+
         $stored = $this->stored($did);
         $choices = [];
 
@@ -56,6 +59,8 @@ class NotificationPreferences
      */
     public function set(string $did, string $reason, ?bool $inApp = null, ?bool $push = null, ?string $from = null): array
     {
+        NotificationsFeature::ensureOn();
+
         if ($from !== null && ! in_array($from, [self::EVERYONE, self::FOLLOWS], true)) {
             throw new \InvalidArgumentException("From is 'everyone' or 'follows', not '{$from}'.");
         }
@@ -84,6 +89,8 @@ class NotificationPreferences
      */
     public function wantsPush(string $did, string $reason, string $actor): bool
     {
+        NotificationsFeature::ensureOn();
+
         $choice = $this->for($did, [$reason])[$reason];
 
         return $choice['push'] && ($choice['from'] === self::EVERYONE || $this->follows($did, $actor));

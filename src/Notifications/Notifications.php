@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
@@ -96,6 +97,8 @@ class Notifications
      */
     public function send(string $recipient, string $reason, string $source, ?string $subject = null): ?int
     {
+        NotificationsFeature::ensureOn();
+
         $subject ??= $recipient;
         $record = $this->connection()->table('atp_records')->where('uri', $source)->whereNull('deleted_at')->first(['uri', 'did', 'hidden_at', 'moderated_at', 'limited_at']);
 
@@ -138,6 +141,8 @@ class Notifications
      */
     public function groups(string $did, int $limit = 50, ?string $cursor = null, ?array $reasons = null): array
     {
+        NotificationsFeature::ensureOn();
+
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $seen = $this->seenAt($did);
 
@@ -199,6 +204,8 @@ class Notifications
      */
     public function people(string $did, string $groupKey, int $limit = 50): array
     {
+        NotificationsFeature::ensureOn();
+
         $rows = $this->visible($did)
             ->where('n.group_key', $groupKey)
             ->groupBy('n.actor_did')
@@ -226,6 +233,8 @@ class Notifications
      */
     public function list(string $did, int $limit = 50, ?string $cursor = null, ?array $reasons = null): array
     {
+        NotificationsFeature::ensureOn();
+
         $limit = max(1, min($limit, self::MAX_LIMIT));
         $seen = $this->seenAt($did);
 
@@ -256,6 +265,8 @@ class Notifications
      */
     public function one(int $id): ?array
     {
+        NotificationsFeature::ensureOn();
+
         $row = $this->connection()->table('atp_notifications')->where('id', $id)->first();
 
         if ($row === null || ! $this->visible($row->recipient_did)->where('n.id', $id)->exists()) {
@@ -271,6 +282,8 @@ class Notifications
      */
     public function unreadCount(string $did, ?array $reasons = null): int
     {
+        NotificationsFeature::ensureOn();
+
         $seen = $this->seenAt($did);
         $query = $this->visible($did, $reasons);
 
@@ -287,6 +300,8 @@ class Notifications
      */
     public function markSeen(string $did, ?Carbon $at = null): Carbon
     {
+        NotificationsFeature::ensureOn();
+
         $at = ($at ?? Carbon::now())->clone()->utc();
         $seen = $this->seenAt($did);
 
@@ -305,6 +320,8 @@ class Notifications
 
     public function seenAt(string $did): ?Carbon
     {
+        NotificationsFeature::ensureOn();
+
         $seen = $this->connection()->table('atp_notification_seen')->where('did', $did)->value('seen_at');
 
         return $seen === null ? null : Carbon::parse($seen, 'UTC');

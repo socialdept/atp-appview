@@ -201,8 +201,8 @@ return [
             \SocialDept\AtpAppview\Lexicons\FollowedLexiconsHandler::class,
             // Marks repos delivered as a running backfill's records arrive.
             \SocialDept\AtpAppview\Backfill\BackfillTracker::class,
-            // Keeps notifications for atp-appview.notifications.reasons.
-            \SocialDept\AtpAppview\Notifications\NotificationIndexer::class,
+            // Enabled features add their own after these, such as the
+            // notifications feature's NotificationIndexer.
         ],
     ],
 
