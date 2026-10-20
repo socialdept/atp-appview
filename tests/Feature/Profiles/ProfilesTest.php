@@ -154,6 +154,28 @@ class ProfilesTest extends TestCase
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'collection=com.example.actor.profile'));
     }
 
+    public function test_profiles_found_in_the_index_never_read_backfill_progress(): void
+    {
+        foreach (['alice' => 'Alice', 'bob' => 'Bob'] as $name => $display) {
+            $this->account("did:plc:{$name}");
+            $this->profile("did:plc:{$name}", self::OWN, ['displayName' => $display]);
+            $this->profile("did:plc:{$name}", self::BSKY, ['displayName' => "{$display} on Bluesky"]);
+        }
+        Http::fake();
+
+        $read = 0;
+        DB::listen(function ($query) use (&$read) {
+            if (str_contains($query->sql, 'atp_backfill')) {
+                $read++;
+            }
+        });
+
+        $profiles = $this->profiles()->for(['did:plc:alice', 'did:plc:bob']);
+
+        $this->assertSame(['Alice', 'Bob'], [$profiles['did:plc:alice']['displayName'], $profiles['did:plc:bob']['displayName']]);
+        $this->assertSame(0, $read, 'Every account had a record in every source, so a backfill could change nothing.');
+    }
+
     public function test_an_inactive_account_shows_only_its_did_and_handle(): void
     {
         $this->account('did:plc:gone', ['active' => false]);
