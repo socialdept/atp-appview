@@ -154,9 +154,7 @@ Sending the same reason, subject and record to someone again adds nothing, so a 
 
 ## Delivering them
 
-The [push](push.md) feature does this for Web Push, with no library to install. To deliver another way:
-
-`NotificationCreated` is dispatched after commit for each new notification whose record shows. Push, email and anything else outside the app hang off it, and `Notifications::one($event->id)` gives it hydrated:
+Delivery outside the app, such as Web Push or email, is the app's. `NotificationCreated` is dispatched after commit for each new notification whose record shows, and `Notifications::one($event->id)` gives it hydrated, as the recipient would see it. Ask [`wants()`](#choices) first, so each account's choices for the channel hold:
 
 ```php
 Event::listen(function (NotificationCreated $event) {

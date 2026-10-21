@@ -50,7 +50,6 @@ The [Features](docs/features.md) doc covers what an app turns on beyond the core
 - **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
 - **[Social graph](docs/social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.
 - **[Notifications](docs/notifications.md)**: Reasons, notifiers, grouping, seen state, preferences and delivery.
-- **[Push](docs/push.md)**: Web Push to people's browsers, with no library to install.
 - **[Search](docs/search.md)**: Records by their words, Latest and Top, and the accounts the index holds.
 - **[Feeds](docs/feeds.md)**: Custom feeds in the shapes of Bluesky's feed generators, under Bluesky's names or your own.
 - **[Standing](docs/standing.md)**: Follower and link counts, proven verification by pluggable verifiers, and weighted scores.
