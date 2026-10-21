@@ -61,4 +61,4 @@ class MeilisearchFeature implements Feature
 }
 ```
 
-It can also add fields kept in the index (`field()`), work inside the indexer's transaction on the rows it wrote (`afterWrite()`), routes (`routes()`), and accounts a viewer should not see (`readFilter()`, applied by `visibleTo()`, the built-in XRPC lists and notifications). A feature left out of the list registers nothing, so its migrations, routes and commands stay out of the app. One that needs a feature left out fails at boot, naming it.
+It can also add fields kept in the index (`field()`), work inside the indexer's transaction on the rows it wrote (`afterWrite()`), routes (`routes()`), and accounts a viewer should not see (`readFilter()`) and records a viewer should not see by what they hold (`recordFilter()`), both applied by `visibleTo()`, the built-in XRPC lists and notifications. A feature left out of the list registers nothing, so its migrations, routes and commands stay out of the app. One that needs a feature left out fails at boot, naming it.

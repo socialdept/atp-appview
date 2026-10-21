@@ -38,6 +38,7 @@ class GraphFeatureOffTest extends TestCase
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.features', [Features::moderation(), Features::notifications()]);
         $app['config']->set('atp-appview.graph.blocks', ['collection' => 'com.example.block', 'path' => 'subject']);
+        $app['config']->set('atp-appview.graph.muted_words', ['com.example.thing' => ['text' => ['text']]]);
     }
 
     protected function setUp(): void
@@ -51,6 +52,8 @@ class GraphFeatureOffTest extends TestCase
     public function test_the_graph_left_out_keeps_nothing_and_filters_nothing(): void
     {
         $this->assertFalse(Schema::hasTable('atp_mutes'));
+        $this->assertFalse(Schema::hasTable('atp_muted_words'));
+        $this->assertNull(app(RecordValues::class)->field('com.example.thing', Graph::mutedWordField('text', 0)));
         $this->assertNull(app(RecordValues::class)->field('com.example.block', 'subject'));
 
         Pipeline::fromConfig(app())->run(new Batch([
@@ -60,6 +63,7 @@ class GraphFeatureOffTest extends TestCase
 
         $this->assertSame([], app(Graph::class)->blocking('did:plc:alice'));
         $this->assertSame([], app(Graph::class)->muted('did:plc:alice'));
+        $this->assertSame([], app(Graph::class)->mutedWords('did:plc:alice'));
         $this->assertCount(1, Record::collection('com.example.thing')->visibleTo('did:plc:alice')->get());
         $this->assertSame(['following' => false, 'followedBy' => false, 'blocking' => false, 'blockedBy' => false, 'muted' => false], app(Graph::class)->relationships('did:plc:alice', ['did:plc:bob'])['did:plc:bob']);
 

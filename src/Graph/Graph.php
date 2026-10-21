@@ -132,9 +132,7 @@ class Graph
 
     public function mute(string $did, string $subject): void
     {
-        if (! self::on()) {
-            throw new LogicException('Mutes need the graph feature: add Features::graph() to atp-appview.features.');
-        }
+        self::ensureOn();
 
         if ($did === $subject) {
             return;
@@ -158,6 +156,175 @@ class Graph
         $this->connection()->table('atp_mutes')->where('did', $did)->where('subject', $subject)->delete();
 
         unset($this->hidden[$did]);
+    }
+
+    /**
+     * The text sources muted words are looked for in, by collection, then by
+     * source name, each a list of field paths.
+     *
+     * @return array<string, array<string, array<int, string>>>
+     */
+    public static function mutedWordSources(): array
+    {
+        // Read whole: NSIDs contain dots, which config() would take as nesting.
+        $sources = [];
+
+        foreach ((array) config('atp-appview.graph.muted_words', []) as $collection => $named) {
+            foreach ((array) $named as $source => $paths) {
+                $sources[(string) $collection][(string) $source] = array_values(array_map('strval', (array) $paths));
+            }
+        }
+
+        return $sources;
+    }
+
+    /**
+     * The index field a source's path is kept in.
+     */
+    public static function mutedWordField(string $source, int $path): string
+    {
+        return "muted.{$source}.{$path}";
+    }
+
+    /**
+     * Mute a word or phrase for $did: records holding all of its words, in
+     * the sources given or in every source, stop showing for them. Until a
+     * time, or for good.
+     *
+     * @param  array<int, string>|null  $sources  Source names from atp-appview.graph.muted_words, or null for all
+     * @return int The muted word's id, for unmuteWord()
+     */
+    public function muteWord(string $did, string $value, ?array $sources = null, ?\DateTimeInterface $until = null, bool $excludeFollowing = false): int
+    {
+        self::ensureOn();
+
+        $words = Field::words($value);
+
+        if ($words === []) {
+            throw new \InvalidArgumentException('A muted word needs at least one letter, number or emoji.');
+        }
+
+        return (int) $this->connection()->table('atp_muted_words')->insertGetId([
+            'did' => $did,
+            'value' => mb_substr(trim($value), 0, 255),
+            'words' => json_encode($words, JSON_UNESCAPED_UNICODE),
+            'sources' => $sources === null ? null : json_encode(array_values($sources)),
+            'exclude_following' => $excludeFollowing,
+            'expires_at' => $until === null ? null : Carbon::instance($until)->utc()->format('Y-m-d H:i:s'),
+            'created_at' => Carbon::now('UTC')->format('Y-m-d H:i:s'),
+        ]);
+    }
+
+    public function unmuteWord(string $did, int $id): void
+    {
+        if (self::on()) {
+            $this->connection()->table('atp_muted_words')->where('did', $did)->where('id', $id)->delete();
+        }
+    }
+
+    /**
+     * $did's muted words still in force, newest first.
+     *
+     * @return array<int, array{id: int, value: string, words: array<int, string>, sources: array<int, string>|null, excludeFollowing: bool, expiresAt: string|null}>
+     */
+    public function mutedWords(string $did): array
+    {
+        if (! self::on()) {
+            return [];
+        }
+
+        return $this->connection()->table('atp_muted_words')
+            ->where('did', $did)
+            ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', Carbon::now('UTC')->format('Y-m-d H:i:s')))
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn ($row) => [
+                'id' => (int) $row->id,
+                'value' => (string) $row->value,
+                'words' => (array) json_decode((string) $row->words, true),
+                'sources' => $row->sources === null ? null : (array) json_decode((string) $row->sources, true),
+                'excludeFollowing' => (bool) $row->exclude_following,
+                'expiresAt' => $row->expires_at === null ? null : Carbon::parse($row->expires_at, 'UTC')->toIso8601ZuluString(),
+            ])
+            ->all();
+    }
+
+    /**
+     * Leave out of a query the records holding any of $viewer's muted words,
+     * by the column holding each record's id in atp_records.
+     */
+    public function applyMutedWords(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn): void
+    {
+        $muted = $this->mutedWords($viewer);
+
+        if ($muted === []) {
+            return;
+        }
+
+        $following = null;
+
+        foreach ($muted as $entry) {
+            $keys = $this->mutedWordKeys($entry['sources']);
+
+            if ($keys === []) {
+                continue;
+            }
+
+            $hashes = array_map(fn (string $word) => ValueHash::of($word), $entry['words']);
+
+            if ($entry['excludeFollowing']) {
+                $following ??= $this->following($viewer);
+            }
+
+            $query->where(function ($query) use ($hashes, $keys, $idColumn, $entry, $following) {
+                // Not holding every word of the entry...
+                $query->whereNot(function ($all) use ($hashes, $keys, $idColumn) {
+                    foreach ($hashes as $hash) {
+                        $all->whereExists(fn ($exists) => $exists->selectRaw('1')->from(RecordValues::VALUES.' as muted')
+                            ->whereColumn('muted.record_id', $idColumn)
+                            ->whereIn('muted.key_id', $keys)
+                            ->where('muted.value_hash', $hash));
+                    }
+                });
+
+                // ...or by an account the viewer follows, when that is excused.
+                if ($entry['excludeFollowing'] && $following !== []) {
+                    $query->orWhereExists(fn ($exists) => $exists->selectRaw('1')->from('atp_records as muted_author')
+                        ->whereColumn('muted_author.id', $idColumn)
+                        ->whereIn('muted_author.did', $following));
+                }
+            });
+        }
+
+    }
+
+    /**
+     * The index keys of the muted word fields for these sources, or every
+     * source when null.
+     *
+     * @param  array<int, string>|null  $sources
+     * @return array<int, int>
+     */
+    protected function mutedWordKeys(?array $sources): array
+    {
+        $values = app(RecordValues::class);
+        $keys = [];
+
+        foreach (self::mutedWordSources() as $collection => $named) {
+            foreach ($named as $source => $paths) {
+                if ($sources !== null && ! in_array($source, $sources, true)) {
+                    continue;
+                }
+
+                foreach (array_keys($paths) as $i) {
+                    if (($field = $values->field($collection, self::mutedWordField($source, $i))) !== null) {
+                        $keys[] = $values->keyId($field);
+                    }
+                }
+            }
+        }
+
+        return $keys;
     }
 
     /**
@@ -216,6 +383,16 @@ class Graph
     public static function on(): bool
     {
         return Features::enabled(GraphFeature::class);
+    }
+
+    /**
+     * @throws LogicException when the graph feature is off
+     */
+    protected static function ensureOn(): void
+    {
+        if (! self::on()) {
+            throw new LogicException('Mutes need the graph feature: add Features::graph() to atp-appview.features.');
+        }
     }
 
     /**

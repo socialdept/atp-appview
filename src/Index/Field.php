@@ -26,6 +26,9 @@ final class Field
         public readonly string $path,
         public readonly bool $many = false,
         public readonly bool $exactCase = false,
+        // Text split into its words, each kept as a value, for matching
+        // words such as muted ones.
+        public readonly bool $words = false,
     ) {
         if (! in_array($type, self::TYPES, true)) {
             throw new InvalidArgumentException("atp-appview.fields.{$collection}.{$name} has an unknown type {$type}. Use one of ".implode(', ', self::TYPES).', with [] for a list.');
@@ -33,7 +36,7 @@ final class Field
     }
 
     /**
-     * @param  string|array{type: string, path?: string, case?: string}  $declared
+     * @param  string|array{type: string, path?: string, case?: string, words?: bool}  $declared
      */
     public static function declared(string $collection, string $name, string|array $declared): self
     {
@@ -47,6 +50,7 @@ final class Field
             is_array($declared) ? (string) ($declared['path'] ?? $name) : $name,
             $many,
             is_array($declared) && ($declared['case'] ?? null) === 'exact',
+            is_array($declared) && ($declared['words'] ?? false) === true,
         );
     }
 
@@ -62,8 +66,16 @@ final class Field
     {
         $raw = data_get($record, $this->path);
         $values = [];
+        $items = $this->many ? Arr::wrap($raw) : [$raw];
 
-        foreach ($this->many ? Arr::wrap($raw) : [$raw] as $item) {
+        if ($this->words) {
+            $items = array_merge(...array_map(
+                fn ($item) => is_string($item) ? self::words($item) : [],
+                [...Arr::flatten($items), ''],
+            ));
+        }
+
+        foreach ($items as $item) {
             if (($value = $this->normalize($item)) !== null && ! isset($values[$value['hash']])) {
                 $values[$value['hash']] = $value;
             }
@@ -78,7 +90,21 @@ final class Field
      */
     public function signature(): string
     {
-        return $this->type.($this->many ? '[]' : '').($this->exactCase ? ':exact' : '');
+        return $this->type.($this->many ? '[]' : '').($this->exactCase ? ':exact' : '').($this->words ? ':words' : '');
+    }
+
+    /**
+     * The words in a text, lowercased: runs of letters and numbers, and each
+     * emoji as a word of its own. A leading # is dropped, so a tag and the
+     * same word in text match.
+     *
+     * @return array<int, string>
+     */
+    public static function words(string $text): array
+    {
+        preg_match_all('/[\p{L}\p{N}\p{M}_]+|\p{Extended_Pictographic}[\x{FE0F}\x{1F3FB}-\x{1F3FF}]*(?:\x{200D}\p{Extended_Pictographic}[\x{FE0F}\x{1F3FB}-\x{1F3FF}]*)*|\p{Regional_Indicator}{2}/u', mb_strtolower($text), $matches);
+
+        return array_values(array_unique($matches[0]));
     }
 
     /**

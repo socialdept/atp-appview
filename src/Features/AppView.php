@@ -45,6 +45,9 @@ class AppView
     protected array $readFilters = [];
 
     /** @var array<int, Closure> */
+    protected array $recordFilters = [];
+
+    /** @var array<int, Closure> */
     protected array $schedules = [];
 
     /** @var array<int, array{0: string, 1: Closure|string}> */
@@ -202,6 +205,29 @@ class AppView
         $this->readFilters[] = $callback;
 
         return $this;
+    }
+
+    /**
+     * Records a viewer should not see, by what they hold rather than who
+     * wrote them: fn (Builder $query, string $viewer, string $idColumn),
+     * narrowing a query by the column holding each record's atp_records id.
+     * Applied wherever read filters are.
+     */
+    public function recordFilter(Closure $callback): static
+    {
+        $this->recordFilters[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Narrow a query for a viewer with every record filter.
+     */
+    public function applyRecordFilters(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn): void
+    {
+        foreach ($this->recordFilters as $filter) {
+            $filter($query, $viewer, $idColumn);
+        }
     }
 
     /**
