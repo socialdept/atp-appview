@@ -49,6 +49,27 @@ class Feeds
     }
 
     /**
+     * Every feed this service runs that has an address, with what its
+     * generator record says, for a directory such as a Discover list.
+     *
+     * @return array<string, array<string, mixed>> By AT-URI: uri, rkey and describe()'s fields
+     */
+    public static function catalog(): array
+    {
+        $catalog = [];
+
+        foreach (self::configured() as $rkey => $class) {
+            $feed = app($class);
+
+            if ($feed instanceof Feed && ($uri = self::uri((string) $rkey)) !== null) {
+                $catalog[$uri] = ['uri' => $uri, 'rkey' => (string) $rkey, ...$feed->describe()];
+            }
+        }
+
+        return $catalog;
+    }
+
+    /**
      * The AT-URI of a configured feed's generator record.
      */
     public static function uri(string $rkey): ?string
