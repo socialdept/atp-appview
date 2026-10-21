@@ -35,6 +35,38 @@ class Push
     }
 
     /**
+     * Why the subject will be refused, or null when it looks fine. Push
+     * services contact the sender through it, and Apple's refuses a subject
+     * that is not a public address (403 BadJwtToken): a .test or .local
+     * domain, localhost, or an IP address.
+     */
+    public static function subjectProblem(?string $subject = null): ?string
+    {
+        $subject ??= (string) config('atp-appview.push.subject');
+
+        if ($subject === '') {
+            return 'No subject is set (atp-appview.push.subject). Use a mailto: or https: URL.';
+        }
+
+        if (str_starts_with($subject, 'mailto:')) {
+            $host = strtolower((string) substr(strrchr($subject, '@') ?: '', 1));
+        } elseif (str_starts_with($subject, 'https://')) {
+            $host = strtolower((string) parse_url($subject, PHP_URL_HOST));
+        } else {
+            return "The subject {$subject} must be a mailto: or https: URL.";
+        }
+
+        $local = $host === ''
+            || $host === 'localhost'
+            || filter_var(trim($host, '[]'), FILTER_VALIDATE_IP) !== false
+            || preg_match('/\.(test|local|localhost|internal|example|invalid|lan|home)$/', $host) === 1;
+
+        return $local
+            ? "The subject {$subject} is not a public address, and Apple's push service refuses it. Use an email address or site you own on the public internet."
+            : null;
+    }
+
+    /**
      * The application server key a browser subscribes with, base64url.
      */
     public function publicKey(): ?string
@@ -135,7 +167,13 @@ class Push
                 // The browser unsubscribed or the subscription expired.
                 $this->connection()->table('atp_push_subscriptions')->where('id', $subscription->id)->delete();
             } else {
-                Log::warning('A push service refused a message.', ['did' => $did, 'status' => $response->status(), 'body' => mb_substr($response->body(), 0, 500)]);
+                Log::warning('A push service refused a message.', array_filter([
+                    'did' => $did,
+                    'status' => $response->status(),
+                    'body' => mb_substr($response->body(), 0, 500),
+                    // Apple says BadJwtToken for a subject it will not accept.
+                    'hint' => str_contains($response->body(), 'BadJwtToken') ? self::subjectProblem() : null,
+                ]));
             }
         }
 
