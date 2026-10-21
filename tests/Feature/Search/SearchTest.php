@@ -199,6 +199,19 @@ class SearchTest extends TestCase
         $this->assertSame(['fresh'], $this->found(['q' => 'cats', 'sort' => 'top', 'limit' => 2, 'cursor' => '2'], self::ALICE));
     }
 
+    public function test_top_falls_back_to_the_newest_matches_when_none_are_in_the_window(): void
+    {
+        $this->index(self::BOB, self::THING, 'older', ['text' => 'cats'], '2026-08-01T00:00:00Z');
+        $liked = $this->index(self::CAROL, self::THING, 'liked', ['text' => 'cats'], '2026-07-01T00:00:00Z');
+
+        foreach (range(1, 40) as $i) {
+            $this->index("did:plc:fan{$i}", self::LIKE, "l{$i}", ['subject' => ['uri' => $liked]]);
+        }
+
+        $this->assertSame(['liked', 'older'], $this->found(['q' => 'cats', 'sort' => 'top']), 'Not empty while Latest has results, and still ranked.');
+        $this->assertSame(['older', 'liked'], $this->found(['q' => 'cats', 'sort' => 'latest']));
+    }
+
     public function test_a_query_the_index_cannot_answer_is_refused(): void
     {
         foreach ([['q' => ''], ['q' => '!?'], ['q' => 'cats', 'lang' => 'en'], ['q' => 'cats', 'mentions' => 'bob.test'], ['q' => 'cats', 'collection' => 'com.example.other'], ['q' => 'cats', 'since' => 'soon'], ['q' => 'x', 'collection' => self::STATUS, 'tag' => ['a']]] as $params) {

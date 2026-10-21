@@ -72,7 +72,7 @@ What the viewer should not see is left out before counting and paging: accounts 
 - `following`: added when the viewer follows the author.
 - Every match also scores for each of the collection's sources it matched in, so a word in the text outranks the same word only in a tag.
 
-Top ranks the newest thousand matches in the window, a page at a time.
+Top ranks the newest thousand matches in the window, a page at a time. When nothing matches inside the window, it ranks the newest thousand matches instead, so Top is never empty while Latest has results.
 
 ## Accounts
 
