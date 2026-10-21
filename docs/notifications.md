@@ -46,26 +46,34 @@ The same is served over XRPC under NSIDs in the app's own namespace. A lexicon f
 
 ## Choices
 
-Each account chooses, per reason, whether it shows in the app, whether it is pushed, and whether from everyone or only the accounts they follow. A reason nobody chose for is shown, pushed and from everyone:
+Each account chooses, per reason, whether it shows in the app, whether from everyone or only the accounts they follow, and whether each of the app's channels carries it. A reason nobody chose for is shown, from everyone, and on each channel as configured.
+
+Channels are ways the app delivers notifications outside its own list, such as push or email. The package keeps the choices, and delivery is the app's:
+
+```php
+// config/atp-appview/notifications.php
+'channels' => ['push' => true, 'email' => false],
+```
 
 ```php
 use SocialDept\AtpAppview\Notifications\NotificationPreferences;
 
 $preferences = app(NotificationPreferences::class);
 
-$preferences->for($did, ['like', 'reply']);              // ['like' => ['inApp' => true, 'push' => true, 'from' => 'everyone'], ...]
+$preferences->for($did, ['like', 'reply']);              // ['like' => ['inApp' => true, 'from' => 'everyone', 'channels' => ['push' => true, 'email' => false]], ...]
 $preferences->set($did, 'like', inApp: false);            // the rest stay as they were
 $preferences->set($did, 'reply', from: NotificationPreferences::FOLLOWS);
+$preferences->set($did, 'reply', channels: ['email' => true]);   // other channels stay as they were
 ```
 
-Choices apply as notifications are read, so turning a reason off leaves it out of lists and the unread count, and turning it back on brings back what it held. The app lists the reasons and their labels, since a notifier's reasons only exist in app code.
+Shown and from apply as notifications are read, so turning a reason off leaves it out of lists and the unread count, and turning it back on brings back what it held. The app lists the reasons and their labels, since a notifier's reasons only exist in app code. Setting a channel the app does not configure throws.
 
-Pushing is the app's own, and `wantsPush()` answers for a `NotificationCreated` listener:
+Before sending on a channel, a `NotificationCreated` listener asks `wants()`, which also holds "only the accounts they follow":
 
 ```php
 Event::listen(function (NotificationCreated $event) use ($preferences) {
-    if ($preferences->wantsPush($event->recipient, $event->reason, $event->actor)) {
-        // send it
+    if ($preferences->wants($event->recipient, $event->reason, $event->actor, 'email')) {
+        // send it, with Notifications::one($event->id) for the hydrated notification
     }
 });
 ```

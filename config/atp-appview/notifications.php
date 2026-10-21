@@ -45,6 +45,13 @@ return [
     //     'reply' => ['collection' => 'com.example.post', 'with' => 'reply', 'reason' => 'subscribed-reply'],
     'activity' => [],
 
+    // Ways the app delivers notifications outside its own list, such as push
+    // or email, each with whether it carries a reason nobody chose for.
+    // Each account chooses per reason, and NotificationPreferences::wants()
+    // answers before the app sends. Delivery itself is the app's.
+    //
+    //     'channels' => ['push' => true, 'email' => false],
+    'channels' => [],
     // The newest notifications a group shows, with their actors.
     'latest' => 3,
 

@@ -36,7 +36,7 @@ class SendNotificationPush implements ShouldQueue
             return;
         }
 
-        if (! $preferences->wantsPush($this->recipient, (string) $notification['reason'], (string) ($notification['actor']['did'] ?? ''))) {
+        if (! $preferences->wants($this->recipient, (string) $notification['reason'], (string) ($notification['actor']['did'] ?? ''), 'push')) {
             return;
         }
 

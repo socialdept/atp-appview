@@ -53,6 +53,7 @@ class NotificationsTest extends TestCase
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.xrpc.middleware', ['web']);
         $app['config']->set('atp-appview.views', [ThingView::class]);
+        $app['config']->set('atp-appview.notifications.channels', ['push' => true, 'email' => false]);
         $app['config']->set('atp-appview.notifications.reasons', [
             self::LIKE => ['subject.uri' => 'like'],
             self::THING => ['reply.parent.uri' => 'reply', 'facets.*.features.*.did' => 'mention'],
@@ -279,12 +280,40 @@ class NotificationsTest extends TestCase
         $preferences->set(self::ALICE, 'like', inApp: false);
         $this->assertSame([], $this->notifications()->groups(self::ALICE)['notifications']);
         $this->assertSame(0, $this->notifications()->unreadCount(self::ALICE));
-        $this->assertTrue($preferences->wantsPush(self::ALICE, 'like', self::BOB), 'Push is its own choice.');
+        $this->assertTrue($preferences->wants(self::ALICE, 'like', self::BOB, 'push'), 'A channel is its own choice.');
 
-        $preferences->set(self::ALICE, 'like', inApp: true, push: false);
+        $preferences->set(self::ALICE, 'like', inApp: true, channels: ['push' => false]);
         $this->assertSame(1, $this->notifications()->unreadCount(self::ALICE));
-        $this->assertFalse(app(NotificationPreferences::class)->wantsPush(self::ALICE, 'like', self::BOB));
-        $this->assertSame(['inApp' => true, 'push' => false, 'from' => 'everyone'], app(NotificationPreferences::class)->for(self::ALICE, ['like'])['like']);
+        $this->assertFalse(app(NotificationPreferences::class)->wants(self::ALICE, 'like', self::BOB, 'push'));
+        $this->assertFalse(app(NotificationPreferences::class)->wants(self::ALICE, 'like', self::BOB, 'email'), 'Email starts off.');
+        $this->assertSame(['inApp' => true, 'from' => 'everyone', 'channels' => ['push' => false, 'email' => false]], app(NotificationPreferences::class)->for(self::ALICE, ['like'])['like']);
+
+        $preferences->set(self::ALICE, 'like', channels: ['email' => true]);
+        $this->assertSame(['push' => false, 'email' => true], app(NotificationPreferences::class)->for(self::ALICE, ['like'])['like']['channels'], 'Changing one channel keeps the others.');
+        $this->assertFalse($preferences->wants(self::ALICE, 'like', self::BOB, 'pigeon'), 'A channel the app does not have carries nothing.');
+    }
+
+    public function test_only_the_apps_channels_can_be_chosen(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('No such notification channel: pigeon');
+
+        app(NotificationPreferences::class)->set(self::ALICE, 'like', channels: ['pigeon' => true]);
+    }
+
+    public function test_a_push_turned_off_before_channels_stays_off(): void
+    {
+        $this->artisan('migrate:rollback', ['--path' => realpath(__DIR__.'/../../../database/migrations/notifications/2026_11_02_000001_move_push_preference_into_channels.php'), '--realpath' => true])->run();
+        DB::table('atp_notification_preferences')->insert([
+            ['did' => self::ALICE, 'reason' => 'like', 'in_app' => true, 'push' => false, 'from' => 'everyone'],
+            ['did' => self::ALICE, 'reason' => 'reply', 'in_app' => false, 'push' => true, 'from' => 'everyone'],
+        ]);
+        $this->artisan('migrate')->run();
+
+        $choices = app(NotificationPreferences::class)->for(self::ALICE, ['like', 'reply']);
+        $this->assertFalse($choices['like']['channels']['push']);
+        $this->assertTrue($choices['reply']['channels']['push']);
+        $this->assertFalse($choices['reply']['inApp']);
     }
 
     public function test_a_reason_can_be_limited_to_followed_accounts(): void
@@ -299,8 +328,8 @@ class NotificationsTest extends TestCase
 
         $this->assertSame([self::BOB], array_map(fn (array $latest) => $latest['actor']['did'], $this->notifications()->groups(self::ALICE)['notifications'][0]['latest']));
         $this->assertSame(1, $this->notifications()->unreadCount(self::ALICE));
-        $this->assertTrue($preferences->wantsPush(self::ALICE, 'like', self::BOB));
-        $this->assertFalse($preferences->wantsPush(self::ALICE, 'like', self::CAROL));
+        $this->assertTrue($preferences->wants(self::ALICE, 'like', self::BOB, 'push'));
+        $this->assertFalse($preferences->wants(self::ALICE, 'like', self::CAROL, 'push'), 'Only from followed accounts holds for channels too.');
 
         // Unfollowing takes Bob's away too.
         $this->index(self::ALICE, self::FOLLOW, 'f1', null, '3l2bbbbbbbbbb');
