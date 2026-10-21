@@ -47,6 +47,8 @@ class RecordQuery
     /** @var array<int, string> Authors left out */
     protected array $hidden = [];
 
+    protected ?string $viewer = null;
+
     protected ?string $cursor = null;
 
     protected int $limit = 50;
@@ -90,6 +92,7 @@ class RecordQuery
      */
     public function visibleTo(?string $viewer): static
     {
+        $this->viewer = $viewer;
         $this->hidden = $viewer === null ? [] : app(AppView::class)->hidden($viewer);
 
         return $this;
@@ -200,6 +203,10 @@ class RecordQuery
             $query->whereNotExists(fn (Builder $records) => $records->selectRaw('1')->from('atp_records as hidden')
                 ->whereColumn('hidden.id', 'd.record_id')
                 ->whereIn('hidden.did', $this->hidden));
+        }
+
+        if ($this->viewer !== null) {
+            app(AppView::class)->applyRecordFilters($query, $this->viewer, 'd.record_id');
         }
 
         // Across accounts is discovery: what needs review is left out. One

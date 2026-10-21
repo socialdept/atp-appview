@@ -18,7 +18,7 @@
 |
 | Blocks apply both ways and mutes only to the muter, wherever records are
 | listed for a viewer. Mutes are private, so they are kept by the app in
-| atp_mutes, never as records.
+| atp_mutes and atp_muted_words, never as records.
 |
 */
 
@@ -26,4 +26,17 @@ return [
     'follows' => null,
 
     'blocks' => null,
+
+    // Where muted words are looked for: each collection's text, in named
+    // sources of one or more fields. A viewer can mute a word in some
+    // sources only, such as tags but not text. The words are kept in the
+    // index, so run appview:fields after changing this.
+    //
+    //     'muted_words' => [
+    //         'com.example.post' => [
+    //             'text' => ['text'],
+    //             'tags' => ['tags', 'facets.*.features.*.tag'],
+    //         ],
+    //     ],
+    'muted_words' => [],
 ];

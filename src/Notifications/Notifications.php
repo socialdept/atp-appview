@@ -446,6 +446,9 @@ class Notifications
             $query->whereNotIn('n.actor_did', $hidden);
         }
 
+        // Nor from records a record filter leaves out, such as muted words.
+        app(AppView::class)->applyRecordFilters($query, $did, 'r.id');
+
         return app(NotificationPreferences::class)->apply($query, $did);
     }
 
