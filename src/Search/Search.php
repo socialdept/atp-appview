@@ -280,18 +280,24 @@ class Search
     }
 
     /**
-     * A page of Top: the recent matches, ranked by their collections' signals
-     * and decayed by age.
+     * A page of Top: the matches of the window, ranked by their collections'
+     * signals and decayed by age. With none in the window, the newest
+     * matches instead, so Top is never empty while Latest has results.
      *
      * @return array{0: array<int, string>, 1: string|null} The URIs, and the next cursor
      */
     protected function top(\Illuminate\Database\Eloquent\Builder $base, SearchQuery $query, int $limit): array
     {
         $window = max(1, ...array_map(fn (array $config) => (int) ($config['top']['window_days'] ?? 7), array_values(self::collections()) ?: [[]]));
-        $candidates = (clone $base)->where('sort_at', '>=', Carbon::now('UTC')->subDays($window)->format('Y-m-d H:i:s.u'))
-            ->orderByDesc('sort_at')->orderByDesc('uri')
+        $newest = fn (\Illuminate\Database\Eloquent\Builder $matches) => $matches->orderByDesc('sort_at')->orderByDesc('uri')
             ->limit(self::TOP_CANDIDATES)
             ->get(['id', 'uri', 'did', 'collection', 'sort_at']);
+
+        $candidates = $newest((clone $base)->where('sort_at', '>=', Carbon::now('UTC')->subDays($window)->format('Y-m-d H:i:s.u')));
+
+        if ($candidates->isEmpty()) {
+            $candidates = $newest(clone $base);
+        }
 
         if ($candidates->isEmpty()) {
             return [[], null];
