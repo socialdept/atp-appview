@@ -20,6 +20,8 @@ ATP_APPVIEW_PUSH_SUBJECT=mailto:you@example.com
 
 Changing the keys later unsubscribes every browser. Without them nothing is sent.
 
+The subject is how push services contact you, so it must be a public address: an email address or a site you own on the public internet. Apple's push service refuses a `.test` or `.local` domain, `localhost` or an IP address, answering 403 `BadJwtToken`, so iPhones and Macs get nothing. That holds in local development too: use a real address even when the app runs on a `.test` domain. `Push::subjectProblem()` says when a subject will be refused, and `appview:push:keys` warns about it.
+
 Give the two procedures browsers subscribe through NSIDs in your own namespace:
 
 ```php

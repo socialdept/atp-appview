@@ -11,7 +11,8 @@
 |
 | Make the VAPID keys once with php artisan appview:push:keys and put them
 | in .env. Without them nothing is sent. The subject is how a push service
-| reaches you about your messages: a mailto: or https: URL.
+| reaches you about your messages: a mailto: or https: URL on the public
+| internet. Apple refuses a .test or .local domain, localhost or an IP.
 |
 */
 
