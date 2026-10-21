@@ -5,9 +5,7 @@ namespace SocialDept\AtpAppview\Notifications;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
-use SocialDept\AtpAppview\Features\Push as PushFeature;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
@@ -72,10 +70,6 @@ class NotificationPreferences
 
         foreach ((array) config('atp-appview.notifications.channels', []) as $name => $default) {
             is_int($name) ? $channels[(string) $default] = true : $channels[(string) $name] = (bool) $default;
-        }
-
-        if (Features::enabled(PushFeature::class)) {
-            $channels += ['push' => true];
         }
 
         return $channels;
