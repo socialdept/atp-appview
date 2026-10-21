@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
@@ -208,6 +209,30 @@ class PushTest extends TestCase
         app(NotificationPreferences::class)->set(self::ALICE, 'like', push: true);
         $this->like('l2');
         $this->assertSame(0, DB::table('atp_push_subscriptions')->count(), 'The push service said it is gone.');
+    }
+
+    public function test_a_subject_apple_would_refuse_is_named_before_and_after_sending(): void
+    {
+        foreach (['https://myapp.test', 'mailto:me@app.local', 'https://localhost', 'https://127.0.0.1', 'mailto:', 'me@example.com'] as $subject) {
+            $this->assertNotNull(Push::subjectProblem($subject), "{$subject} should be named.");
+        }
+
+        foreach (['https://example.com', 'mailto:ops@example.com', 'https://appview.example.org'] as $subject) {
+            $this->assertNull(Push::subjectProblem($subject), "{$subject} is fine.");
+        }
+
+        config()->set('atp-appview.push.subject', 'https://myapp.test');
+        $this->artisan('appview:push:keys')->expectsOutputToContain('not a public address')->assertSuccessful();
+
+        // When Apple refuses, the log says why.
+        $browser = $this->browser();
+        app(Push::class)->subscribe(self::ALICE, 'https://web.push.apple.com/abc', $browser['p256dh'], $browser['auth']);
+        Http::fake(['https://web.push.apple.com/*' => Http::response('{"reason":"BadJwtToken"}', 403)]);
+        Log::spy();
+
+        app(Push::class)->send(self::ALICE, ['type' => 'test']);
+
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context) => str_contains($context['hint'] ?? '', 'not a public address'));
     }
 
     public function test_browsers_subscribe_and_unsubscribe_through_xrpc_and_learn_the_key(): void
