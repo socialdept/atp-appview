@@ -21,6 +21,7 @@ use SocialDept\AtpAppview\Standing\Standing;
 use SocialDept\AtpAppview\Standing\Verification;
 use SocialDept\AtpAppview\Standing\Verifiers\LabelVerifier;
 use SocialDept\AtpAppview\Standing\Verifiers\RecordVerifier;
+use SocialDept\AtpAppview\Tests\Fixtures\Standing\CommunityIssuers;
 use SocialDept\AtpCbor\Core\CBOR;
 use SocialDept\AtpCbor\Core\CID;
 use SocialDept\AtpCbor\Crypto\Secp256k1Keypair;
@@ -46,6 +47,7 @@ class StandingTest extends TestCase
     protected const ALICE = 'did:plc:alice';
     protected const BOB = 'did:plc:bob';
     protected const CAROL = 'did:plc:carol';
+    protected const DAVE = 'did:plc:dave';
     protected const ISSUER = 'did:plc:issuer';
     protected const STRANGER = 'did:plc:stranger';
     protected const LABELER = 'did:plc:labeler';
@@ -328,6 +330,89 @@ class StandingTest extends TestCase
         $basic = app(Profiles::class)->basic([self::ALICE])[self::ALICE];
         $this->assertSame('valid', $basic['verification']['verifiedStatus']);
         $this->assertArrayNotHasKey('stats', $basic);
+    }
+
+    public function test_trusted_issuers_can_come_from_a_class_and_are_cached(): void
+    {
+        CommunityIssuers::$dids = [self::STRANGER];
+        CommunityIssuers::$asked = 0;
+        config()->set('atp-appview.standing.verification.verifiers', [['class' => RecordVerifier::class, 'collection' => self::VERIFY, 'issuers' => [self::ISSUER, CommunityIssuers::class], 'prove' => false]]);
+        $this->account(self::ALICE, 'alice.test', 'Alice');
+        $this->account(self::CAROL, 'carol.test', 'Carol');
+        $this->index(self::ISSUER, self::VERIFY, 'v1', ['subject' => self::ALICE, 'handle' => 'alice.test', 'displayName' => 'Alice']);
+        $this->index(self::STRANGER, self::VERIFY, 'v2', ['subject' => self::CAROL, 'handle' => 'carol.test', 'displayName' => 'Carol']);
+
+        $this->standing()->refresh([self::ALICE, self::CAROL]);
+        $verified = $this->standing()->verification([self::ALICE, self::CAROL]);
+
+        $this->assertSame(Verification::VALID, $verified[self::ALICE]->status, 'A DID in config still counts.');
+        $this->assertSame(Verification::VALID, $verified[self::CAROL]->status, 'So does one the class gives.');
+        $this->assertTrue($this->standing()->trusted(self::STRANGER));
+        $this->assertSame([self::ISSUER, self::STRANGER], Standing::verifiers()[0]->issuers(), 'What is not a DID is dropped.');
+
+        $asked = CommunityIssuers::$asked;
+        $this->standing()->trusted(self::STRANGER);
+        Standing::verifiers()[0]->issuers();
+        $this->assertSame($asked, CommunityIssuers::$asked, 'The class is asked once per cache period, not on every read.');
+
+        config()->set('atp-appview.standing.verification.verifiers', [['class' => RecordVerifier::class, 'issuers' => [\stdClass::class], 'prove' => false]]);
+        $this->expectException(\InvalidArgumentException::class);
+        Standing::verifiers()[0]->issuers();
+    }
+
+    public function test_fields_match_exactly_as_bluesky_compares_them(): void
+    {
+        $this->account(self::ALICE, 'alice.test', 'Alice');
+        $this->account(self::BOB, '', 'Bob');
+        $this->account(self::CAROL, 'carol.test', 'Carol');
+        $this->account(self::DAVE, 'dave.test', 'Café');
+        $this->index(self::ISSUER, self::VERIFY, 'v1', ['subject' => self::ALICE, 'handle' => 'alice.test', 'displayName' => 'Alice ']);
+        $this->index(self::ISSUER, self::VERIFY, 'v2', ['subject' => self::BOB, 'handle' => '', 'displayName' => 'Bob']);
+        $this->index(self::ISSUER, self::VERIFY, 'v3', ['subject' => self::CAROL, 'handle' => 'Carol.test', 'displayName' => 'Carol']);
+        // The same é, decomposed: e and a combining accent.
+        $this->index(self::ISSUER, self::VERIFY, 'v4', ['subject' => self::DAVE, 'handle' => 'dave.test', 'displayName' => "Cafe\u{0301}"]);
+
+        $this->standing()->refresh([self::ALICE, self::BOB, self::CAROL, self::DAVE]);
+        $verified = $this->standing()->verification([self::ALICE, self::BOB, self::CAROL, self::DAVE]);
+
+        $this->assertSame(['invalid', 'displayName'], [$verified[self::ALICE]->status, $verified[self::ALICE]->verifications[0]['reason']], 'No trimming.');
+        $this->assertSame(['invalid', 'handle'], [$verified[self::BOB]->status, $verified[self::BOB]->verifications[0]['reason']], 'An empty value never matches, even an empty one.');
+        $this->assertSame(['invalid', 'handle'], [$verified[self::CAROL]->status, $verified[self::CAROL]->verifications[0]['reason']], 'No case folding.');
+        $this->assertSame(['invalid', 'displayName'], [$verified[self::DAVE]->status, $verified[self::DAVE]->verifications[0]['reason']], 'No Unicode normalization.');
+    }
+
+    public function test_an_impersonation_label_from_a_named_labeler_outweighs_verification(): void
+    {
+        config()->set('atp-appview.standing.verification.impersonation', ['labelers' => [self::LABELER], 'values' => ['impersonation']]);
+        config()->set('atp-appview.standing.verification.verifiers', [['class' => RecordVerifier::class, 'collection' => self::VERIFY, 'issuers' => [self::ISSUER, self::ALICE], 'prove' => false]]);
+        $this->account(self::ALICE, 'alice.test', 'Alice');
+        $this->account(self::BOB, 'bob.test', 'Bob');
+        $this->index(self::ISSUER, self::VERIFY, 'v1', ['subject' => self::ALICE, 'handle' => 'alice.test', 'displayName' => 'Alice']);
+        $this->index(self::ISSUER, self::VERIFY, 'v2', ['subject' => self::BOB, 'handle' => 'bob.test', 'displayName' => 'Bob']);
+        $this->standing()->refresh([self::ALICE, self::BOB]);
+        $label = fn (string $subject, string $src, bool $checked) => DB::table('atp_labels')->insert(['src' => $src, 'uri' => $subject, 'subject' => $subject, 'val' => 'impersonation', 'cts' => '2026-10-01T00:00:00.000Z', 'verified' => $checked]);
+
+        $label(self::ALICE, self::LABELER, true);
+        $label(self::BOB, self::STRANGER, true);
+        $label(self::BOB, self::LABELER, false);
+
+        $profiles = app(Profiles::class)->for([self::ALICE, self::BOB]);
+        $this->assertSame('invalid', $profiles[self::ALICE]['verification']['verifiedStatus'], 'Applied as read, with no refresh.');
+        $this->assertTrue($profiles[self::ALICE]['verification']['verifications'][0]['isValid'], 'Each record still holds on its own.');
+        $this->assertSame('invalid', $profiles[self::ALICE]['verification']['trustedVerifierStatus'], 'A trusted verifier labeled an impersonation is invalid too.');
+        $this->assertSame('valid', $profiles[self::BOB]['verification']['verifiedStatus'], 'Another labeler, or a label not checked, does not count.');
+
+        config()->set('atp-appview.standing.verification.impersonation.labelers', []);
+        $this->assertSame(Verification::VALID, $this->standing()->verification([self::ALICE])[self::ALICE]->status, 'No labelers named, no check.');
+    }
+
+    public function test_an_account_without_a_valid_handle_shows_no_verification(): void
+    {
+        DB::table('atp_identities')->insert(['did' => self::ALICE, 'handle' => null, 'active' => true, 'updated_at' => now()]);
+        $this->index(self::ALICE, self::PROFILE, 'self', ['displayName' => 'Alice']);
+        Resolver::shouldReceive('resolveDid')->andThrow(new \RuntimeException('offline'));
+
+        $this->assertArrayNotHasKey('verification', app(Profiles::class)->for([self::ALICE])[self::ALICE]);
     }
 
     public function test_the_command_refreshes_what_has_gone_stale(): void

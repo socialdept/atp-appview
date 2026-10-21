@@ -84,8 +84,8 @@ Bluesky's model, for any collection. An issuer publishes a record in its own rep
 
 - `collection`: the verification records' collection, `app.bsky.graph.verification` by default.
 - `subject`: the path to the verified DID, `subject` by default.
-- `issuers`: the DIDs it trusts. Records from anyone else are ignored.
-- `match`: record fields that must still equal the account's, `['handle' => 'handle', 'displayName' => 'displayName']` by default. A record whose handle or display name no longer matches is `invalid`, not `none`, with the field as its reason.
+- `issuers`: the DIDs it trusts, and classes that give them (below). Records from anyone else are ignored.
+- `match`: record fields that must still equal the account's, `['handle' => 'handle', 'displayName' => 'displayName']` by default. A record whose handle or display name no longer matches is `invalid`, not `none`, with the field as its reason. They are compared exactly, as Bluesky's AppView compares them: no trimming, case folding or Unicode normalization, and an empty value never matches.
 - `prove`: `true` by default. See below.
 
 Candidates come from the index when you ingest the collection, current to the second, deletions included. Otherwise they come from Constellation, filtered to the trusted issuers.
@@ -95,6 +95,30 @@ Candidates come from the index when you ingest the collection, current to the se
 Proof needs `socialdept/atp-cbor` and the `gmp` extension, which atp-appview suggests rather than requires. With `prove` on and atp-cbor missing, the verifier refuses to run rather than quietly trust what it found. Set `prove` to `false` only for records you already trust, such as ones your own app ingests from a source you control.
 
 The handle compared is the one the index holds for the account, or the one in its DID document when that handle resolves back to the same DID. The display name is the profile's, through [profiles](views.md#profiles).
+
+**Trusted issuers from elsewhere.** Bluesky does not publish its list of trusted verifiers, and a community may keep its own. An issuer can be a class implementing `Standing\Contracts\TrustedIssuers`, which gives DIDs from wherever the app keeps them: a table its operators edit, a list a community publishes as a record, one refreshed from elsewhere. Its answer is cached for `issuers_cache` seconds, 300 by default:
+
+```php
+use SocialDept\AtpAppview\Standing\Contracts\TrustedIssuers;
+
+class CommunityVerifiers implements TrustedIssuers
+{
+    public function dids(): array
+    {
+        return Verifier::query()->pluck('did')->all();
+    }
+}
+
+'issuers' => ['did:plc:z72i7hdynmk6r22z27h6tvur', CommunityVerifiers::class],
+```
+
+**Impersonation.** As on Bluesky, an `impersonation` label on an account makes its verification `invalid` however many records hold, and a trusted verifier's `trustedVerifierStatus` `invalid` too. Only labels from the labelers you name count, with their signatures checked, so name your own moderation service. It applies as labels arrive, without waiting for a refresh, and needs [moderation](moderation.md):
+
+```php
+'verification' => [
+    'impersonation' => ['labelers' => ['did:plc:ar7c4by46qjdydhdevvrndac'], 'values' => ['impersonation']],
+],
+```
 
 ### LabelVerifier
 
@@ -159,7 +183,7 @@ $standing->scores([$did, $uri]);       // subject => float
 
 With the feature on, [profiles](views.md#profiles) gain:
 
-- `verification`, in Bluesky's `verificationState` shape: `verifiedStatus`, `trustedVerifierStatus` and each verification's `issuer`, `uri`, `isValid` and `createdAt`. Only when a verifier is configured.
+- `verification`, in Bluesky's `verificationState` shape: `verifiedStatus`, `trustedVerifierStatus` and each verification's `issuer`, `uri`, `isValid` and `createdAt`. Only when a verifier is configured, and, as on Bluesky, never for an account without a valid handle.
 - `stats`, the account metrics. Full profiles only, not basic ones.
 
 [Search](search.md) uses scores too: account search orders by score after the accounts the viewer follows, and an app's [Top ranker](search.md#latest-and-top) can weigh the author's score.

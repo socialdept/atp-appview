@@ -2,11 +2,14 @@
 
 namespace SocialDept\AtpAppview\Standing\Verifiers;
 
+use Illuminate\Support\Facades\Cache;
+use InvalidArgumentException;
 use LogicException;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Profiles\Profiles;
+use SocialDept\AtpAppview\Standing\Contracts\TrustedIssuers;
 use SocialDept\AtpAppview\Standing\Contracts\Verifier;
 use SocialDept\AtpAppview\Standing\Verification;
 use SocialDept\AtpCbor\Proof\ProofException;
@@ -35,7 +38,7 @@ use Throwable;
  */
 class RecordVerifier implements Verifier
 {
-    /** @var array<int, string> */
+    /** @var array<int, string> The resolved issuers, once asked for */
     protected array $issuers;
 
     protected string $collection;
@@ -48,13 +51,23 @@ class RecordVerifier implements Verifier
     protected bool $prove;
 
     /**
-     * @param  array<string, mixed>  $options  collection, subject, issuers, match, prove
+     * Issuers as configured: DIDs, and classes implementing TrustedIssuers.
+     *
+     * @var array<int, string>
+     */
+    protected array $configuredIssuers;
+
+    protected int $issuersCache;
+
+    /**
+     * @param  array<string, mixed>  $options  collection, subject, issuers, issuers_cache, match, prove
      */
     public function __construct(array $options = [])
     {
         $this->collection = (string) ($options['collection'] ?? 'app.bsky.graph.verification');
         $this->subjectPath = (string) ($options['subject'] ?? 'subject');
-        $this->issuers = array_values(array_filter((array) ($options['issuers'] ?? []), 'is_string'));
+        $this->configuredIssuers = array_values(array_filter((array) ($options['issuers'] ?? []), 'is_string'));
+        $this->issuersCache = (int) ($options['issuers_cache'] ?? 300);
         $this->match = (array) ($options['match'] ?? ['handle' => 'handle', 'displayName' => 'displayName']);
         $this->prove = (bool) ($options['prove'] ?? true);
 
@@ -65,7 +78,45 @@ class RecordVerifier implements Verifier
 
     public function trusts(string $did): bool
     {
-        return in_array($did, $this->issuers, true);
+        return in_array($did, $this->issuers(), true);
+    }
+
+    /**
+     * The trusted issuers: the DIDs configured, and those each class gives,
+     * which are cached for issuers_cache seconds.
+     *
+     * @return array<int, string>
+     *
+     * @throws InvalidArgumentException for a class that is not TrustedIssuers
+     */
+    public function issuers(): array
+    {
+        if (isset($this->issuers)) {
+            return $this->issuers;
+        }
+
+        $dids = [];
+
+        foreach ($this->configuredIssuers as $issuer) {
+            if (str_starts_with($issuer, 'did:')) {
+                $dids[] = $issuer;
+
+                continue;
+            }
+
+            if (! is_subclass_of($issuer, TrustedIssuers::class)) {
+                throw new InvalidArgumentException("{$issuer} is neither a DID nor a class implementing Standing\\Contracts\\TrustedIssuers.");
+            }
+
+            $given = Cache::remember("atp-appview:standing:issuers:{$issuer}", $this->issuersCache, fn () => array_values(array_filter(
+                (array) app($issuer)->dids(),
+                fn ($did) => is_string($did) && str_starts_with($did, 'did:'),
+            )));
+
+            array_push($dids, ...$given);
+        }
+
+        return $this->issuers = array_values(array_unique($dids));
     }
 
     public function verify(array $dids): array
@@ -73,7 +124,7 @@ class RecordVerifier implements Verifier
         $results = [];
         $method = 'record:'.$this->collection;
 
-        if ($this->issuers === []) {
+        if ($this->issuers() === []) {
             return array_fill_keys($dids, Verification::none($method));
         }
 
@@ -118,7 +169,7 @@ class RecordVerifier implements Verifier
         if (Collections::ingests($this->collection)) {
             return Record::query()
                 ->where('collection', $this->collection)
-                ->whereIn('did', $this->issuers)
+                ->whereIn('did', $this->issuers())
                 ->where('record->'.str_replace('.', '->', $this->subjectPath), $did)
                 ->get(['did', 'rkey', 'record'])
                 ->map(fn (Record $record) => [$record->did, $record->rkey, $record->record])
@@ -126,14 +177,14 @@ class RecordVerifier implements Verifier
         }
 
         try {
-            $found = Microcosm::constellation()->getBacklinks($did, "{$this->collection}:{$this->subjectPath}", $this->issuers, 100);
+            $found = Microcosm::constellation()->getBacklinks($did, "{$this->collection}:{$this->subjectPath}", $this->issuers(), 100);
         } catch (Throwable) {
             return [];
         }
 
         return array_map(fn ($reference) => [$reference->did, $reference->rkey, null], array_values(array_filter(
             $found->records,
-            fn ($reference) => in_array($reference->did, $this->issuers, true) && $reference->collection === $this->collection,
+            fn ($reference) => in_array($reference->did, $this->issuers(), true) && $reference->collection === $this->collection,
         )));
     }
 
@@ -177,8 +228,10 @@ class RecordVerifier implements Verifier
             return ['valid' => false, 'reason' => 'subject'];
         }
 
+        // Compared exactly, as Bluesky's AppView does: no trimming, case
+        // folding or Unicode normalization, and an empty value never matches.
         foreach ($this->match as $field => $accountField) {
-            if (! is_string($record[$field] ?? null) || ($account[$accountField] ?? null) !== $record[$field]) {
+            if (! is_string($record[$field] ?? null) || $record[$field] === '' || ($account[$accountField] ?? null) !== $record[$field]) {
                 return ['valid' => false, 'reason' => $field];
             }
         }
