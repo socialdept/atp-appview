@@ -7,8 +7,10 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Features\Standing as StandingFeature;
 use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Standing\Contracts\Metric;
 use SocialDept\AtpAppview\Standing\Contracts\Verifier;
 use SocialDept\AtpAppview\Standing\Metrics\BacklinkCount;
@@ -108,11 +110,20 @@ class Standing
     public function verification(array $dids): array
     {
         $stored = $this->stored($dids);
+        $impersonated = $this->impersonated($dids);
         $result = [];
 
         foreach ($dids as $did) {
             $detail = $stored[$did][self::VERIFICATION]['detail'] ?? null;
-            $result[$did] = is_array($detail) ? Verification::fromArray($detail) : Verification::none();
+            $verification = is_array($detail) ? Verification::fromArray($detail) : Verification::none();
+
+            // An impersonation label outweighs every verification, as on
+            // Bluesky. Checked as read, so a new label applies at once.
+            if (($impersonated[$did] ?? false) && $verification->status === Verification::VALID) {
+                $verification = new Verification(Verification::INVALID, $verification->verifications, $verification->method, $verification->complete);
+            }
+
+            $result[$did] = $verification;
         }
 
         return $result;
@@ -130,6 +141,47 @@ class Standing
         }
 
         return false;
+    }
+
+    /**
+     * Bluesky's trustedVerifierStatus: valid for a trusted issuer, invalid for
+     * one labeled an impersonation, none for everyone else.
+     */
+    public function trustedStatus(string $did): string
+    {
+        if (! $this->trusted($did)) {
+            return Verification::NONE;
+        }
+
+        return ($this->impersonated([$did])[$did] ?? false) ? Verification::INVALID : Verification::VALID;
+    }
+
+    /**
+     * Which of these accounts carry an impersonation label from the labelers
+     * standing.verification.impersonation names. None without moderation, or
+     * with no labelers named.
+     *
+     * @param  array<int, string>  $dids
+     * @return array<string, bool>
+     */
+    public function impersonated(array $dids): array
+    {
+        $config = (array) config('atp-appview.standing.verification.impersonation', []);
+        $labelers = array_values(array_filter((array) ($config['labelers'] ?? []), 'is_string'));
+
+        if ($dids === [] || $labelers === [] || ! ModerationFeature::on()) {
+            return [];
+        }
+
+        // On the account itself, from a named labeler, its signature checked.
+        return Label::query()->live()
+            ->whereIn('uri', $dids)
+            ->whereIn('src', $labelers)
+            ->whereIn('val', (array) ($config['values'] ?? ['impersonation']))
+            ->where('verified', true)
+            ->pluck('uri')
+            ->mapWithKeys(fn (string $did) => [$did => true])
+            ->all();
     }
 
     /**

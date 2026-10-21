@@ -65,11 +65,13 @@ class Standing implements Feature
         $stats = ! $basic && StandingService::metrics(StandingService::ACCOUNT) !== [] ? $standing->metricsFor($dids) : [];
 
         foreach ($profiles as $did => $profile) {
-            if ($verifying) {
+            // Like Bluesky, an account without a valid handle shows no
+            // verification at all.
+            if ($verifying && filled($profile['handle'] ?? null)) {
                 $verification = $verifications[$did];
                 $profiles[$did]['verification'] = [
                     'verifiedStatus' => $verification->status,
-                    'trustedVerifierStatus' => $standing->trusted($did) ? 'valid' : 'none',
+                    'trustedVerifierStatus' => $standing->trustedStatus($did),
                     'verifications' => array_map(fn (array $item) => [
                         'issuer' => $item['issuer'],
                         'uri' => $item['uri'],

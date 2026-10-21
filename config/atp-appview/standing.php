@@ -25,19 +25,33 @@ return [
     'metrics' => [],
 
     // Whether an account is verified, and by whom. Each verifier is a class
-    // implementing Standing\Contracts\Verifier, with its options. Under the
-    // any policy an account is verified by any of them, under all by every
-    // one.
+    // implementing Standing\Contracts\Verifier, with its options. A
+    // RecordVerifier's issuers are DIDs, or classes implementing
+    // Standing\Contracts\TrustedIssuers that give them, cached for
+    // issuers_cache seconds (300 by default). Under the any policy an
+    // account is verified by any verifier, under all by every one.
     //
     //     [
     //         'class' => Standing\Verifiers\RecordVerifier::class,
     //         'collection' => 'app.bsky.graph.verification',
-    //         'issuers' => ['did:plc:z72i7hdynmk6r22z27h6tvur'],
+    //         'issuers' => ['did:plc:z72i7hdynmk6r22z27h6tvur', CommunityVerifiers::class],
     //         'match' => ['handle' => 'handle', 'displayName' => 'displayName'],
     //     ],
     'verification' => [
         'policy' => 'any',
         'verifiers' => [],
+
+        // An impersonation label on an account makes its verification
+        // invalid, and a trusted verifier's status invalid too, as Bluesky
+        // does. Only labels from these labelers count, so name your own
+        // moderation service. No labelers turns the check off. Needs the
+        // moderation feature.
+        //
+        //     'labelers' => ['did:plc:ar7c4by46qjdydhdevvrndac'],
+        'impersonation' => [
+            'labelers' => [],
+            'values' => ['impersonation'],
+        ],
     ],
 
     // How metrics and verification add up to a score, per subject kind. A
