@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Profiles;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use SocialDept\AtpAppview\Backfill\Backfills;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Images\Blobs;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Models\Identity;
@@ -94,7 +95,7 @@ class Profiles
      */
     public function for(array $dids): array
     {
-        return $this->resolve($dids, ['avatar' => 'avatar', 'banner' => 'banner']);
+        return app(AppView::class)->decorateProfiles($this->resolve($dids, ['avatar' => 'avatar', 'banner' => 'banner']), basic: false);
     }
 
     /**
@@ -106,10 +107,10 @@ class Profiles
      */
     public function basic(array $dids): array
     {
-        return array_map(
+        return app(AppView::class)->decorateProfiles(array_map(
             fn (array $profile) => array_intersect_key($profile, array_flip(self::BASIC)),
             $this->resolve($dids, ['avatar' => 'author']),
-        );
+        ), basic: true);
     }
 
     /**

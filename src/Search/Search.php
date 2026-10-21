@@ -7,6 +7,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Features\Search as SearchFeature;
+use SocialDept\AtpAppview\Features\Standing as StandingFeature;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\Field;
 use SocialDept\AtpAppview\Index\RecordValues;
@@ -14,6 +15,7 @@ use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Profiles\Profiles;
 use SocialDept\AtpAppview\Search\Contracts\SearchText;
+use SocialDept\AtpAppview\Standing\Standing;
 use SocialDept\AtpAppview\Views\UriViews;
 
 /**
@@ -194,6 +196,12 @@ class Search
             $query->orderByRaw('case when i.did in ('.implode(',', array_fill(0, count($following), '?')).') then 0 else 1 end', $following);
         }
 
+        // Then by standing, when the feature keeps scores.
+        if (StandingFeature::on()) {
+            $query->leftJoin('atp_standing as standing', fn ($join) => $join->on('standing.subject', '=', 'i.did')->where('standing.kind', Standing::SCORE))
+                ->orderByRaw('coalesce(standing.value, 0) desc');
+        }
+
         $offset = $typeahead ? 0 : max(0, (int) $cursor);
         $dids = $query->orderByRaw('length(i.handle)')->orderBy('i.handle')
             ->offset($offset)->limit($limit + 1)->pluck('did')->all();
@@ -304,13 +312,15 @@ class Search
         }
 
         $following = $query->viewer !== null && Graph::on() ? array_flip(app(Graph::class)->following($query->viewer)) : [];
+        $standing = StandingFeature::on() ? app(Standing::class)->scores($candidates->pluck('did')->unique()->values()->all()) : [];
         $matched = $this->matchedSources($candidates->pluck('id')->all(), $query);
         $counts = $this->counts($candidates);
         $now = Carbon::now('UTC');
 
-        $scored = $candidates->map(function (Record $record) use ($following, $matched, $counts, $now) {
+        $scored = $candidates->map(function (Record $record) use ($following, $matched, $counts, $standing, $now) {
             $top = (array) (self::collections()[$record->collection]['top'] ?? []);
-            $signals = 1 + count($matched[$record->id] ?? []) + ($counts[$record->uri] ?? 0);
+            $signals = 1 + count($matched[$record->id] ?? []) + ($counts[$record->uri] ?? 0)
+                + (float) ($top['standing'] ?? 0) * ($standing[$record->did] ?? 0);
 
             if (isset($following[$record->did])) {
                 $signals += (float) ($top['following'] ?? 5);

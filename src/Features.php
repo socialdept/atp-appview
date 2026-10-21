@@ -10,6 +10,7 @@ use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
 use SocialDept\AtpAppview\Features\Push;
 use SocialDept\AtpAppview\Features\Search;
+use SocialDept\AtpAppview\Features\Standing;
 
 /**
  * The features an app turns on, listed in atp-appview.features as Laravel
@@ -90,6 +91,16 @@ class Features
     public static function search(array $options = []): string
     {
         return static::feature(Search::class, $options);
+    }
+
+    /**
+     * Standing: metrics, verification and scores for accounts and records.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.standing
+     */
+    public static function standing(array $options = []): string
+    {
+        return static::feature(Standing::class, $options);
     }
 
     /**

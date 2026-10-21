@@ -51,6 +51,9 @@ class AppView
     protected array $services = [];
 
     /** @var array<int, Closure> */
+    protected array $profileDecorators = [];
+
+    /** @var array<int, Closure> */
     protected array $schedules = [];
 
     /** @var array<int, array{0: string, 1: Closure|string}> */
@@ -221,6 +224,33 @@ class AppView
         $this->recordFilters[] = $callback;
 
         return $this;
+    }
+
+    /**
+     * Fields added to profiles: fn (array $profiles, bool $basic): array,
+     * given profiles by DID and whether they are the basic ones an embedded
+     * author shows, returning them with the feature's fields added.
+     */
+    public function profiles(Closure $decorate): static
+    {
+        $this->profileDecorators[] = $decorate;
+
+        return $this;
+    }
+
+    /**
+     * Profiles with every feature's fields added.
+     *
+     * @param  array<string, array<string, mixed>>  $profiles
+     * @return array<string, array<string, mixed>>
+     */
+    public function decorateProfiles(array $profiles, bool $basic): array
+    {
+        foreach ($this->profileDecorators as $decorate) {
+            $profiles = $decorate($profiles, $basic);
+        }
+
+        return $profiles;
     }
 
     /**
