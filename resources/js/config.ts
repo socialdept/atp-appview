@@ -42,6 +42,9 @@ export interface AtprotoConfig {
     syncRecord?: string | null;
     // Whether a PDS can reach this AppView. False keeps calls same origin.
     proxy?: boolean;
+    // The procedure the browser joins its private channel through, when the
+    // app has the realtime feature. Null otherwise.
+    realtime?: { authorize: string } | null;
     // Prefixes the browser storage the library uses, so two apps on one
     // origin keep their sessions apart.
     namespace?: string;

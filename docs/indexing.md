@@ -15,6 +15,10 @@ $record->identity->handle;    // the author, when the index has seen their ident
 Identity::find($did)->records;
 ```
 
+## Record events
+
+Records arriving live are announced as Laravel events once their batch commits: `Index\Events\RecordIndexed` for a create or update, and `RecordRemoved`, with what the record held, for a delete. Backfills and replays do not dispatch them. See [Realtime](realtime.md#record-events).
+
 ## Sort order
 
 `sort_at` is when a record was made, as far as the index can trust it: the first usable date among the collection's time fields, else the timestamp inside a TID record key, else the moment the record was indexed. It is never later than the moment the record was indexed, so a future date cannot pin a record to the top of a feed, and a backfill still lands years of history in the order it was written rather than all at once.

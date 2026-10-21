@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Auth;
 
 use Closure;
 use Illuminate\Routing\Router;
+use SocialDept\AtpAppview\Features\Realtime as RealtimeFeature;
 use SocialDept\AtpAppview\Http\Controllers\Auth\OAuthController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SessionController;
 use SocialDept\AtpAppview\Http\Controllers\Auth\SignInViewController;
@@ -85,6 +86,10 @@ class FrontendAuth
             'xrpcPrefix' => '/'.trim((string) config('atp-appview.xrpc.prefix', 'xrpc'), '/'),
             'syncRecord' => config('atp-appview.xrpc.sync_record'),
             'proxy' => app(ServiceIdentity::class)->publishable(),
+            // The procedure that lets the browser join its private channel, when the app has realtime.
+            'realtime' => RealtimeFeature::on() && filled(config('atp-appview.realtime.xrpc.authorize'))
+                ? ['authorize' => config('atp-appview.realtime.xrpc.authorize')]
+                : null,
         ];
     }
 
