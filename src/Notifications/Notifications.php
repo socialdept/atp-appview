@@ -65,12 +65,6 @@ class Notifications
 
         $classes = (array) config('atp-appview.notifications.notifiers', []);
 
-        // Subscriptions to an account's activity notify by themselves once
-        // any kind is configured.
-        if (ActivitySubscriptions::kinds() !== []) {
-            $classes[] = ActivityNotifier::class;
-        }
-
         foreach (array_unique($classes) as $class) {
             $notifier = app($class);
 
