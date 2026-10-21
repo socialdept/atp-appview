@@ -37,6 +37,14 @@ class Graph
     protected array $hidden = [];
 
     /**
+     * Muted words read this request, by DID, since a page asks for each
+     * viewer's more than once.
+     *
+     * @var array<string, array<int, array<string, mixed>>>
+     */
+    protected array $mutedWords = [];
+
+    /**
      * The collection and field a relation is read from, or null when the app
      * has none.
      *
@@ -204,6 +212,8 @@ class Graph
             throw new \InvalidArgumentException('A muted word needs at least one letter, number or emoji.');
         }
 
+        unset($this->mutedWords[$did]);
+
         return (int) $this->connection()->table('atp_muted_words')->insertGetId([
             'did' => $did,
             'value' => mb_substr(trim($value), 0, 255),
@@ -219,6 +229,7 @@ class Graph
     {
         if (self::on()) {
             $this->connection()->table('atp_muted_words')->where('did', $did)->where('id', $id)->delete();
+            unset($this->mutedWords[$did]);
         }
     }
 
@@ -233,7 +244,7 @@ class Graph
             return [];
         }
 
-        return $this->connection()->table('atp_muted_words')
+        $this->mutedWords[$did] ??= $this->connection()->table('atp_muted_words')
             ->where('did', $did)
             ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', Carbon::now('UTC')->format('Y-m-d H:i:s')))
             ->orderByDesc('id')
@@ -247,6 +258,12 @@ class Graph
                 'expiresAt' => $row->expires_at === null ? null : Carbon::parse($row->expires_at, 'UTC')->toIso8601ZuluString(),
             ])
             ->all();
+
+        // Kept for the request, so one that runs out meanwhile is dropped here.
+        return array_values(array_filter(
+            $this->mutedWords[$did],
+            fn (array $entry) => $entry['expiresAt'] === null || Carbon::parse($entry['expiresAt'])->isFuture(),
+        ));
     }
 
     /**
