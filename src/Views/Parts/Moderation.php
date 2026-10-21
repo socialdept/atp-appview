@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Views\Parts;
 
+use ArrayObject;
 use Illuminate\Support\Collection;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Views\Contracts\Part;
@@ -13,12 +14,15 @@ use SocialDept\AtpAppview\Views\Contracts\Part;
  * who asked, with !no-unauthenticated, not to be shown to them. Two queries
  * for the page.
  *
+ * Each is an ArrayObject, so it reads as an array and is a JSON object even
+ * when empty: {} rather than [].
+ *
  *     'moderation' => new Moderation(),
  */
 class Moderation implements Part
 {
     public function resolve(Collection $records, ?string $viewer): array
     {
-        return array_map(fn ($decision) => $decision->toArray(), app(Labels::class)->decideMany($records, $viewer));
+        return array_map(fn ($decision) => new ArrayObject($decision->toArray()), app(Labels::class)->decideMany($records, $viewer));
     }
 }
