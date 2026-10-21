@@ -23,7 +23,8 @@ return [
     //
     // Top ranks recent matches, within window_days, by weighted signals:
     // records pointing at the match (counts: collection => [path => weight]),
-    // the viewer following its author (following), and how many sources
+    // the viewer following its author (following), its author's standing
+    // score with the standing feature (standing), and how many sources
     // matched, decaying with age.
     //
     //     'com.example.post' => [

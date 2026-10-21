@@ -64,12 +64,14 @@ What the viewer should not see is left out before counting and paging: accounts 
 'top' => [
     'counts' => ['com.example.like' => ['subject.uri' => 1], 'com.example.repost' => ['subject.uri' => 2]],
     'following' => 5,
+    'standing' => 0.1,
     'window_days' => 7,
 ],
 ```
 
 - `counts`: records pointing at the match, as `Count` view parts count them, each with a weight.
 - `following`: added when the viewer follows the author.
+- `standing`: with [Standing](standing.md) on, this weight times the author's score.
 - Every match also scores for each of the collection's sources it matched in, so a word in the text outranks the same word only in a tag.
 
 Top ranks the newest thousand matches in the window, a page at a time. When nothing matches inside the window, it ranks the newest thousand matches instead, so Top is never empty while Latest has results.
@@ -81,4 +83,4 @@ Account search reads only what the index holds: handles in `atp_identities`, and
 - **Typeahead** matches the start of a handle or of a word in the display name, for completing while typing.
 - **Search** needs every word somewhere in the handle, display name or description.
 
-Accounts the viewer follows come first. Those blocked either way are left out, and muted ones stay, marked. Typeahead answers basic profiles, search full ones, each with `viewer`, the [Relationship](social-graph.md) part, when there is a viewer.
+Accounts the viewer follows come first, then, with [Standing](standing.md) on, those with the higher score. Those blocked either way are left out, and muted ones stay, marked. Typeahead answers basic profiles, search full ones, each with `viewer`, the [Relationship](social-graph.md) part, when there is a viewer.

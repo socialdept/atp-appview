@@ -15,6 +15,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Search\Search;
+use SocialDept\AtpAppview\Standing\Standing;
 use SocialDept\AtpAppview\Tests\Fixtures\Search\EmojiNames;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
@@ -61,12 +62,12 @@ class SearchTest extends TestCase
         $app['config']->set('atp-appview.graph.muted_words', [self::THING => ['text' => ['text']]]);
         $app['config']->set('atp-appview.graph.follows', ['collection' => self::FOLLOW, 'path' => 'subject']);
         $app['config']->set('atp-appview.graph.blocks', ['collection' => self::BLOCK, 'path' => 'subject']);
-        $app['config']->set('atp-appview.features', [Features::graph(), Features::search()]);
+        $app['config']->set('atp-appview.features', [Features::graph(), Features::search(), Features::standing()]);
         $app['config']->set('atp-appview.search', [
             'collections' => [
                 self::THING => [
                     'sources' => ['text' => ['text'], 'tags' => ['tags', 'facets.*.features.*.tag']],
-                    'top' => ['counts' => [self::LIKE => ['subject.uri' => 1]], 'following' => 5, 'window_days' => 7],
+                    'top' => ['counts' => [self::LIKE => ['subject.uri' => 1]], 'following' => 5, 'standing' => 0.1, 'window_days' => 7],
                 ],
                 self::STATUS => ['sources' => ['emoji' => [EmojiNames::class]]],
             ],
@@ -261,6 +262,30 @@ class SearchTest extends TestCase
         $this->assertSame('2', $first['cursor']);
         $this->assertCount(1, Xrpc::as(null)->query('com.example.search.searchAccounts', ['q' => 'cats', 'limit' => 2, 'cursor' => '2'])['actors']);
         $this->assertSame(['erin.test'], $handles(Xrpc::as(null)->query('com.example.search.searchAccounts', ['q' => 'erin'])['actors']), 'An account without a profile is found by handle.');
+    }
+
+    protected function score(string $did, float $value): void
+    {
+        DB::table('atp_standing')->upsert([['subject' => $did, 'kind' => Standing::SCORE, 'value' => $value, 'computed_at' => now(), 'stale_at' => now()->addDay()]], ['subject', 'kind'], ['value', 'stale_at']);
+    }
+
+    public function test_standing_lifts_top_matches_by_their_author_and_orders_people_after_follows(): void
+    {
+        $this->index(self::BOB, self::THING, 'known', ['text' => 'cats'], '2026-10-21T09:00:00Z');
+        $this->index(self::CAROL, self::THING, 'fresh', ['text' => 'cats'], '2026-10-21T11:00:00Z');
+        $this->assertSame(['fresh', 'known'], $this->found(['q' => 'cats', 'sort' => 'top']));
+
+        $this->score(self::BOB, 100);
+        $this->assertSame(['known', 'fresh'], $this->found(['q' => 'cats', 'sort' => 'top']), 'Bob stands well enough to beat being newest.');
+
+        $this->account(self::CAROL, 'cat1.test', 'Cat');
+        $this->account(self::DAVE, 'cat2.test', 'Cat');
+        $this->account('did:plc:erin', 'cat3.test', 'Cat');
+        $this->score(self::DAVE, 40);
+        $this->index(self::ALICE, self::FOLLOW, 'f1', ['subject' => 'did:plc:erin']);
+
+        $handles = array_column(Xrpc::as(self::ALICE)->query('com.example.search.searchAccounts', ['q' => 'cat'])['actors'], 'handle');
+        $this->assertSame(['cat3.test', 'cat2.test', 'cat1.test'], $handles, 'Followed first, then by standing, then by handle.');
     }
 
     public function test_without_the_feature_search_refuses(): void
