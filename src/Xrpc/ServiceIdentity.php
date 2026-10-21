@@ -2,6 +2,8 @@
 
 namespace SocialDept\AtpAppview\Xrpc;
 
+use SocialDept\AtpAppview\Features\AppView;
+
 /**
  * Who this AppView is on the network: the did:web it answers to, from
  * atp-client.service_auth.audience, and where its service is reached, from
@@ -47,14 +49,17 @@ class ServiceIdentity
      */
     public function document(): array
     {
+        $services = [$this->serviceId() => (string) config('atp-appview.service.type', 'AtprotoAppView')]
+            + app(AppView::class)->services();
+
         return [
             '@context' => ['https://www.w3.org/ns/did/v1'],
             'id' => $this->did(),
-            'service' => [[
-                'id' => '#'.$this->serviceId(),
-                'type' => (string) config('atp-appview.service.type', 'AtprotoAppView'),
+            'service' => array_map(fn (string $id, string $type) => [
+                'id' => '#'.$id,
+                'type' => $type,
                 'serviceEndpoint' => $this->endpoint(),
-            ]],
+            ], array_keys($services), $services),
         ];
     }
 }

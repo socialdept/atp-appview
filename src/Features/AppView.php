@@ -47,6 +47,9 @@ class AppView
     /** @var array<int, Closure> */
     protected array $recordFilters = [];
 
+    /** @var array<string, string> Service id => type, for the DID document */
+    protected array $services = [];
+
     /** @var array<int, Closure> */
     protected array $schedules = [];
 
@@ -218,6 +221,25 @@ class AppView
         $this->recordFilters[] = $callback;
 
         return $this;
+    }
+
+    /**
+     * Another service entry in the AppView's DID document, on the same DID
+     * and endpoint, such as a feed generator's #bsky_fg.
+     */
+    public function service(string $id, string $type): static
+    {
+        $this->services[ltrim($id, '#')] = $type;
+
+        return $this;
+    }
+
+    /**
+     * @return array<string, string> Service id => type
+     */
+    public function services(): array
+    {
+        return $this->services;
     }
 
     /**
