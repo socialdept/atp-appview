@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview;
 
 use Illuminate\Console\Scheduling\Schedule;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Feeds;
 use SocialDept\AtpAppview\Features\Graph;
 use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
@@ -68,6 +69,16 @@ class Features
     public static function push(array $options = []): string
     {
         return static::feature(Push::class, $options);
+    }
+
+    /**
+     * Custom feeds in the shapes of Bluesky's feed generators.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.feeds
+     */
+    public static function feeds(array $options = []): string
+    {
+        return static::feature(Feeds::class, $options);
     }
 
     /**

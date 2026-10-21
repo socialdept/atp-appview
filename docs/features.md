@@ -18,7 +18,7 @@ use SocialDept\AtpAppview\Features;
 
 A helper's options go over that feature's config section, so `Features::notifications(['latest' => 5])` is the same as setting `latest` in `config/atp-appview/notifications.php`. `Features::enabled(Features::graph())` says whether one is on.
 
-Push is a fourth, `Features::push()`, off unless listed. See [Push](push.md).
+Push is a fourth, `Features::push()`, off unless listed. See [Push](push.md). Feeds are a fifth, `Features::feeds()`, also off unless listed. See [Feeds](feeds.md).
 
 All three ship enabled, and leaving one out turns it off: its tables are not created, its routes, commands and XRPC methods are not registered, and nothing is kept for it as records are indexed. Left out, the graph answers as though nobody follows, blocks or mutes anyone. Left out, moderation applies no labels and nobody counts as banned or under review, and the `Moderation` and `Labels` view parts are neutral. The notifications, notification preferences, mutes, label policy and account action APIs refuse when their feature is off, naming the feature to add.
 
@@ -61,4 +61,4 @@ class MeilisearchFeature implements Feature
 }
 ```
 
-It can also add fields kept in the index (`field()`), work inside the indexer's transaction on the rows it wrote (`afterWrite()`), routes (`routes()`), and accounts a viewer should not see (`readFilter()`) and records a viewer should not see by what they hold (`recordFilter()`), both applied by `visibleTo()`, the built-in XRPC lists and notifications. A feature left out of the list registers nothing, so its migrations, routes and commands stay out of the app. One that needs a feature left out fails at boot, naming it.
+It can also add fields kept in the index (`field()`), work inside the indexer's transaction on the rows it wrote (`afterWrite()`), routes (`routes()`), and accounts a viewer should not see (`readFilter()`) and records a viewer should not see by what they hold (`recordFilter()`), both applied by `visibleTo()`, the built-in XRPC lists and notifications. A feature can also add a service entry to the DID document (`service()`), as feeds add their feed generator. A feature left out of the list registers nothing, so its migrations, routes and commands stay out of the app. One that needs a feature left out fails at boot, naming it.

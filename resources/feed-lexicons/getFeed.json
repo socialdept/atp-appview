@@ -1,0 +1,84 @@
+{
+  "lexicon": 1,
+  "id": "app.bsky.feed.getFeed",
+  "defs": {
+    "main": {
+      "type": "query",
+      "description": "Get a page of a feed with each item hydrated into its view. Served by an AppView running the feed itself.",
+      "parameters": {
+        "type": "params",
+        "required": [
+          "feed"
+        ],
+        "properties": {
+          "feed": {
+            "type": "string",
+            "format": "at-uri"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "encoding": "application/json",
+        "schema": {
+          "type": "object",
+          "required": [
+            "feed"
+          ],
+          "properties": {
+            "cursor": {
+              "type": "string"
+            },
+            "feed": {
+              "type": "array",
+              "items": {
+                "type": "ref",
+                "ref": "#feedItem"
+              }
+            },
+            "reqId": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        }
+      },
+      "errors": [
+        {
+          "name": "UnknownFeed"
+        }
+      ]
+    },
+    "feedItem": {
+      "type": "object",
+      "required": [
+        "post"
+      ],
+      "properties": {
+        "post": {
+          "type": "unknown",
+          "description": "The item's view, from the AppView's view for its collection, or {uri} when it has none."
+        },
+        "reason": {
+          "type": "union",
+          "refs": [
+            "app.bsky.feed.defs#skeletonReasonRepost",
+            "app.bsky.feed.defs#skeletonReasonPin"
+          ]
+        },
+        "feedContext": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      }
+    }
+  }
+}
