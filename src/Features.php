@@ -9,6 +9,7 @@ use SocialDept\AtpAppview\Features\Graph;
 use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
 use SocialDept\AtpAppview\Features\Push;
+use SocialDept\AtpAppview\Features\Search;
 
 /**
  * The features an app turns on, listed in atp-appview.features as Laravel
@@ -79,6 +80,16 @@ class Features
     public static function feeds(array $options = []): string
     {
         return static::feature(Feeds::class, $options);
+    }
+
+    /**
+     * Search over records and the accounts the index holds.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.search
+     */
+    public static function search(array $options = []): string
+    {
+        return static::feature(Search::class, $options);
     }
 
     /**

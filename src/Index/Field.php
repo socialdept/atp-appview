@@ -29,6 +29,9 @@ final class Field
         // Text split into its words, each kept as a value, for matching
         // words such as muted ones.
         public readonly bool $words = false,
+        // A class implementing Search\Contracts\SearchText whose text is
+        // read in place of the path.
+        public readonly ?string $text = null,
     ) {
         if (! in_array($type, self::TYPES, true)) {
             throw new InvalidArgumentException("atp-appview.fields.{$collection}.{$name} has an unknown type {$type}. Use one of ".implode(', ', self::TYPES).', with [] for a list.');
@@ -36,7 +39,7 @@ final class Field
     }
 
     /**
-     * @param  string|array{type: string, path?: string, case?: string, words?: bool}  $declared
+     * @param  string|array{type: string, path?: string, case?: string, words?: bool, text?: class-string}  $declared
      */
     public static function declared(string $collection, string $name, string|array $declared): self
     {
@@ -51,6 +54,7 @@ final class Field
             $many,
             is_array($declared) && ($declared['case'] ?? null) === 'exact',
             is_array($declared) && ($declared['words'] ?? false) === true,
+            is_array($declared) && is_string($declared['text'] ?? null) ? $declared['text'] : null,
         );
     }
 
@@ -64,7 +68,7 @@ final class Field
      */
     public function values(array $record): array
     {
-        $raw = data_get($record, $this->path);
+        $raw = $this->text === null ? data_get($record, $this->path) : app($this->text)->text($record, $this->collection);
         $values = [];
         $items = $this->many ? Arr::wrap($raw) : [$raw];
 
@@ -90,7 +94,7 @@ final class Field
      */
     public function signature(): string
     {
-        return $this->type.($this->many ? '[]' : '').($this->exactCase ? ':exact' : '').($this->words ? ':words' : '');
+        return $this->type.($this->many ? '[]' : '').($this->exactCase ? ':exact' : '').($this->words ? ':words' : '').($this->text === null ? '' : ':text='.$this->text);
     }
 
     /**
