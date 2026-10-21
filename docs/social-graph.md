@@ -60,7 +60,16 @@ $graph->mutedWords($alice);                                    // entries still 
 $graph->unmuteWord($alice, $id);
 ```
 
-An entry hides a record holding every one of its words, in any order and any of its sources, so `violent protest` hides "the protest got violent" but not "a violent storm". Matching whole words keeps it an index lookup rather than a scan of every record's text. An expired entry stops applying on its own and is left out of `mutedWords()`. Muted records are left out everywhere hidden accounts are, in the table above.
+An entry hides a record holding every one of its words, in any order and any of its sources, so `violent protest` hides "the protest got violent" but not "a violent storm". Matching whole words keeps it an index lookup rather than a scan of every record's text. An expired entry stops applying on its own and is left out of `mutedWords()`. Muted records are left out everywhere hidden accounts are, in the table above. Where the viewer asked for something deliberately, such as a profile, cover a muted record instead of dropping it:
+
+```php
+'muted' => new MutedWords(),   // ['spoilers'], or null when it holds none
+
+$graph->mutedWordsIn($alice, [$recordId => $authorDid]);   // record id => muted values
+$graph->mutedWordsInText($alice, '🔥', 'status');          // for what is not a record, such as a trending word
+```
+
+`MutedWords` is null without a viewer and for the viewer's own records, and honors each entry's sources and `excludeFollowing`.
 
 ## Relationship
 

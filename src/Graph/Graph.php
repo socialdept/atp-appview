@@ -299,6 +299,85 @@ class Graph
     }
 
     /**
+     * Which of the viewer's muted entries each record holds, for views that
+     * show muted records covered rather than leaving them out, such as a
+     * profile. Records with none are left out of the result.
+     *
+     * @param  array<int, string>  $authors  Record id => its author's DID
+     * @return array<int, array<int, string>> Record id => the muted values it holds
+     */
+    public function mutedWordsIn(string $viewer, array $authors): array
+    {
+        $muted = $authors === [] ? [] : $this->mutedWords($viewer);
+
+        if ($muted === []) {
+            return [];
+        }
+
+        $keys = [];
+        $hashes = [];
+
+        foreach ($muted as $i => $entry) {
+            $keys[$i] = $this->mutedWordKeys($entry['sources']);
+            $hashes[$i] = array_map(fn (string $word) => ValueHash::of($word), $entry['words']);
+        }
+
+        // Each record's muted words, by key, in one query for the page.
+        $held = [];
+        $this->connection()->table(RecordValues::VALUES)
+            ->whereIn('record_id', array_keys($authors))
+            ->whereIn('key_id', array_values(array_unique(array_merge(...$keys))))
+            ->whereIn('value_hash', array_values(array_unique(array_merge(...$hashes))))
+            ->get(['record_id', 'key_id', 'value_hash'])
+            ->each(function (object $row) use (&$held) {
+                $held[(int) $row->record_id][(int) $row->key_id][(int) $row->value_hash] = true;
+            });
+
+        $following = null;
+        $matches = [];
+
+        foreach ($held as $record => $byKey) {
+            foreach ($muted as $i => $entry) {
+                $words = [];
+
+                foreach ($keys[$i] as $key) {
+                    $words += $byKey[$key] ?? [];
+                }
+
+                if (array_diff($hashes[$i], array_keys($words)) !== []) {
+                    continue;
+                }
+
+                if ($entry['excludeFollowing'] && in_array($authors[$record], $following ??= $this->following($viewer), true)) {
+                    continue;
+                }
+
+                $matches[$record][] = $entry['value'];
+            }
+        }
+
+        return $matches;
+    }
+
+    /**
+     * The viewer's muted entries a piece of text holds, for what is not a
+     * record, such as a trending word. Only entries that apply to the source
+     * when one is named.
+     *
+     * @return array<int, string> The muted values it holds
+     */
+    public function mutedWordsInText(string $viewer, string $text, ?string $source = null): array
+    {
+        $words = Field::words($text);
+
+        return array_values(array_map(
+            fn (array $entry) => $entry['value'],
+            array_filter($this->mutedWords($viewer), fn (array $entry) => ($source === null || $entry['sources'] === null || in_array($source, $entry['sources'], true))
+                && array_diff($entry['words'], $words) === []),
+        ));
+    }
+
+    /**
      * The index keys of the muted word fields for these sources, or every
      * source when null.
      *

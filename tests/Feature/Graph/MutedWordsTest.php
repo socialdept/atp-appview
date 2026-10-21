@@ -18,6 +18,9 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Notifications\Notifications;
+use SocialDept\AtpAppview\Views\Hydrator;
+use SocialDept\AtpAppview\Views\Parts\MutedWords;
+use SocialDept\AtpAppview\Views\View;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -214,5 +217,54 @@ class MutedWordsTest extends TestCase
 
         $this->assertSame(['b', 'c', 'd', 'post', 'r2'], $rkeys(RecordQuery::in(self::THING)->where('kind', 'note')->visibleTo(self::ALICE)->get()['records']));
         $this->assertSame(['b', 'c', 'd', 'post', 'r2'], $rkeys(Xrpc::as(self::ALICE)->query('com.example.listThings', ['limit' => 5])['records']));
+    }
+
+    public function test_a_view_part_names_the_muted_words_a_record_holds_instead_of_hiding_it(): void
+    {
+        $this->posts();
+        $this->index(self::ALICE, 'mine', ['text' => 'my violent protest']);
+        $this->index(self::ALICE, 'f1', ['subject' => self::CAROL], self::FOLLOW);
+        $this->graph()->muteWord(self::ALICE, 'violent picnic');
+        $this->graph()->muteWord(self::ALICE, 'violent');
+        $this->graph()->muteWord(self::ALICE, 'protest violent');
+        $this->graph()->muteWord(self::ALICE, '#spoilers', ['tags']);
+        $this->graph()->muteWord(self::ALICE, 'storms', excludeFollowing: true);
+
+        $view = new class () extends View {
+            public function collection(): string
+            {
+                return 'com.example.thing';
+            }
+
+            public function parts(): array
+            {
+                return ['muted' => new MutedWords()];
+            }
+        };
+
+        $records = Record::query()->where('collection', self::THING)->orderBy('rkey')->get();
+        $muted = collect(app(Hydrator::class)->hydrate($view, $records, self::ALICE))->mapWithKeys(fn (array $view) => [explode('/', $view['uri'])[4] => $view['muted']])->all();
+
+        $this->assertSame([
+            'a' => ['protest violent', 'violent'],
+            'b' => ['#spoilers'],
+            'c' => null,
+            'd' => ['#spoilers'],
+            'e' => ['protest violent', 'violent'],
+            'mine' => null,
+        ], $muted, 'Newest entry first. No record holds both words of violent picnic. Storms spares Carol, whom Alice follows, and her own records are never muted.');
+        $this->assertNull(app(Hydrator::class)->hydrate($view, $records, null)[0]['muted'], 'Not without a viewer.');
+    }
+
+    public function test_text_that_is_not_a_record_can_be_checked_against_muted_words(): void
+    {
+        $this->graph()->muteWord(self::ALICE, 'violent protest');
+        $this->graph()->muteWord(self::ALICE, '#spoilers', ['tags']);
+
+        $this->assertSame(['violent protest'], $this->graph()->mutedWordsInText(self::ALICE, 'Protest turns VIOLENT'));
+        $this->assertSame([], $this->graph()->mutedWordsInText(self::ALICE, 'violent storms'));
+        $this->assertSame(['#spoilers'], $this->graph()->mutedWordsInText(self::ALICE, 'spoilers', 'tags'));
+        $this->assertSame([], $this->graph()->mutedWordsInText(self::ALICE, 'spoilers', 'text'));
+        $this->assertSame([], $this->graph()->mutedWordsInText(self::BOB, 'violent protest'));
     }
 }
