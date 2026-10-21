@@ -63,7 +63,7 @@ export {
 } from './moderation';
 export type { Moderation, NamedLabel } from './moderation';
 
-export { authorHandle, authorName } from './views';
+export { authorHandle, authorName, INVALID_HANDLE } from './views';
 export type { Author } from './views';
 
 export {
