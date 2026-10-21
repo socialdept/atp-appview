@@ -5,6 +5,8 @@ namespace SocialDept\AtpAppview\Index;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Carbon;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Index\Events\RecordIndexed;
+use SocialDept\AtpAppview\Index\Events\RecordRemoved;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
@@ -52,6 +54,11 @@ class RecordIndexer implements BatchHandler
         }
 
         $connection = $this->db->connection(config('atp-appview.index.connection'));
+        $live = array_values(array_filter($events, fn (RecordEvent $event) => $event->live));
+
+        // What live deletes held, read before they are cleared, for RecordRemoved.
+        $deleted = array_map(fn (RecordEvent $event) => $event->uri(), array_filter($live, fn (RecordEvent $event) => $event->action === RecordAction::Delete));
+        $previous = $deleted === [] ? [] : $connection->table('atp_records')->whereIn('uri', array_values($deleted))->whereNotNull('record')->pluck('record', 'uri')->all();
 
         $connection->transaction(function () use ($connection, $records, $identities, $now) {
             $status = new AccountStatus($connection);
@@ -81,6 +88,24 @@ class RecordIndexer implements BatchHandler
                 }
             }
         });
+
+        // After the whole batch commits, so listeners see every handler's work.
+        if ($live !== []) {
+            $connection->afterCommit(fn () => $this->announce($live, $previous));
+        }
+    }
+
+    /**
+     * @param  array<int, RecordEvent>  $events
+     * @param  array<string, string>  $previous  Deleted records' JSON, by uri
+     */
+    protected function announce(array $events, array $previous): void
+    {
+        foreach ($events as $event) {
+            event($event->action === RecordAction::Delete
+                ? new RecordRemoved($event->uri(), $event->did, $event->collection, $event->rkey, (array) json_decode((string) ($previous[$event->uri()] ?? '[]'), true))
+                : new RecordIndexed($event->uri(), $event->did, $event->collection, $event->rkey, $event->action, $event->record ?? []));
+        }
     }
 
     protected function validation(): RecordValidation

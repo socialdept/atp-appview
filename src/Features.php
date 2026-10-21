@@ -8,6 +8,7 @@ use SocialDept\AtpAppview\Features\Feeds;
 use SocialDept\AtpAppview\Features\Graph;
 use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
+use SocialDept\AtpAppview\Features\Realtime;
 use SocialDept\AtpAppview\Features\Search;
 use SocialDept\AtpAppview\Features\Standing;
 
@@ -90,6 +91,17 @@ class Features
     public static function standing(array $options = []): string
     {
         return static::feature(Standing::class, $options);
+    }
+
+    /**
+     * Realtime: pings over Laravel broadcasting when records and
+     * notifications change.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.realtime
+     */
+    public static function realtime(array $options = []): string
+    {
+        return static::feature(Realtime::class, $options);
     }
 
     /**
