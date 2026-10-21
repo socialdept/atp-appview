@@ -21,11 +21,9 @@ return [
     // Search\Contracts\SearchText that derive text from it. The source
     // named tags answers the tag filter.
     //
-    // Top ranks recent matches, within window_days, by weighted signals:
-    // records pointing at the match (counts: collection => [path => weight]),
-    // the viewer following its author (following), its author's standing
-    // score with the standing feature (standing), and how many sources
-    // matched, decaying with age.
+    // Top ranks the recent matches, within window_days. counts names the
+    // records pointing at a match to count for the ranker (collection =>
+    // [paths]), which also sees the sources that matched.
     //
     //     'com.example.post' => [
     //         'sources' => [
@@ -33,12 +31,18 @@ return [
     //             'tags' => ['tags', 'facets.*.features.*.tag'],
     //         ],
     //         'top' => [
-    //             'counts' => ['com.example.like' => ['subject.uri' => 1]],
-    //             'following' => 5,
+    //             'counts' => ['com.example.like' => ['subject.uri']],
     //             'window_days' => 7,
     //         ],
     //     ],
     'collections' => [],
+
+    // How Top orders the matches: a class implementing
+    // Search\Contracts\TopRanker. The default, RecentEngagement, counts the
+    // sources matched and the records pointing at a match, decayed with age.
+    // An app's own can weigh anything else, such as whether the viewer
+    // follows the author.
+    'ranker' => SocialDept\AtpAppview\Search\Rankers\RecentEngagement::class,
 
     // The methods, under your own names. Null leaves one off.
     //

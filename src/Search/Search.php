@@ -15,6 +15,8 @@ use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Profiles\Profiles;
 use SocialDept\AtpAppview\Search\Contracts\SearchText;
+use SocialDept\AtpAppview\Search\Contracts\TopRanker;
+use SocialDept\AtpAppview\Search\Rankers\RecentEngagement;
 use SocialDept\AtpAppview\Standing\Standing;
 use SocialDept\AtpAppview\Views\UriViews;
 
@@ -83,7 +85,7 @@ class Search
             }
 
             foreach ((array) ($config['top']['counts'] ?? []) as $counted => $paths) {
-                foreach (array_keys((array) $paths) as $path) {
+                foreach ((array) $paths as $path) {
                     $fields[] = [(string) $counted, (string) $path, 'uri'];
                 }
             }
@@ -288,8 +290,8 @@ class Search
     }
 
     /**
-     * A page of Top: the matches of the window, ranked by their collections'
-     * signals and decayed by age. With none in the window, the newest
+     * A page of Top: the matches of the window, scored by the app's ranker
+     * from what is looked up here. With none in the window, the newest
      * matches instead, so Top is never empty while Latest has results.
      *
      * @return array{0: array<int, string>, 1: string|null} The URIs, and the next cursor
@@ -311,25 +313,25 @@ class Search
             return [[], null];
         }
 
-        $following = $query->viewer !== null && Graph::on() ? array_flip(app(Graph::class)->following($query->viewer)) : [];
-        $standing = StandingFeature::on() ? app(Standing::class)->scores($candidates->pluck('did')->unique()->values()->all()) : [];
         $matched = $this->matchedSources($candidates->pluck('id')->all(), $query);
         $counts = $this->counts($candidates);
-        $now = Carbon::now('UTC');
 
-        $scored = $candidates->map(function (Record $record) use ($following, $matched, $counts, $standing, $now) {
-            $top = (array) (self::collections()[$record->collection]['top'] ?? []);
-            $signals = 1 + count($matched[$record->id] ?? []) + ($counts[$record->uri] ?? 0)
-                + (float) ($top['standing'] ?? 0) * ($standing[$record->did] ?? 0);
+        $ranked = $candidates->map(fn (Record $record) => new TopCandidate(
+            uri: $record->uri,
+            did: $record->did,
+            collection: $record->collection,
+            sortAt: $record->sort_at,
+            matched: array_keys($matched[$record->id] ?? []),
+            counts: $counts[$record->uri] ?? [],
+        ))->all();
 
-            if (isset($following[$record->did])) {
-                $signals += (float) ($top['following'] ?? 5);
-            }
+        $scores = self::ranker()->scores($ranked, $query);
 
-            $hours = max(0, $now->diffInMinutes($record->sort_at ?? $now, true) / 60);
-
-            return ['uri' => $record->uri, 'score' => $signals / (($hours + 2) ** 1.5), 'at' => $record->sort_at?->getTimestamp() ?? 0];
-        })->sort(fn (array $a, array $b) => [$b['score'], $b['at'], $b['uri']] <=> [$a['score'], $a['at'], $a['uri']])->values();
+        $scored = $candidates->map(fn (Record $record) => [
+            'uri' => $record->uri,
+            'score' => (float) ($scores[$record->uri] ?? 0),
+            'at' => $record->sort_at?->getTimestamp() ?? 0,
+        ])->sort(fn (array $a, array $b) => [$b['score'], $b['at'], $b['uri']] <=> [$a['score'], $a['at'], $a['uri']])->values();
 
         $offset = max(0, (int) $query->cursor);
         $page = $scored->slice($offset, $limit)->pluck('uri')->all();
@@ -367,21 +369,21 @@ class Search
     }
 
     /**
-     * The weighted counts of records pointing at each candidate, from the
-     * reference fields its collection's Top names.
+     * How many records point at each candidate, from the reference fields its
+     * collection's Top names.
      *
-     * @return array<string, float> URI => weighted count
+     * @return array<string, array<string, int>> URI => collection:path => count
      */
     protected function counts(\Illuminate\Support\Collection $candidates): array
     {
         $values = app(RecordValues::class);
-        $weighted = [];
+        $counts = [];
 
         foreach ($candidates->groupBy('collection') as $collection => $records) {
             $hashes = $records->mapWithKeys(fn (Record $record) => [$record->uri => ValueHash::of($record->uri)])->all();
 
             foreach ((array) (self::collections()[$collection]['top']['counts'] ?? []) as $counted => $paths) {
-                foreach ((array) $paths as $path => $weight) {
+                foreach ((array) $paths as $path) {
                     if (($field = $values->field((string) $counted, (string) $path)) === null) {
                         continue;
                     }
@@ -390,13 +392,28 @@ class Search
                     $totals = $values->totals([$key], array_values($hashes));
 
                     foreach ($hashes as $uri => $hash) {
-                        $weighted[$uri] = ($weighted[$uri] ?? 0) + (float) $weight * ($totals["{$key}#{$hash}"] ?? 0);
+                        $counts[$uri]["{$counted}:{$path}"] = (int) ($totals["{$key}#{$hash}"] ?? 0);
                     }
                 }
             }
         }
 
-        return $weighted;
+        return $counts;
+    }
+
+    /**
+     * The app's Top ranker, RecentEngagement unless atp-appview.search.ranker
+     * names another.
+     */
+    public static function ranker(): TopRanker
+    {
+        $ranker = app((string) config('atp-appview.search.ranker', RecentEngagement::class));
+
+        if (! $ranker instanceof TopRanker) {
+            throw new \LogicException('atp-appview.search.ranker must implement '.TopRanker::class.'.');
+        }
+
+        return $ranker;
     }
 
     /**
