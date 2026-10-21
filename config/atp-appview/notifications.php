@@ -36,6 +36,15 @@ return [
     // sharing a status. They see records as they arrive live.
     'notifiers' => [],
 
+    // Kinds of activity an account can ask to hear about from another,
+    // Bluesky's "Keep me posted", each a collection and the reason its
+    // notification takes. A kind can require a path to be set (with) or
+    // unset (without). Subscriptions live in atp_activity_subscriptions.
+    //
+    //     'post' => ['collection' => 'com.example.post', 'without' => 'reply', 'reason' => 'subscribed-post'],
+    //     'reply' => ['collection' => 'com.example.post', 'with' => 'reply', 'reason' => 'subscribed-reply'],
+    'activity' => [],
+
     // The newest notifications a group shows, with their actors.
     'latest' => 3,
 

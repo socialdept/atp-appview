@@ -110,6 +110,30 @@ A `Notify` names the record that notifies, the recipient, the reason and the sub
 
 Only records arriving live are offered. A backfill or a replay keeps what a record gave before, so a notifier can ask about the present ("who has this status now") without old records notifying again. A record changed live is offered again and its notifications brought to what the notifier says now. Deleting it removes them. `appview:notifications:build` does not run notifiers.
 
+## Activity subscriptions
+
+An account can ask to hear whenever another account writes, as Bluesky's "Keep me posted" does. The app names the kinds of activity, each a collection and the reason its notifications take, optionally requiring a path to be set (`with`) or unset (`without`):
+
+```php
+// config/atp-appview/notifications.php
+'activity' => [
+    'post' => ['collection' => 'com.example.post', 'without' => 'reply', 'reason' => 'subscribed-post'],
+    'reply' => ['collection' => 'com.example.post', 'with' => 'reply', 'reason' => 'subscribed-reply'],
+],
+```
+
+```php
+use SocialDept\AtpAppview\Notifications\ActivitySubscriptions;
+
+$subscriptions = app(ActivitySubscriptions::class);
+
+$subscriptions->set($alice, $bob, ['post']);   // replaces Alice's choices for Bob, [] unsubscribes
+$subscriptions->for($alice, $bob);            // ['post']
+$subscriptions->subscriptions($alice);        // everyone Alice hears about, with the kinds
+```
+
+Once any kind is configured, `ActivityNotifier` joins the notifiers by itself: each matching record a subscribed account writes live notifies each subscriber, grouped on its own. Subscriptions are private, in `atp_activity_subscriptions`, and blocks, mutes and preferences apply when notifications are read, as for any other reason. A kind removed from config stops applying to existing subscriptions.
+
 ## Sending one
 
 For what no record does on its own, such as a scheduled digest or a milestone, send a notification about a record. Its author is the actor, it shows while the record does, and it goes when the record is deleted. Unlike a reason or a notifier, it may notify the record's own author:

@@ -48,12 +48,17 @@ class Notifications implements Feature
         }
     }
 
+    public static function on(): bool
+    {
+        return Features::enabled(self::class);
+    }
+
     /**
      * @throws LogicException when the feature is off
      */
     public static function ensureOn(): void
     {
-        if (! Features::enabled(self::class)) {
+        if (! self::on()) {
             throw new LogicException('Notifications need the notifications feature: add Features::notifications() to atp-appview.features.');
         }
     }
