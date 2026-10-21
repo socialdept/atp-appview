@@ -87,31 +87,9 @@ $interactions->contexts($viewer, $feed, FeedInteractions::REQUEST_LESS); // the 
 
 Each takes an optional `since`. `appview:feeds:prune` forgets interactions older than `interactions_days` (90 by default), and `Features::schedule()` runs it daily.
 
-## Saved and pinned feeds
+## Listing them
 
-Each viewer's feeds, as Bluesky's `savedFeedsPrefV2` keeps them: saved means listed among their feeds, pinned means also shown as a tab. A PDS keeps only Bluesky's own preferences, so the app keeps these, privately, in `atp_saved_feeds`.
-
-```php
-use SocialDept\AtpAppview\Feeds\SavedFeeds;
-
-$saved = app(SavedFeeds::class);
-
-$saved->for($viewer);              // [{type, value, pinned}], pinned first
-$saved->pinned($viewer);           // the tabs, in order
-$saved->save($viewer, $feedUri);   // saved, not pinned. pin(), unpin() and remove() too
-$saved->replace($viewer, $entries); // the whole list, in this order, as an editing screen saves it
-```
-
-An entry is a type and a value: a feed's AT-URI under `feed`, or anything the app defines, such as a built-in timeline under `timeline`. A viewer who never changed theirs has the defaults, which name feeds this service runs by rkey:
-
-```php
-'saved' => [
-    ['type' => 'timeline', 'value' => 'following', 'pinned' => true],
-    ['type' => 'feed', 'value' => 'latest', 'pinned' => true],
-],
-```
-
-Unpinning keeps a feed saved, and removing forgets it. A viewer who removes every feed keeps an empty list rather than getting the defaults back. `Feeds::catalog()` lists the feeds this service runs, with what their generator records say, for a directory such as a Discover list.
+`Feeds::catalog()` lists the feeds this service runs, with what their generator records say, for a directory such as a Discover list. Which feeds each viewer keeps, and which show as tabs, is the app's to store.
 
 ## Publishing
 
