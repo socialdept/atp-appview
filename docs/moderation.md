@@ -81,7 +81,7 @@ hiddenFromGuests(view.moderation);   // hidden only because the author asked to 
 labelName('graphic-media');          // "graphic media"
 ```
 
-`authorName()` and `authorHandle()` do the same for the `Author` part: the display name, else `@handle`, else the DID.
+`authorName()` and `authorHandle()` do the same for the `Author` part: the display name, else `@handle`, else `@handle.invalid` (`INVALID_HANDLE`), as Bluesky shows an account without a valid handle. A DID is never shown as a name.
 
 `Labels` is the API for everything else:
 

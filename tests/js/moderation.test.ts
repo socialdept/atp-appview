@@ -50,11 +50,14 @@ describe('author helpers', () => {
         displayName: null,
     };
 
-    it('names an author, falling back to the handle, then the DID', () => {
+    it('names an author by display name, then handle, never by DID', () => {
         expect(authorName({ ...author, displayName: 'Alice' })).toBe('Alice');
         expect(authorName(author)).toBe('@alice.test');
+        expect(authorName({ ...author, displayName: '', handle: null })).toBe(
+            '@handle.invalid',
+        );
         expect(authorHandle({ did: 'did:plc:alice', handle: null })).toBe(
-            'did:plc:alice',
+            '@handle.invalid',
         );
     });
 });
