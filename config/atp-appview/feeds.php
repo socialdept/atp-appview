@@ -48,6 +48,15 @@ return [
         'password' => env('ATP_APPVIEW_FEEDS_PUBLISHER_PASSWORD'),
     ],
 
+    // What a viewer who never changed their saved feeds has, in order.
+    // Saved means listed among their feeds, pinned means also shown as a
+    // tab. A feed this service runs can be named by its rkey. Other types,
+    // such as a built-in timeline, are the app's to define and show.
+    //
+    //     ['type' => 'timeline', 'value' => 'following', 'pinned' => true],
+    //     ['type' => 'feed', 'value' => 'same-vibe', 'pinned' => true],
+    'saved' => [],
+
     // Policies describeFeedGenerator links to.
     'links' => [
         'privacyPolicy' => null,
