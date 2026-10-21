@@ -162,6 +162,6 @@ With the feature on, [profiles](views.md#profiles) gain:
 - `verification`, in Bluesky's `verificationState` shape: `verifiedStatus`, `trustedVerifierStatus` and each verification's `issuer`, `uri`, `isValid` and `createdAt`. Only when a verifier is configured.
 - `stats`, the account metrics. Full profiles only, not basic ones.
 
-[Search](search.md) uses scores too: Top adds a collection's `standing` weight times the author's score, and account search orders by score after the accounts the viewer follows.
+[Search](search.md) uses scores too: account search orders by score after the accounts the viewer follows, and an app's [Top ranker](search.md#latest-and-top) can weigh the author's score.
 
 Off, nothing is kept or fetched, profiles are unchanged, and the `Standing` API refuses, naming the feature to add.

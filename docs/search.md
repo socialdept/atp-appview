@@ -58,23 +58,44 @@ What the viewer should not see is left out before counting and paging: accounts 
 
 ## Latest and Top
 
-**Latest** is matches newest first. **Top** ranks the matches of the last `window_days` (7 by default) by signals the collection names, decayed by age, so a fresh record with some engagement beats an old one with a little more:
+**Latest** is matches newest first. **Top** takes the newest thousand matches of the last `window_days` (7 by default) and orders them with the app's ranker. When nothing matches inside the window, it ranks the newest thousand matches instead, so Top is never empty while Latest has results.
+
+The package does the costly lookups: which of the collection's sources each match was found in, and how many records point at it through the references its Top counts:
 
 ```php
 'top' => [
-    'counts' => ['com.example.like' => ['subject.uri' => 1], 'com.example.repost' => ['subject.uri' => 2]],
-    'following' => 5,
-    'standing' => 0.1,
+    'counts' => ['com.example.like' => ['subject.uri'], 'com.example.repost' => ['subject.uri']],
     'window_days' => 7,
 ],
 ```
 
-- `counts`: records pointing at the match, as `Count` view parts count them, each with a weight.
-- `following`: added when the viewer follows the author.
-- `standing`: with [Standing](standing.md) on, this weight times the author's score.
-- Every match also scores for each of the collection's sources it matched in, so a word in the text outranks the same word only in a tag.
+The ranker turns that into scores. The default, `RecentEngagement`, gives one point, plus one per source matched and per record pointing at the match, decayed with age, so a fresh match with some engagement beats an old one with a little more. An app's own implements `Search\Contracts\TopRanker` and is named in `search.ranker`:
 
-Top ranks the newest thousand matches in the window, a page at a time. When nothing matches inside the window, it ranks the newest thousand matches instead, so Top is never empty while Latest has results.
+```php
+use SocialDept\AtpAppview\Graph\Graph;
+use SocialDept\AtpAppview\Search\Contracts\TopRanker;
+use SocialDept\AtpAppview\Search\Rankers\RecentEngagement;
+use SocialDept\AtpAppview\Search\SearchQuery;
+
+class FollowedFirst implements TopRanker
+{
+    public function scores(array $candidates, SearchQuery $query): array
+    {
+        $scores = (new RecentEngagement)->scores($candidates, $query);
+        $following = $query->viewer === null ? [] : array_flip(app(Graph::class)->following($query->viewer));
+
+        foreach ($candidates as $candidate) {
+            if (isset($following[$candidate->did])) {
+                $scores[$candidate->uri] *= 20;
+            }
+        }
+
+        return $scores;
+    }
+}
+```
+
+Each `TopCandidate` has the match's `uri`, `did`, `collection` and `sortAt`, the sources it `matched`, its `counts` keyed `collection:path`, and `hours()` since it was written. A ranker reads anything else it weighs itself, in one query for all the candidates: follows from the [graph](social-graph.md), scores from [standing](standing.md). Top pages through the ranked list, a page at a time.
 
 ## Accounts
 

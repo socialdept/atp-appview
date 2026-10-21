@@ -17,6 +17,8 @@ use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Search\Search;
 use SocialDept\AtpAppview\Standing\Standing;
 use SocialDept\AtpAppview\Tests\Fixtures\Search\EmojiNames;
+use SocialDept\AtpAppview\Tests\Fixtures\Search\FollowedFirst;
+use SocialDept\AtpAppview\Tests\Fixtures\Search\RecordingRanker;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
@@ -35,6 +37,7 @@ class SearchTest extends TestCase
     protected const BOB = 'did:plc:bob';
     protected const CAROL = 'did:plc:carol';
     protected const DAVE = 'did:plc:dave';
+    protected const FAN = 'did:plc:fan';
     protected const THING = 'com.example.thing';
     protected const STATUS = 'com.example.status';
     protected const LIKE = 'com.example.like';
@@ -67,7 +70,7 @@ class SearchTest extends TestCase
             'collections' => [
                 self::THING => [
                     'sources' => ['text' => ['text'], 'tags' => ['tags', 'facets.*.features.*.tag']],
-                    'top' => ['counts' => [self::LIKE => ['subject.uri' => 1]], 'following' => 5, 'standing' => 0.1, 'window_days' => 7],
+                    'top' => ['counts' => [self::LIKE => ['subject.uri']], 'window_days' => 7],
                 ],
                 self::STATUS => ['sources' => ['emoji' => [EmojiNames::class]]],
             ],
@@ -191,13 +194,44 @@ class SearchTest extends TestCase
             $this->index("did:plc:fan{$i}", self::LIKE, "o{$i}", ['subject' => ['uri' => $old]]);
         }
 
-        $this->assertSame(['liked', 'followed', 'fresh'], $this->found(['q' => 'cats', 'sort' => 'top'], self::ALICE), 'Likes, then a follow, beat being newest. Older than the window is left out.');
-        $this->assertSame(['liked', 'fresh', 'followed'], $this->found(['q' => 'cats', 'sort' => 'top']), 'Signed out, no follows.');
+        $this->assertSame(['liked', 'fresh', 'followed'], $this->found(['q' => 'cats', 'sort' => 'top'], self::ALICE), 'Likes beat being newest. Older than the window is left out. Follows are not the default ranker\'s.');
         $this->assertSame(['fresh', 'followed', 'liked', 'old'], $this->found(['q' => 'cats', 'sort' => 'latest']));
 
         $page = Xrpc::as(self::ALICE)->query('com.example.search.searchRecords', ['q' => 'cats', 'sort' => 'top', 'limit' => 2]);
         $this->assertSame('2', $page['cursor']);
-        $this->assertSame(['fresh'], $this->found(['q' => 'cats', 'sort' => 'top', 'limit' => 2, 'cursor' => '2'], self::ALICE));
+        $this->assertSame(['followed'], $this->found(['q' => 'cats', 'sort' => 'top', 'limit' => 2, 'cursor' => '2'], self::ALICE));
+
+        config()->set('atp-appview.search.ranker', FollowedFirst::class);
+        $this->assertSame(['followed', 'liked', 'fresh'], $this->found(['q' => 'cats', 'sort' => 'top'], self::ALICE), 'An app\'s ranker can weigh the viewer\'s follows.');
+        $this->assertSame(['liked', 'fresh', 'followed'], $this->found(['q' => 'cats', 'sort' => 'top']), 'Signed out, no follows.');
+    }
+
+    public function test_the_ranker_sees_what_the_package_looked_up(): void
+    {
+        $liked = $this->index(self::BOB, self::THING, 'liked', ['text' => 'cats', 'tags' => ['cats']], '2026-10-21T06:00:00Z');
+        $this->index(self::FAN, self::LIKE, 'l1', ['subject' => ['uri' => $liked]]);
+        $this->index(self::FAN, self::LIKE, 'l2', ['subject' => ['uri' => $liked]]);
+        $seen = [];
+        app()->instance(RecordingRanker::class, new RecordingRanker($seen));
+        config()->set('atp-appview.search.ranker', RecordingRanker::class);
+
+        $this->found(['q' => 'cats', 'sort' => 'top']);
+
+        $this->assertCount(1, $seen);
+        $this->assertSame($liked, $seen[0]->uri);
+        $this->assertSame(self::BOB, $seen[0]->did);
+        $this->assertEqualsCanonicalizing(['text', 'tags'], $seen[0]->matched);
+        $this->assertSame([self::LIKE.':subject.uri' => 2], $seen[0]->counts);
+        $this->assertSame(6.0, $seen[0]->hours());
+    }
+
+    public function test_a_ranker_must_implement_the_contract(): void
+    {
+        $this->index(self::BOB, self::THING, 'a', ['text' => 'cats']);
+        config()->set('atp-appview.search.ranker', \stdClass::class);
+
+        $this->expectException(LogicException::class);
+        $this->found(['q' => 'cats', 'sort' => 'top']);
     }
 
     public function test_top_falls_back_to_the_newest_matches_when_none_are_in_the_window(): void
@@ -269,15 +303,8 @@ class SearchTest extends TestCase
         DB::table('atp_standing')->upsert([['subject' => $did, 'kind' => Standing::SCORE, 'value' => $value, 'computed_at' => now(), 'stale_at' => now()->addDay()]], ['subject', 'kind'], ['value', 'stale_at']);
     }
 
-    public function test_standing_lifts_top_matches_by_their_author_and_orders_people_after_follows(): void
+    public function test_standing_orders_people_after_follows(): void
     {
-        $this->index(self::BOB, self::THING, 'known', ['text' => 'cats'], '2026-10-21T09:00:00Z');
-        $this->index(self::CAROL, self::THING, 'fresh', ['text' => 'cats'], '2026-10-21T11:00:00Z');
-        $this->assertSame(['fresh', 'known'], $this->found(['q' => 'cats', 'sort' => 'top']));
-
-        $this->score(self::BOB, 100);
-        $this->assertSame(['known', 'fresh'], $this->found(['q' => 'cats', 'sort' => 'top']), 'Bob stands well enough to beat being newest.');
-
         $this->account(self::CAROL, 'cat1.test', 'Cat');
         $this->account(self::DAVE, 'cat2.test', 'Cat');
         $this->account('did:plc:erin', 'cat3.test', 'Cat');
