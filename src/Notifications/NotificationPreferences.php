@@ -5,20 +5,24 @@ namespace SocialDept\AtpAppview\Notifications;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\Notifications as NotificationsFeature;
+use SocialDept\AtpAppview\Features\Push as PushFeature;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 
 /**
  * What each account wants to hear about, per reason: whether it shows in the
- * app, whether it is pushed, and whether from everyone or only the accounts
- * they follow. A reason nobody chose for takes the defaults: shown, pushed,
- * from everyone.
+ * app, whether from everyone or only the accounts they follow, and whether
+ * each of the app's channels carries it. A reason nobody chose for takes the
+ * defaults: shown, from everyone, each channel as configured.
  *
- * Choices apply as notifications are read, so changing one changes what the
- * list and unread count already hold, both ways. Pushing is up to the app:
- * a NotificationCreated listener asks wantsPush().
+ * Shown and from apply as notifications are read, so changing one changes
+ * what the list and unread count already hold, both ways. Channels, such as
+ * push or email, are the app's, named in atp-appview.notifications.channels.
+ * The package only keeps the choice: a NotificationCreated listener asks
+ * wants() before sending.
  *
  * "Only the accounts they follow" reads follows from atp-appview.graph.
  * Without them every notification counts as from everyone.
@@ -29,35 +33,61 @@ class NotificationPreferences
 
     public const FOLLOWS = 'follows';
 
-    /** @var array<string, array<string, array{inApp: bool, push: bool, from: string}>> */
+    /** @var array<string, array<string, array{inApp: bool, from: string, channels: array<string, bool>}>> */
     protected array $stored = [];
 
     /**
      * The account's choices for these reasons, defaults filled in.
      *
      * @param  array<int, string>  $reasons
-     * @return array<string, array{inApp: bool, push: bool, from: string}>
+     * @return array<string, array{inApp: bool, from: string, channels: array<string, bool>}>
      */
     public function for(string $did, array $reasons): array
     {
         NotificationsFeature::ensureOn();
 
         $stored = $this->stored($did);
+        $defaults = self::defaults();
         $choices = [];
 
         foreach ($reasons as $reason) {
-            $choices[$reason] = $stored[$reason] ?? self::defaults();
+            $choice = $stored[$reason] ?? $defaults;
+            // Channels keep only those configured, with defaults for the rest.
+            $choice['channels'] = array_replace($defaults['channels'], array_intersect_key($choice['channels'], $defaults['channels']));
+            $choices[$reason] = $choice;
         }
 
         return $choices;
     }
 
     /**
+     * The app's channels, each with whether it carries a reason nobody chose
+     * for.
+     *
+     * @return array<string, bool>
+     */
+    public static function channels(): array
+    {
+        $channels = [];
+
+        foreach ((array) config('atp-appview.notifications.channels', []) as $name => $default) {
+            is_int($name) ? $channels[(string) $default] = true : $channels[(string) $name] = (bool) $default;
+        }
+
+        if (Features::enabled(PushFeature::class)) {
+            $channels += ['push' => true];
+        }
+
+        return $channels;
+    }
+
+    /**
      * Change some of an account's choices for a reason, keeping the rest.
      *
-     * @return array{inApp: bool, push: bool, from: string}
+     * @param  array<string, bool>  $channels  Only the channels to change
+     * @return array{inApp: bool, from: string, channels: array<string, bool>}
      */
-    public function set(string $did, string $reason, ?bool $inApp = null, ?bool $push = null, ?string $from = null): array
+    public function set(string $did, string $reason, ?bool $inApp = null, ?string $from = null, array $channels = []): array
     {
         NotificationsFeature::ensureOn();
 
@@ -65,17 +95,21 @@ class NotificationPreferences
             throw new \InvalidArgumentException("From is 'everyone' or 'follows', not '{$from}'.");
         }
 
+        if (($unknown = array_diff(array_keys($channels), array_keys(self::channels()))) !== []) {
+            throw new \InvalidArgumentException('No such notification channel: '.implode(', ', $unknown).'. Add it to atp-appview.notifications.channels.');
+        }
+
         $choice = $this->for($did, [$reason])[$reason];
         $choice = [
             'inApp' => $inApp ?? $choice['inApp'],
-            'push' => $push ?? $choice['push'],
             'from' => $from ?? $choice['from'],
+            'channels' => array_replace($choice['channels'], array_map('boolval', $channels)),
         ];
 
         $this->connection()->table('atp_notification_preferences')->upsert(
-            [['did' => $did, 'reason' => $reason, 'in_app' => $choice['inApp'], 'push' => $choice['push'], 'from' => $choice['from']]],
+            [['did' => $did, 'reason' => $reason, 'in_app' => $choice['inApp'], 'from' => $choice['from'], 'channels' => json_encode($choice['channels'])]],
             ['did', 'reason'],
-            ['in_app', 'push', 'from'],
+            ['in_app', 'from', 'channels'],
         );
 
         unset($this->stored[$did]);
@@ -84,16 +118,17 @@ class NotificationPreferences
     }
 
     /**
-     * Whether a notification for this reason from this actor should be
-     * pushed, for a NotificationCreated listener.
+     * Whether a channel should carry a notification for this reason from this
+     * actor, for a NotificationCreated listener. Only from followed accounts
+     * holds here too. False for a channel not configured.
      */
-    public function wantsPush(string $did, string $reason, string $actor): bool
+    public function wants(string $did, string $reason, string $actor, string $channel): bool
     {
         NotificationsFeature::ensureOn();
 
         $choice = $this->for($did, [$reason])[$reason];
 
-        return $choice['push'] && ($choice['from'] === self::EVERYONE || $this->follows($did, $actor));
+        return ($choice['channels'][$channel] ?? false) && ($choice['from'] === self::EVERYONE || $this->follows($did, $actor));
     }
 
     /**
@@ -145,11 +180,11 @@ class NotificationPreferences
     }
 
     /**
-     * @return array{inApp: bool, push: bool, from: string}
+     * @return array{inApp: bool, from: string, channels: array<string, bool>}
      */
     public static function defaults(): array
     {
-        return ['inApp' => true, 'push' => true, 'from' => self::EVERYONE];
+        return ['inApp' => true, 'from' => self::EVERYONE, 'channels' => self::channels()];
     }
 
     /**
@@ -170,14 +205,18 @@ class NotificationPreferences
     }
 
     /**
-     * @return array<string, array{inApp: bool, push: bool, from: string}>
+     * @return array<string, array{inApp: bool, from: string, channels: array<string, bool>}>
      */
     protected function stored(string $did): array
     {
         return $this->stored[$did] ??= $this->connection()->table('atp_notification_preferences')
             ->where('did', $did)
             ->get()
-            ->mapWithKeys(fn ($row) => [$row->reason => ['inApp' => (bool) $row->in_app, 'push' => (bool) $row->push, 'from' => (string) $row->from]])
+            ->mapWithKeys(fn ($row) => [$row->reason => [
+                'inApp' => (bool) $row->in_app,
+                'from' => (string) $row->from,
+                'channels' => array_map('boolval', (array) json_decode((string) ($row->channels ?? '[]'), true)),
+            ]])
             ->all();
     }
 

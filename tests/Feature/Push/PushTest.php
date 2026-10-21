@@ -202,11 +202,11 @@ class PushTest extends TestCase
         app(Push::class)->subscribe(self::ALICE, self::ENDPOINT, $browser['p256dh'], $browser['auth']);
         Http::fake([self::ENDPOINT => Http::response('', 410), '*' => Http::response([], 404)]);
 
-        app(NotificationPreferences::class)->set(self::ALICE, 'like', push: false);
+        app(NotificationPreferences::class)->set(self::ALICE, 'like', channels: ['push' => false]);
         $this->like('l1');
         Http::assertNotSent(fn (Request $request) => $request->url() === self::ENDPOINT);
 
-        app(NotificationPreferences::class)->set(self::ALICE, 'like', push: true);
+        app(NotificationPreferences::class)->set(self::ALICE, 'like', channels: ['push' => true]);
         $this->like('l2');
         $this->assertSame(0, DB::table('atp_push_subscriptions')->count(), 'The push service said it is gone.');
     }
