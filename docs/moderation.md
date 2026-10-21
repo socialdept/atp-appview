@@ -66,6 +66,8 @@ Content a label hides carries `moderated_at`, kept apart from `hidden_at`, which
 "moderation": {"blur": "media", "warn": [{"src": "did:plc:...", "val": "graphic-media"}], "author": {"review": true}}
 ```
 
+It is always a JSON object, `{}` when there is nothing to say. In PHP it is an `ArrayObject`, read like an array (`$view['moderation']['blur'] ?? null`). Cast it with `(array)` before using array functions or operators on it.
+
 The browser library has the part's type and helpers for showing it, so a moderation gate does not redefine them. A content warning covers what was written, and an author's account labels never do:
 
 ```ts

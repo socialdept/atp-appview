@@ -73,7 +73,7 @@ class ModerationFeatureOffTest extends TestCase
         $this->assertFalse(app(AccountActions::class)->banned('did:plc:bob'));
         $this->assertSame([], app(AccountActions::class)->bannedAmong(['did:plc:bob']));
         $this->assertFalse(app(Labels::class)->account('did:plc:bob')->hide);
-        $this->assertSame(['hide' => false], array_intersect_key((new Moderation())->resolve(collect([$record]), null)[$record->uri] + ['hide' => false], ['hide' => 1]));
+        $this->assertSame(['hide' => false], array_intersect_key((array) (new Moderation())->resolve(collect([$record]), null)[$record->uri] + ['hide' => false], ['hide' => 1]));
         $this->assertSame(0, DB::table('atp_records')->whereNotNull('moderated_at')->count());
 
         $this->expectException(LogicException::class);

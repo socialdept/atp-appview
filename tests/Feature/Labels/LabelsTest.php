@@ -270,6 +270,29 @@ class LabelsTest extends TestCase
         $this->assertSame(['!warn'], array_column($item['authorLabels'], 'val'));
         $this->assertSame('media', $item['moderation']['blur']);
         $this->assertSame([['src' => self::MOD, 'val' => '!warn']], $item['moderation']['author']['warn']);
+        $this->assertFalse(isset($item['moderation']['hide']));
+    }
+
+    public function test_moderation_is_a_json_object_even_with_nothing_to_say(): void
+    {
+        $this->indexPost('a');
+
+        $view = new class () extends View {
+            public function collection(): string
+            {
+                return 'app.example.post';
+            }
+
+            public function parts(): array
+            {
+                return ['moderation' => new ModerationPart()];
+            }
+        };
+
+        $item = app(Hydrator::class)->one($view, Record::query()->sole());
+
+        $this->assertSame('{}', json_encode($item['moderation']), 'Not [], which a typed client reads as a list.');
+        $this->assertNull($item['moderation']['blur'] ?? null);
     }
 
     public function test_the_labels_service_follows_labelers_through_tack(): void
