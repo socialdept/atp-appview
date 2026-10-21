@@ -118,6 +118,21 @@ The browser session is the source of truth. The server session can be rebuilt fr
 - **An action that hits a dead session** is not lost. `withSession()` raises a dialog, the user signs back in through a popup, and the action runs again. It only retries a request that never took effect.
 - **Signing back in** prepares with the account's DID, and the browser refuses a sign-in that lands on another account.
 
+## Session lifetime
+
+Laravel's session lifetime, `SESSION_LIFETIME` in minutes, defaults to 120, so an app left alone for two hours forgets the user while their atproto session is still good. Set it from the kind of OAuth client the app is, which its client metadata declares, not the mode:
+
+- **Confidential**: the metadata declares `private_key_jwt`, which needs a client key (`ATP_OAUTH_PRIVATE_KEY`). Requests to the authorization server are signed: by the server itself in backend mode, and in frontend mode by short-lived client assertions the server signs for the browser, which keeps the tokens. Set `SESSION_LIFETIME=20160` (14 days).
+- **Public**: the metadata declares `none`, with no client key. Set `SESSION_LIFETIME=4320` (3 days).
+
+What a PDS allows, as Bluesky's reference server (`@atproto/oauth-provider`) sets it, which other implementations may change:
+
+- **Access tokens** last at most 60 minutes for every client, and never past the session's end. Both modes refresh them as they run out, so they do not decide how long anyone stays signed in.
+- **A confidential client's** session lasts up to two years, as long as it is refreshed at least every three months.
+- **A public client's** session ends two weeks after sign-in, however often it is refreshed.
+
+Laravel's lifetime counts from the last request. In frontend mode a server session that ended is rebuilt from the browser's while the browser's session lives (see above), so a shorter lifetime costs a rebuild rather than a sign-in. Keep `SESSION_EXPIRE_ON_CLOSE` off, or every new browser window starts signed out.
+
 ## The atp guard
 
 The `atp` guard answers one question per request: which DID is the viewer, and how did they prove it. It returns your `User` model, so `auth()`, Gates and policies work unchanged.
