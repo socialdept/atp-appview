@@ -47,7 +47,7 @@ The [Features](docs/features.md) doc covers what an app turns on beyond the core
 - **[Blocklist](docs/blocklist.md)**: Keeping repos, collections and hosts out of the index.
 - **[Index](docs/indexing.md)**: How records are stored, sorted, validated and reconciled, account status, and index stats.
 - **[XRPC](docs/xrpc.md)**: Default queries and procedures, custom handlers, calling methods, and writing records.
-- **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
+- **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, reply trees, fields kept in the index, profiles and images.
 - **[Social graph](docs/social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.
 - **[Notifications](docs/notifications.md)**: Reasons, notifiers, grouping, seen state, preferences and delivery.
 - **[Search](docs/search.md)**: Records by their words, Latest and Top, and the accounts the index holds.

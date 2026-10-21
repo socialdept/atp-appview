@@ -66,6 +66,24 @@ Inertia::scroll(fn () => ViewPage::of(
 
 `Record::$sort_at` keeps its microseconds as a string, so cursors over it never skip records that share a second.
 
+## Threads
+
+What makes a reply, where its parent lives and how replies sort are the app's. `ReplyTree` turns the parents into a tree of views. Find the thread's records with a [queryable field](#fields), such as every record sharing a root, and hand over each one's parent:
+
+```php
+use SocialDept\AtpAppview\Views\ReplyTree;
+
+$records = Record::query()->where('collection', 'com.example.post')
+    ->whereIn('id', $idsSharingTheRoot)->orderBy('sort_at')->get();
+
+$parents = ReplyTree::parents($records, 'reply.parent.uri');   // uri => parent uri
+$thread = app(ReplyTree::class)->build($anchorUri, $parents, $viewer, depth: 6, height: 80);
+```
+
+Each node has a `type`, its `uri`, and for a record its `view` and `replies`. The anchor also has its `parent`, which has its own, up to `height`. Replies keep the order of `$parents`, or pass `order` to compare two nodes.
+
+The views come in one batch for the whole tree, so a deep thread takes no more queries than a shallow one. A reply the viewer cannot see is left out with everything under it. A parent the viewer cannot see stands as a placeholder, as Bluesky's threads have them: `blocked`, with its `author`, when the viewer blocks the author or is blocked by them, and `notFound` otherwise. Map the node types to your own lexicon's.
+
 ## Fields
 
 Records can be filtered, sorted and counted by their own fields, declared per collection in `config/atp-appview/fields.php`:
