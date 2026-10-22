@@ -25,6 +25,7 @@ use SocialDept\AtpAppview\Console\FailedDeliveriesCommand;
 use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\HooksApplyCommand;
 use SocialDept\AtpAppview\Console\JetstreamCommand;
+use SocialDept\AtpAppview\Console\LabelsStreamCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
@@ -47,6 +48,8 @@ use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
+use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
+use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -134,6 +137,18 @@ class AtpAppviewServiceProvider extends ServiceProvider
             failedDeliveries: $app->make(FailedDeliveries::class),
         ));
 
+        $this->app->singleton(LabelSource::class, fn (Application $app) => new LabelSource(
+            handlers: Pipeline::handlers($app),
+            cursors: $app->make(Cursors::class),
+            lookup: $app->make(LabelerLookup::class),
+            batchSize: (int) config('atp-appview.ingest.batch_size', 200),
+            maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
+            refreshSeconds: (int) config('atp-appview.labels.streams.refresh', 60),
+            blocklist: $app->make(Blocklist::class),
+            stats: $app->make(IngestStats::class),
+            failedDeliveries: $app->make(FailedDeliveries::class),
+        ));
+
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
 
         // Policies are read once and kept for the process, re-read every
@@ -189,6 +204,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BlocksCommand::class,
                 ConsumeCommand::class,
                 JetstreamCommand::class,
+                LabelsStreamCommand::class,
                 FailedDeliveriesCommand::class,
                 DiscoverCommand::class,
                 LexiconsAcceptCommand::class,

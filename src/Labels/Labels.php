@@ -4,6 +4,11 @@ namespace SocialDept\AtpAppview\Labels;
 
 use Illuminate\Support\Collection;
 use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
+use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Cursors;
+use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
+use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
 use SocialDept\AtpAppview\Models\AccountAction;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
@@ -154,7 +159,7 @@ class Labels
     }
 
     /**
-     * The labelers Tack has told the app about, with their declarations.
+     * The labelers the app follows, with their declarations.
      *
      * @return Collection<int, Labeler>
      */
@@ -168,23 +173,50 @@ class Labels
     }
 
     /**
-     * Ask Tack to follow a labeler. Its declaration arrives as an event.
+     * Follow a labeler. With streams, its service and declaration are looked
+     * up now and appview:labels:stream opens its stream. With Tack, Tack is
+     * asked, and the declaration arrives as an event.
      */
     public function follow(string $did): void
     {
         ModerationFeature::ensureOn();
 
-        app(Tack::class)->addLabeler($did);
+        if (! self::streaming()) {
+            app(Tack::class)->addLabeler($did);
+
+            return;
+        }
+
+        $lookup = app(LabelerLookup::class);
+        $endpoint = $lookup->service($did, fresh: true)['endpoint'];
+
+        app(LabelIndexer::class)->handle(new Batch([new LabelerEvent(0, $did, $endpoint, $lookup->declaration($did), false)]));
     }
 
     /**
-     * Ask Tack to stop following a labeler. Its labels go once Tack says so.
+     * Stop following a labeler. With streams, its labels go now. With Tack,
+     * once Tack says so.
      */
     public function unfollow(string $did): void
     {
         ModerationFeature::ensureOn();
 
-        app(Tack::class)->removeLabeler($did);
+        if (! self::streaming()) {
+            app(Tack::class)->removeLabeler($did);
+
+            return;
+        }
+
+        app(LabelIndexer::class)->handle(new Batch([new LabelerEvent(0, $did, null, null, true)]));
+        app(Cursors::class)->forget(LabelSource::cursor($did));
+    }
+
+    /**
+     * Whether labels come from the labelers' own streams rather than Tack.
+     */
+    public static function streaming(): bool
+    {
+        return config('atp-appview.labels.source') === 'streams';
     }
 
     /**

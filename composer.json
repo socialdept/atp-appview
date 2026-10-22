@@ -28,12 +28,12 @@
         "phpunit/phpunit": "^11.0|^12.0",
         "friendsofphp/php-cs-fixer": "^3.89",
         "socialdept/atp-cbor": "^0.2.3",
-        "socialdept/atp-signals": "^2.3.2"
+        "socialdept/atp-signals": "^2.3.3"
     },
     "suggest": {
         "inertiajs/inertia-laravel": "Render the sign-in pages with Inertia through FrontendAuth::loginView() and completeView()",
         "socialdept/atp-cbor": "Proves verification records for the standing feature (^0.2.3, needs ext-gmp).",
-        "socialdept/atp-signals": "Follows Jetstream v2 and labelers over websockets in place of Tap and Tack (^2.3.2, needs ext-gmp)."
+        "socialdept/atp-signals": "Follows Jetstream v2 and labelers over websockets in place of Tap and Tack (^2.3.3, needs ext-gmp)."
     },
     "autoload": {
         "psr-4": {

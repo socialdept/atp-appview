@@ -5,14 +5,17 @@ namespace SocialDept\AtpAppview\Labels;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
 
 /**
  * Keeps Tack's subjects in step with the index, so Tack fetches the labels
- * each account already has and delivers new ones.
+ * each account already has and delivers new ones. Without Tack, keeps the
+ * labelers' services and declarations current instead.
  *
  * - Accounts not yet registered are, a batch at a time, with the URIs of
  *   their records the index holds, for labelers that only answer for exact
@@ -63,6 +66,32 @@ class SubjectSync
         app(Visibility::class)->refresh($subjects);
 
         return $count;
+    }
+
+    /**
+     * Look up each followed labeler's service and declaration again, for
+     * label streams, where no one else tells the app about a change.
+     *
+     * @return int Labelers checked
+     */
+    public function refreshDeclarations(): int
+    {
+        $lookup = app(LabelerLookup::class);
+        $events = [];
+
+        foreach (Labeler::query()->pluck('did') as $did) {
+            try {
+                $events[] = new LabelerEvent(0, $did, $lookup->service($did, fresh: true)['endpoint'], $lookup->declaration($did), false);
+            } catch (\Throwable $e) {
+                Log::warning('[atp-appview] Could not recheck a labeler', ['labeler' => $did, 'error' => $e->getMessage()]);
+            }
+        }
+
+        if ($events !== []) {
+            app(LabelIndexer::class)->handle(new Batch($events));
+        }
+
+        return count($events);
     }
 
     /**
