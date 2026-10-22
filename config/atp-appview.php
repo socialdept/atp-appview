@@ -174,6 +174,17 @@ return [
             'middleware' => [],
         ],
 
+        // Jetstream v2, an alternative to Tap: appview:jetstream follows it for
+        // the collections and companions above, with identity and account
+        // events, and keeps its cursor in atp_ingest_cursors. Needs
+        // socialdept/atp-signals. Live only: repos it has not seen yet are
+        // added as their records arrive. known_refresh is how often, in
+        // seconds, it rereads which repos the index knows.
+        'jetstream' => [
+            'url' => env('ATP_APPVIEW_JETSTREAM_URL', 'wss://jetstream.us-east.bsky.network'),
+            'known_refresh' => (int) env('ATP_APPVIEW_JETSTREAM_KNOWN_REFRESH', 60),
+        ],
+
         // What a batch passes through before the handlers, in order: classes
         // with handle(Batch $batch, Closure $next), as in a Laravel pipeline.
         'pipes' => [
