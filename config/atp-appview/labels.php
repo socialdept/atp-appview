@@ -5,10 +5,12 @@
 | Labels
 |--------------------------------------------------------------------------
 |
-| Labels come from labelers through Tack, which follows them, verifies
-| their signatures and delivers the labels about the accounts the index
-| knows, by webhook or over its websocket. appview:labels:sync keeps Tack's
-| subjects in step with atp_identities.
+| Labels come from labelers, through Tack or from each labeler's own
+| stream (source). Tack follows them, verifies their signatures and
+| delivers the labels about the accounts the index knows, by webhook or
+| over its websocket, and appview:labels:sync keeps its subjects in step
+| with atp_identities. With streams, appview:labels:stream does the same
+| in the app.
 |
 | What a label does is decided per labeler, value and target (content or
 | account), in this order: an operator's policy in atp_label_policies, the
@@ -19,6 +21,16 @@
 */
 
 return [
+    // tack, or streams for appview:labels:stream, which needs
+    // socialdept/atp-signals. It decides what following a labeler does.
+    'source' => env('ATP_APPVIEW_LABELS_SOURCE', 'tack'),
+
+    // How often, in seconds, appview:labels:stream rereads the labelers it
+    // follows and the accounts the index knows.
+    'streams' => [
+        'refresh' => (int) env('ATP_APPVIEW_LABELS_STREAMS_REFRESH', 60),
+    ],
+
     'tack' => [
         'url' => env('ATP_APPVIEW_TACK_URL'),
         // Tack's TACK_ADMIN_PASSWORD. It signs webhooks with it, and the app

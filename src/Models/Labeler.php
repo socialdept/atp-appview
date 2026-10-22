@@ -5,7 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * A labeler Tack follows, with its app.bsky.labeler.service declaration.
+ * A labeler the app follows, with its app.bsky.labeler.service declaration.
  *
  * @property string $did
  * @property string|null $endpoint

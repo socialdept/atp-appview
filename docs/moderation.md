@@ -1,6 +1,6 @@
 # Moderation
 
-Part of the [atp-appview docs](../README.md#documentation). Labels from labelers through Tack, policies, self-labels and account actions.
+Part of the [atp-appview docs](../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels and account actions.
 
 ## Labels
 
@@ -18,6 +18,24 @@ Schedule the sync. It registers the accounts the index knows with Tack, with the
 ```php
 Schedule::command('appview:labels:sync')->everyMinute()->withoutOverlapping();
 ```
+
+### Label streams instead of Tack
+
+`php artisan appview:labels:stream` follows each labeler's own `com.atproto.label.subscribeLabels` stream in place of Tack, with no separate service to run. It needs `socialdept/atp-signals` ^2.3.3 (which needs `ext-gmp`).
+
+```dotenv
+ATP_APPVIEW_LABELS_SOURCE=streams
+```
+
+- **Following.** `Labels::follow()` looks up the labeler's service and declaration and adds it to `atp_labelers`. `unfollow()` removes it with its labels. The command opens a stream for each labeler there and closes one when it goes, rereading the list every `labels.streams.refresh` seconds (60).
+- **Which labels count.** Only labels about accounts the index knows, held in memory and reread on the same schedule. They are picked out before their signatures are checked, which is most of the work saved, since a labeler's stream is mostly about other accounts.
+- **Signatures.** A kept label must name the labeler whose stream carried it, and verify against its `#atproto_label` key. When one fails, the key is looked up again in case it was rotated, at most every ten minutes. Labels that still fail are dropped and logged.
+- **Batches and failures** go through the same buffer as records: retries, then failing labels parked as [failed deliveries](ingest.md#failed-deliveries).
+- **The cursor** is kept per labeler in `atp_ingest_cursors` (`labels:<did>`), saved in the same transaction as the batch it ends. A new labeler starts at its current label. `--from-live` forgets every labeler's cursor.
+- **Declarations.** `appview:labels:sync` looks each labeler's service and declaration up again every six hours, as Tack does, and drops expired labels.
+- **Live only.** Labels made before an account was known are not on the live stream.
+
+It takes the same `--max-time`, `--max-batches` and `--memory` limits as `appview:consume`, and stops on `appview:restart` and when its config changes. Replaying Bluesky's moderation stream it kept up with about 2,000 labels a second at a fifth of one core, and it idles at almost nothing.
 
 Authors' own labels on their records (`labels.values`, self-labels) count too, with the author as their source. Turn them off with `labels.self_labels`. Records indexed before self-labels were kept, or while they were off, get theirs from `php artisan appview:labels:self`, which is safe to run again.
 
