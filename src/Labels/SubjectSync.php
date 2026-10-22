@@ -8,14 +8,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Labels\BackfillLabels;
 use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
 
 /**
- * Keeps Tack's subjects in step with the index, so Tack fetches the labels
- * each account already has and delivers new ones. Without Tack, keeps the
- * labelers' services and declarations current instead.
+ * Fetches the labels each account already has, so only new ones need to
+ * arrive live: through Tack, which is told about the accounts, or with label
+ * streams, by queueing BackfillLabels.
  *
  * - Accounts not yet registered are, a batch at a time, with the URIs of
  *   their records the index holds, for labelers that only answer for exact
@@ -25,7 +26,8 @@ use SocialDept\AtpAppview\Models\Labeler;
  *   nothing: their labels arrive live.
  * - Labels past their expiry are dropped, and what they hid is shown.
  * - The labelers Tack follows, with their declarations, are read from its
- *   API, so a declaration missed in delivery is caught up.
+ *   API, so a declaration missed in delivery is caught up. With streams,
+ *   each labeler is looked up again every six hours instead.
  */
 class SubjectSync
 {
@@ -34,22 +36,32 @@ class SubjectSync
     /** URIs per request to Tack. */
     protected const URI_CHUNK = 1000;
 
+    /** Hours between lookups of each labeler with streams, as Tack does. */
+    protected const DECLARATIONS_HOURS = 6;
+
     public function __construct(
         protected Tack $tack,
     ) {
     }
 
     /**
-     * @return array{accounts: int, uris: int, expired: int}
+     * @return array{accounts: int, uris: int, expired: int, labelers: int}
      */
     public function run(int $limit = 1000): array
     {
-        $this->syncLabelers();
+        $labelers = 0;
+
+        if (! Labels::streaming()) {
+            $this->syncLabelers();
+        } elseif (Cache::add('atp-appview:labels:declarations-checked', true, now()->addHours(self::DECLARATIONS_HOURS))) {
+            $labelers = $this->refreshDeclarations();
+        }
+
         $expired = self::expire();
         $accounts = $this->registerAccounts($limit);
         $uris = $this->sendLateRecords();
 
-        return ['accounts' => $accounts, 'uris' => $uris, 'expired' => $expired];
+        return ['accounts' => $accounts, 'uris' => $uris, 'expired' => $expired, 'labelers' => $labelers];
     }
 
     /**
@@ -129,13 +141,17 @@ class SubjectSync
 
         foreach (array_chunk($dids, 100) as $chunk) {
             $now = Carbon::now('UTC')->format('Y-m-d H:i:s');
-            $uris = $connection->table('atp_records')->whereIn('did', $chunk)->whereNull('deleted_at')->pluck('uri')->all();
-            $batches = array_chunk($uris, self::URI_CHUNK);
+            if (Labels::streaming()) {
+                BackfillLabels::accounts($chunk);
+            } else {
+                $uris = $connection->table('atp_records')->whereIn('did', $chunk)->whereNull('deleted_at')->pluck('uri')->all();
+                $batches = array_chunk($uris, self::URI_CHUNK);
 
-            $this->tack->addSubjects($chunk, $batches[0] ?? []);
+                $this->tack->addSubjects($chunk, $batches[0] ?? []);
 
-            foreach (array_slice($batches, 1) as $batch) {
-                $this->tack->addUris($batch);
+                foreach (array_slice($batches, 1) as $batch) {
+                    $this->tack->addUris($batch);
+                }
             }
 
             $connection->table('atp_identities')->whereIn('did', $chunk)->update(['labels_synced_at' => $now]);
@@ -166,7 +182,7 @@ class SubjectSync
                 ->select('atp_records.uri')
                 ->chunk(self::URI_CHUNK, function ($rows) use (&$sent) {
                     $uris = $rows->pluck('uri')->all();
-                    $this->tack->addUris($uris);
+                    Labels::streaming() ? BackfillLabels::records($uris) : $this->tack->addUris($uris);
                     $sent += count($uris);
                 });
         }

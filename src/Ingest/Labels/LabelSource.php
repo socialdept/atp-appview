@@ -17,9 +17,7 @@ use SocialDept\AtpAppview\Ingest\IngestBuffer;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Labels\Target;
-use SocialDept\AtpCbor\Core\CBOR;
 use SocialDept\AtpSignals\Labels\LabelStream;
-use SocialDept\AtpSupport\Crypto\SignatureVerifier;
 use Throwable;
 
 /**
@@ -32,10 +30,10 @@ use Throwable;
  *
  * Only labels about accounts the index knows are kept, checked before their
  * signatures, which cost milliseconds each. A kept label must come from the
- * labeler whose stream carried it and verify against its #atproto_label key,
- * looked up again once when a label fails, in case the key was rotated.
+ * labeler whose stream carried it and verify against its #atproto_label key.
  *
  * Labels made before an account was known are not on the live stream.
+ * BackfillLabels fetches those.
  */
 class LabelSource
 {
@@ -44,9 +42,6 @@ class LabelSource
     public const RESTART_KEY = TapConsumer::RESTART_KEY;
 
     public const CURSOR_PREFIX = 'labels:';
-
-    /** Seconds before a labeler's key is looked up again after a failed label. */
-    protected const REKEY_SECONDS = 600;
 
     protected IngestBuffer $buffer;
 
@@ -58,16 +53,8 @@ class LabelSource
     /** @var array<string, string> */
     protected array $endpoints = [];
 
-    /** @var array<string, string> */
-    protected array $keys = [];
-
-    /** @var array<string, int> */
-    protected array $rekeyedAt = [];
-
     /** @var array<string, true> */
     protected array $known = [];
-
-    protected SignatureVerifier $verifier;
 
     /**
      * @param  array<int, BatchHandler>  $handlers
@@ -76,7 +63,7 @@ class LabelSource
     public function __construct(
         protected array $handlers,
         protected Cursors $cursors,
-        protected LabelerLookup $lookup,
+        protected LabelVerifier $verifier,
         protected int $batchSize = 200,
         protected int $maxAttempts = 3,
         protected int $refreshSeconds = 60,
@@ -86,7 +73,6 @@ class LabelSource
         protected ?Closure $streamFactory = null,
     ) {
         $this->buffer = new IngestBuffer($handlers, fn () => null, PHP_INT_MAX, $maxAttempts, blocklist: $blocklist, stats: $stats, failedDeliveries: $failedDeliveries);
-        $this->verifier = new SignatureVerifier();
     }
 
     public static function cursor(string $labeler): string
@@ -221,7 +207,7 @@ class LabelSource
                 continue;
             }
 
-            if (! $this->verified($labeler, $label)) {
+            if (! $this->verifier->verify($labeler, $label)) {
                 Log::warning('[atp-appview] Dropped a label whose signature does not verify', ['labeler' => $labeler, 'uri' => $uri, 'val' => $label['val']]);
 
                 continue;
@@ -261,46 +247,10 @@ class LabelSource
         $this->known = $known;
     }
 
-    /**
-     * @param  array<string, mixed>  $label
-     */
-    protected function verified(string $labeler, array $label): bool
-    {
-        $sig = $label['sig'] ?? null;
-        unset($label['sig']);
-
-        if (! is_string($sig)) {
-            return false;
-        }
-
-        $bytes = CBOR::encode($label);
-
-        if (isset($this->keys[$labeler]) && $this->verifier->verify($this->keys[$labeler], $bytes, $sig)) {
-            return true;
-        }
-
-        // The key may have been rotated since it was looked up.
-        if ($this->now() - ($this->rekeyedAt[$labeler] ?? 0) < self::REKEY_SECONDS) {
-            return false;
-        }
-
-        $this->rekeyedAt[$labeler] = $this->now();
-
-        try {
-            $this->keys[$labeler] = $this->lookup->service($labeler, fresh: true)['key'];
-        } catch (Throwable $e) {
-            Log::warning('[atp-appview] Could not look up a labeler\'s key', ['labeler' => $labeler, 'error' => $e->getMessage()]);
-
-            return false;
-        }
-
-        return $this->verifier->verify($this->keys[$labeler], $bytes, $sig);
-    }
-
     protected function openStream(string $did, string $endpoint): void
     {
         try {
-            $this->keys[$did] = $this->lookup->service($did)['key'];
+            $this->verifier->key($did);
         } catch (Throwable $e) {
             Log::warning('[atp-appview] Not following a labeler yet, its key could not be looked up', ['labeler' => $did, 'error' => $e->getMessage()]);
 
