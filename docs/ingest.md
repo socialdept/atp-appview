@@ -1,6 +1,6 @@
 # Ingest
 
-Part of the [atp-appview docs](../README.md#documentation). Tap and Tab delivery, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
+Part of the [atp-appview docs](../README.md#documentation). Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
 
 [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) does the network work: crawling, fetching repos, verifying commits and ordering events per repo. It delivers what it finds to your application in batches, and each batch goes to your handlers. The application only writes what arrives.
 
@@ -65,6 +65,24 @@ Run `php artisan appview:restart` at the end of a deploy, the same as `queue:res
 The worker also restarts itself when its config changes. Every minute it compares `.env`, the config cache and the files in `config/` with how they were when it started, and exits if any changed, so adding a collection or a handler takes effect without a manual restart. That only sees files in place: a zero-downtime deploy into a new release directory leaves the worker looking at the old one, so keep `appview:restart` in the deploy.
 
 Exiting is always lossless. The batch in progress finishes first, and anything not yet acknowledged is redelivered by Tap when the worker comes back.
+
+## Jetstream instead of Tap
+
+`php artisan appview:jetstream` follows [Jetstream v2](https://github.com/bluesky-social/jetstream) in place of Tap, with no separate service to run. It needs `socialdept/atp-signals` (which needs `ext-gmp`).
+
+```dotenv
+ATP_APPVIEW_JETSTREAM_URL=wss://jetstream.us-east.bsky.network
+```
+
+- **One stream** follows `ingest.collections` and `ingest.companions`, with identity and account events.
+- **Which repos count.** Jetstream cannot know which repos the app follows, so the app decides. A record in one of the app's own collections counts from any repo, and adds that repo, whose handle and PDS are then looked up in the queue (`ResolveIdentity`). A companion record, an identity change or an account change counts only for a repo the index already knows. The set of known repos is held in memory and reread every `ingest.jetstream.known_refresh` seconds (60).
+- **Identities.** Jetstream sends a handle change and an account's status as separate events, where Tap sends both together, so each is combined with what the index holds. A handle change never brings a taken down account back.
+- **Batches and failures** go through the same buffer as Tap's: retries, then failing records parked as [failed deliveries](#failed-deliveries) while the rest go through.
+- **The cursor** is kept in `atp_ingest_cursors`, saved in the same transaction as the batch it ends. A batch that fails in every attempt is not saved, so it comes again. `--from-live` forgets the cursor and starts at the live tip.
+- **Trust.** Jetstream checks commit signatures upstream, so records are as trusted as the Jetstream instance. Run your own instance to verify them yourself.
+- **Live only.** Records written before the cursor started are not fetched. Backfill the collections another way, such as Tap or a discovery and reconcile, then follow Jetstream from then on. A cursor older than the instance keeps (36 hours on Bluesky's) stops the command with a message saying so.
+
+It takes the same `--max-time`, `--max-batches` and `--memory` limits as `appview:consume`, stops on `appview:restart` and when its config changes, and is lossless on exit. Measured following a few collections, it uses about 2% of one core.
 
 ## Handlers
 

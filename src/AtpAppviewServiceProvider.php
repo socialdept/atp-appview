@@ -24,6 +24,7 @@ use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\FailedDeliveriesCommand;
 use SocialDept\AtpAppview\Console\FieldsCommand;
 use SocialDept\AtpAppview\Console\HooksApplyCommand;
+use SocialDept\AtpAppview\Console\JetstreamCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
@@ -42,8 +43,10 @@ use SocialDept\AtpAppview\Images\BlobUrls;
 use SocialDept\AtpAppview\Images\InfraCoopBlobUrls;
 use SocialDept\AtpAppview\Images\PdsBlobUrls;
 use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
+use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -119,6 +122,18 @@ class AtpAppviewServiceProvider extends ServiceProvider
             failedDeliveries: $app->make(FailedDeliveries::class),
         ));
 
+        $this->app->singleton(JetstreamSource::class, fn (Application $app) => new JetstreamSource(
+            handlers: Pipeline::handlers($app),
+            cursors: $app->make(Cursors::class),
+            url: (string) config('atp-appview.ingest.jetstream.url', 'wss://jetstream.us-east.bsky.network'),
+            batchSize: (int) config('atp-appview.ingest.batch_size', 200),
+            maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
+            knownRefreshSeconds: (int) config('atp-appview.ingest.jetstream.known_refresh', 60),
+            blocklist: $app->make(Blocklist::class),
+            stats: $app->make(IngestStats::class),
+            failedDeliveries: $app->make(FailedDeliveries::class),
+        ));
+
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
 
         // Policies are read once and kept for the process, re-read every
@@ -173,6 +188,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BlockCommand::class,
                 BlocksCommand::class,
                 ConsumeCommand::class,
+                JetstreamCommand::class,
                 FailedDeliveriesCommand::class,
                 DiscoverCommand::class,
                 LexiconsAcceptCommand::class,
