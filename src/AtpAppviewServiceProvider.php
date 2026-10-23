@@ -48,8 +48,9 @@ use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
-use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
+use SocialDept\AtpAppview\Ingest\Labels\LabelQuery;
 use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
+use SocialDept\AtpAppview\Ingest\Labels\LabelVerifier;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
@@ -137,10 +138,13 @@ class AtpAppviewServiceProvider extends ServiceProvider
             failedDeliveries: $app->make(FailedDeliveries::class),
         ));
 
+        $this->app->singleton(LabelVerifier::class);
+        $this->app->bind(LabelQuery::class, fn () => new LabelQuery((int) config('atp-appview.labels.streams.query_rate', 4)));
+
         $this->app->singleton(LabelSource::class, fn (Application $app) => new LabelSource(
             handlers: Pipeline::handlers($app),
             cursors: $app->make(Cursors::class),
-            lookup: $app->make(LabelerLookup::class),
+            verifier: $app->make(LabelVerifier::class),
             batchSize: (int) config('atp-appview.ingest.batch_size', 200),
             maxAttempts: (int) config('atp-appview.ingest.max_attempts', 3),
             refreshSeconds: (int) config('atp-appview.labels.streams.refresh', 60),

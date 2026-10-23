@@ -97,7 +97,7 @@ class TackTest extends TestCase
         DB::table('atp_identities')->insert(['did' => 'did:plc:alice', 'handle' => 'alice.test', 'active' => true, 'updated_at' => now()]);
         $this->record('did:plc:alice', 'old', '2026-01-01 00:00:00', '2026-01-01 00:00:00');
 
-        $this->assertSame(['accounts' => 1, 'uris' => 0, 'expired' => 0], app(SubjectSync::class)->run());
+        $this->assertSame(['accounts' => 1, 'uris' => 0, 'expired' => 0, 'labelers' => 0], app(SubjectSync::class)->run());
         $this->assertSame(['did:plc:mod'], Labeler::query()->pluck('did')->all(), 'Labelers follow what Tack follows.');
         $this->assertSame(['spam'], Labeler::query()->sole()->values());
 
@@ -114,7 +114,7 @@ class TackTest extends TestCase
         Cache::forever('atp-appview:labels:sync:indexed', $synced);
 
         $this->travel(2)->minutes();
-        $this->assertSame(['accounts' => 0, 'uris' => 1, 'expired' => 0], app(SubjectSync::class)->run());
+        $this->assertSame(['accounts' => 0, 'uris' => 1, 'expired' => 0, 'labelers' => 0], app(SubjectSync::class)->run());
 
         Http::assertSent(fn (Request $request) => $request->url() === 'http://tack.test/subjects/uris'
             && $request['uris'] === ['at://did:plc:alice/app.example.post/late']);

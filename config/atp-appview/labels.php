@@ -26,9 +26,11 @@ return [
     'source' => env('ATP_APPVIEW_LABELS_SOURCE', 'tack'),
 
     // How often, in seconds, appview:labels:stream rereads the labelers it
-    // follows and the accounts the index knows.
+    // follows and the accounts the index knows, and how many queryLabels
+    // requests a second label backfills send each labeler.
     'streams' => [
         'refresh' => (int) env('ATP_APPVIEW_LABELS_STREAMS_REFRESH', 60),
+        'query_rate' => (int) env('ATP_APPVIEW_LABELS_QUERY_RATE', 4),
     ],
 
     'tack' => [

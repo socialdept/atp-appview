@@ -3,10 +3,12 @@
 namespace SocialDept\AtpAppview\Labels;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
+use SocialDept\AtpAppview\Ingest\Labels\BackfillLabels;
 use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
 use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
 use SocialDept\AtpAppview\Models\AccountAction;
@@ -174,8 +176,9 @@ class Labels
 
     /**
      * Follow a labeler. With streams, its service and declaration are looked
-     * up now and appview:labels:stream opens its stream. With Tack, Tack is
-     * asked, and the declaration arrives as an event.
+     * up now, appview:labels:stream opens its stream, and the labels it has
+     * on the accounts the index knows are queued to be fetched. With Tack,
+     * Tack is asked, and the declaration arrives as an event.
      */
     public function follow(string $did): void
     {
@@ -191,6 +194,11 @@ class Labels
         $endpoint = $lookup->service($did, fresh: true)['endpoint'];
 
         app(LabelIndexer::class)->handle(new Batch([new LabelerEvent(0, $did, $endpoint, $lookup->declaration($did), false)]));
+
+        // Accounts already synced have labels from the other labelers only.
+        DB::connection(config('atp-appview.index.connection'))->table('atp_identities')
+            ->whereNotNull('labels_synced_at')->orderBy('did')->select('did')
+            ->chunk(5000, fn ($rows) => BackfillLabels::accounts($rows->pluck('did')->all(), $did));
     }
 
     /**

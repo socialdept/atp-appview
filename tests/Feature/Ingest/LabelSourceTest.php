@@ -3,10 +3,10 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Orchestra\Testbench\TestCase;
 use phpseclib3\Crypt\EC;
 use phpseclib3\Crypt\EC\PrivateKey;
-use phpseclib3\Math\BigInteger;
 use React\EventLoop\Loop;
 use React\EventLoop\LoopInterface;
 use React\Promise\PromiseInterface;
@@ -21,15 +21,13 @@ use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
 use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
 use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
+use SocialDept\AtpAppview\Ingest\Labels\LabelVerifier;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
-use SocialDept\AtpCbor\Core\CBOR;
 use SocialDept\AtpSignals\Labels\LabelStream;
 use SocialDept\AtpSignals\Support\WebSocketConnection;
-use SocialDept\AtpSupport\Crypto\Base58;
-use SocialDept\AtpSupport\Crypto\DidKey;
 
 /**
  * Labels from each labeler's own stream in place of Tack: kept only about
@@ -39,15 +37,18 @@ use SocialDept\AtpSupport\Crypto\DidKey;
  */
 class LabelSourceTest extends TestCase
 {
+    use SignsLabels;
+
     protected const MOD = 'did:plc:mod';
     protected const OTHER = 'did:plc:other';
     protected const ALICE = 'did:plc:alice';
     protected const STRANGER = 'did:plc:stranger';
-    protected const ORDER = 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141';
 
     protected PrivateKey $key;
 
     protected FakeLookup $lookup;
+
+    protected LabelVerifier $verifier;
 
     protected function getPackageProviders($app): array
     {
@@ -72,6 +73,7 @@ class LabelSourceTest extends TestCase
         $this->lookup = new FakeLookup();
         $this->lookup->keys[self::MOD] = self::didKey($this->key);
         $this->app->instance(LabelerLookup::class, $this->lookup);
+        $this->verifier = new LabelVerifier($this->lookup);
     }
 
     protected function tearDown(): void
@@ -84,13 +86,12 @@ class LabelSourceTest extends TestCase
 
     protected function primeKey(LabelSource $source): void
     {
-        [$did, $key] = [self::MOD, $this->lookup->service(self::MOD)['key']];
-        (fn () => $this->keys[$did] = $key)->call($source);
+        $this->verifier->key(self::MOD);
     }
 
     protected function source(array $handlers = [], ?\Closure $streams = null): LabelSource
     {
-        $source = new LabelSource($handlers ?: [new LabelIndexer()], app(Cursors::class), $this->lookup, streamFactory: $streams);
+        $source = new LabelSource($handlers ?: [new LabelIndexer()], app(Cursors::class), $this->verifier, streamFactory: $streams);
         $source->refreshKnown();
 
         return $source;
@@ -105,7 +106,7 @@ class LabelSourceTest extends TestCase
     {
         $label = ['ver' => 1, 'src' => $src, 'uri' => $uri, 'val' => $val, 'neg' => $neg, 'cts' => $cts];
 
-        return $label + ['sig' => self::sign($key ?? $this->key, CBOR::encode($label))];
+        return $label + ['sig' => self::signLabel($key ?? $this->key, $label)];
     }
 
     public function test_a_signed_label_about_a_known_account_is_kept_with_the_labelers_cursor(): void
@@ -267,6 +268,7 @@ class LabelSourceTest extends TestCase
 
     public function test_the_sync_rechecks_declarations_every_few_hours(): void
     {
+        Queue::fake();
         $this->lookup->endpoints[self::MOD] = 'https://mod.example';
         DB::table('atp_labelers')->insert(['did' => self::MOD, 'endpoint' => 'https://mod.example', 'created_at' => now(), 'updated_at' => now()]);
         $this->lookup->declarations[self::MOD] = ['policies' => ['labelValues' => ['spam', 'scam']]];
@@ -275,55 +277,6 @@ class LabelSourceTest extends TestCase
         $this->assertSame(['spam', 'scam'], Labeler::query()->sole()->values());
 
         $this->artisan('appview:labels:sync')->expectsOutputToContain('0 labelers rechecked')->assertSuccessful();
-    }
-
-    protected static function sign(PrivateKey $key, string $data): string
-    {
-        $order = new BigInteger(self::ORDER, 16);
-        [$half] = $order->divide(new BigInteger(2));
-        $signature = $key->withSignatureFormat('Raw')->withHash('sha256')->sign($data);
-        $s = $signature['s']->compare($half) > 0 ? $order->subtract($signature['s']) : $signature['s'];
-
-        return str_pad($signature['r']->toBytes(), 32, "\0", STR_PAD_LEFT).str_pad($s->toBytes(), 32, "\0", STR_PAD_LEFT);
-    }
-
-    protected static function didKey(PrivateKey $key): string
-    {
-        $point = $key->getPublicKey()->getEncodedCoordinates();
-
-        return 'did:key:z'.Base58::encode(DidKey::SECP256K1_PREFIX.chr(0x02 | (ord($point[64]) & 1)).substr($point, 1, 32));
-    }
-}
-
-class FakeLookup extends LabelerLookup
-{
-    /** @var array<string, string> */
-    public array $keys = [];
-
-    /** @var array<string, string> */
-    public array $endpoints = [];
-
-    /** @var array<string, array<string, mixed>|null> */
-    public array $declarations = [];
-
-    public int $calls = 0;
-
-    public bool $fresh = false;
-
-    public function service(string $did, bool $fresh = false): array
-    {
-        $this->calls++;
-        $this->fresh = $fresh;
-
-        return [
-            'endpoint' => $this->endpoints[$did] ?? 'https://labeler.example',
-            'key' => $this->keys[$did] ?? throw new RuntimeException("{$did} publishes no label key."),
-        ];
-    }
-
-    public function declaration(string $did): ?array
-    {
-        return $this->declarations[$did] ?? null;
     }
 }
 
