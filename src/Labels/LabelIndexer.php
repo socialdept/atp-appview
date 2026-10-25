@@ -107,9 +107,13 @@ class LabelIndexer implements BatchHandler
             'self' => false,
         ];
 
-        $stored === null
-            ? $table->insert(['src' => $label->src, 'uri' => $label->uri, 'val' => $label->val, ...$row])
-            : $key()->update($row);
+        // Another writer, such as a label backfill beside the stream, may store
+        // the same label between the read and the insert. Then the newer wins.
+        $inserted = $stored === null && $table->insertOrIgnore(['src' => $label->src, 'uri' => $label->uri, 'val' => $label->val, ...$row]) > 0;
+
+        if (! $inserted && $key()->where('cts', '<', $label->cts)->update($row) === 0) {
+            return false;
+        }
 
         $connection->afterCommit(function () use ($label) {
             $model = Label::query()->where('src', $label->src)->where('uri', $label->uri)->where('val', $label->val)->first();
