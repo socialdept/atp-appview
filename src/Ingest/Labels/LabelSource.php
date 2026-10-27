@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use React\EventLoop\Loop;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
+use SocialDept\AtpAppview\Ingest\Concerns\BeatsHeart;
 use SocialDept\AtpAppview\Ingest\Concerns\StopsWhenAsked;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Cursors;
@@ -37,11 +38,14 @@ use Throwable;
  */
 class LabelSource
 {
+    use BeatsHeart;
     use StopsWhenAsked;
 
     public const RESTART_KEY = TapConsumer::RESTART_KEY;
 
     public const CURSOR_PREFIX = 'labels:';
+
+    public const HEARTBEAT = 'labels';
 
     protected IngestBuffer $buffer;
 
@@ -91,6 +95,7 @@ class LabelSource
         $loop = Loop::get();
         $loop->addPeriodicTimer(max(1, $this->refreshSeconds), fn () => $this->refresh());
         $loop->addPeriodicTimer(1, fn () => $this->stopIfLimitReached());
+        $this->startHeartbeat($loop);
 
         if ($this->deployedFingerprint !== null) {
             $loop->addPeriodicTimer($this->configCheckSeconds, fn () => $this->stopIfConfigChanged());
@@ -277,6 +282,14 @@ class LabelSource
         if (str_contains($e->getMessage(), 'FutureCursor')) {
             $this->cursors->forget(self::cursor($did));
         }
+    }
+
+    /**
+     * @return array{following: int}
+     */
+    protected function heartbeatState(): array
+    {
+        return ['following' => count($this->streams)];
     }
 
     protected function closeStream(string $did): void

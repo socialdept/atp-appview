@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Log;
 use React\EventLoop\Loop;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Collections;
+use SocialDept\AtpAppview\Ingest\Concerns\BeatsHeart;
 use SocialDept\AtpAppview\Ingest\Concerns\StopsWhenAsked;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Cursors;
@@ -42,11 +43,14 @@ use Throwable;
  */
 class JetstreamSource
 {
+    use BeatsHeart;
     use StopsWhenAsked;
 
     public const RESTART_KEY = TapConsumer::RESTART_KEY;
 
     public const CURSOR = 'jetstream';
+
+    public const HEARTBEAT = 'jetstream';
 
     protected IngestBuffer $buffer;
 
@@ -97,6 +101,7 @@ class JetstreamSource
         $loop = Loop::get();
         $loop->addPeriodicTimer(max(1, $this->knownRefreshSeconds), fn () => $this->refreshKnown());
         $loop->addPeriodicTimer(1, fn () => $this->stopIfLimitReached());
+        $this->startHeartbeat($loop);
 
         if ($this->deployedFingerprint !== null) {
             $loop->addPeriodicTimer($this->configCheckSeconds, fn () => $this->stopIfConfigChanged());

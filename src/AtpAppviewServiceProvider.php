@@ -46,6 +46,7 @@ use SocialDept\AtpAppview\Images\PdsBlobUrls;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\FailedDeliveries;
+use SocialDept\AtpAppview\Ingest\Heartbeats;
 use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
 use SocialDept\AtpAppview\Ingest\Labels\LabelQuery;
@@ -154,6 +155,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
         ));
 
         $this->app->singleton(IngestStats::class, fn (Application $app) => new IngestStats($app->make('cache.store')));
+        $this->app->singleton(Heartbeats::class, fn (Application $app) => new Heartbeats($app->make('cache.store')));
 
         // Policies are read once and kept for the process, re-read every
         // half minute so workers see an operator's change.

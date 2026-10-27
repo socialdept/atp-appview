@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Cache\Repository as Cache;
 use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\DeployedConfig;
+use SocialDept\AtpAppview\Ingest\Heartbeats;
 use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
 use SocialDept\AtpSignals\Jetstream\JetstreamStream;
 
@@ -39,6 +40,7 @@ class JetstreamCommand extends Command
         $source
             ->withLimits((int) $this->option('max-time'), (int) $this->option('max-batches'), (int) $this->option('memory'))
             ->withRestartSignal($cache)
+            ->withHeartbeat($this->laravel->make(Heartbeats::class))
             ->withConfigWatch(fn () => DeployedConfig::signature(), DeployedConfig::signature())
             ->run();
 

@@ -9,6 +9,7 @@ use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\IndexStats;
 use SocialDept\AtpAppview\Index\ReconcileErrors;
 use SocialDept\AtpAppview\Index\ReconcileResult;
+use SocialDept\AtpAppview\Ingest\Heartbeats;
 use SocialDept\AtpAppview\Models\Block;
 use SocialDept\AtpAppview\Models\FollowedLexicon;
 use SocialDept\AtpAppview\Models\Identity;
@@ -167,5 +168,63 @@ class AppviewStatusTest extends TestCase
         $this->assertSame('2 indexed, 1 tombstoned', (new ReconcileResult('did:plc:a', rev: '3l2', indexed: ['x', 'y'], tombstoned: ['z']))->summary());
         $this->assertSame('Skipped: blocked', (new ReconcileResult('did:plc:a', skipped: 'blocked'))->summary());
         $this->assertSame('Account deleted', (new ReconcileResult('did:plc:a', account: 'deleted'))->summary());
+    }
+
+    public function test_it_reports_the_sources(): void
+    {
+        $this->assertSame(['records' => 'tap', 'labels' => 'tack'], $this->appview()->sources());
+
+        config(['atp-appview.ingest.source' => 'jetstream', 'atp-appview.labels.source' => 'streams']);
+
+        $this->assertSame(['records' => 'jetstream', 'labels' => 'streams'], $this->appview()->sources());
+    }
+
+    public function test_it_reports_the_streams_from_their_heartbeats_and_cursors(): void
+    {
+        $streams = $this->appview()->streams();
+
+        $this->assertFalse($streams['jetstream']['running'], 'A stream that never ran is not running.');
+        $this->assertNull($streams['jetstream']['seenAt']);
+        $this->assertNull($streams['jetstream']['cursor']);
+        $this->assertSame([], $streams['labels']['labelers']);
+
+        app(Heartbeats::class)->beat('jetstream');
+        app(Heartbeats::class)->beat('labels', ['following' => 2]);
+        DB::table('atp_ingest_cursors')->insert([
+            ['source' => 'jetstream', 'cursor' => 812, 'updated_at' => '2026-10-27 12:00:05'],
+            ['source' => 'labels:did:plc:quiet', 'cursor' => 3, 'updated_at' => '2026-10-27 09:00:00'],
+            ['source' => 'labels:did:plc:busy', 'cursor' => 90, 'updated_at' => '2026-10-27 12:00:00'],
+        ]);
+        $this->appview()->forget();
+
+        $streams = $this->appview()->streams();
+
+        $this->assertTrue($streams['jetstream']['running']);
+        $this->assertSame(812, $streams['jetstream']['cursor']);
+        $this->assertSame('2026-10-27T12:00:05Z', $streams['jetstream']['savedAt']);
+        $this->assertTrue($streams['labels']['running']);
+        $this->assertSame(2, $streams['labels']['following']);
+        $this->assertSame([
+            ['did' => 'did:plc:busy', 'cursor' => 90, 'savedAt' => '2026-10-27T12:00:00Z'],
+            ['did' => 'did:plc:quiet', 'cursor' => 3, 'savedAt' => '2026-10-27T09:00:00Z'],
+        ], $streams['labels']['labelers'], 'Labelers come newest first.');
+    }
+
+    public function test_a_stream_reads_as_stopped_three_heartbeats_after_its_last(): void
+    {
+        $now = 1_000_000;
+        $this->app->instance(Heartbeats::class, $heartbeats = new Heartbeats($this->app->make('cache.store'), function () use (&$now) {
+            return $now;
+        }));
+
+        $heartbeats->beat('jetstream');
+        $now += Heartbeats::INTERVAL * 3;
+        $this->assertTrue($this->appview()->streams()['jetstream']['running'], 'Two late beats are still running.');
+
+        $now += 1;
+        $streams = $this->appview()->streams();
+
+        $this->assertFalse($streams['jetstream']['running']);
+        $this->assertSame('1970-01-12T13:46:40Z', $streams['jetstream']['seenAt'], 'A stopped stream still says when it was last seen.');
     }
 }

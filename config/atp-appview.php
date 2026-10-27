@@ -130,6 +130,10 @@ return [
     */
 
     'ingest' => [
+        // Where records come from: tap, or jetstream for appview:jetstream
+        // below. It decides what the status page and admin panel report.
+        'source' => env('ATP_APPVIEW_INGEST_SOURCE', 'tap'),
+
         // Tap's websocket channel, for appview:consume.
         'url' => env('ATP_APPVIEW_TAP_URL', 'ws://localhost:2480/channel'),
 
