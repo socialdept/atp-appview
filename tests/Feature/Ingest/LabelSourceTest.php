@@ -19,6 +19,7 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\Cursors;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
+use SocialDept\AtpAppview\Ingest\Heartbeats;
 use SocialDept\AtpAppview\Ingest\Labels\LabelerLookup;
 use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
 use SocialDept\AtpAppview\Ingest\Labels\LabelVerifier;
@@ -212,6 +213,9 @@ class LabelSourceTest extends TestCase
         $source->refresh();
 
         $this->assertSame([self::MOD], $source->following(), 'A labeler without an endpoint has no stream.');
+
+        $source->withHeartbeat(app(Heartbeats::class))->heartbeat();
+        $this->assertSame(['following' => 1], app(Heartbeats::class)->state(LabelSource::HEARTBEAT), 'The heartbeat says how many streams are open.');
         $this->assertSame(['wss://mod.example/xrpc/com.atproto.label.subscribeLabels?cursor=5'], $urls);
 
         DB::table('atp_labelers')->where('did', self::MOD)->update(['endpoint' => 'https://moved.example']);

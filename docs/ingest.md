@@ -71,8 +71,11 @@ Exiting is always lossless. The batch in progress finishes first, and anything n
 `php artisan appview:jetstream` follows [Jetstream v2](https://github.com/bluesky-social/jetstream) in place of Tap, with no separate service to run. It needs `socialdept/atp-signals` (which needs `ext-gmp`).
 
 ```dotenv
+ATP_APPVIEW_INGEST_SOURCE=jetstream
 ATP_APPVIEW_JETSTREAM_URL=wss://jetstream.us-east.bsky.network
 ```
+
+`ingest.source` tells the status page and the admin panel which source to report on.
 
 - **One stream** follows `ingest.collections` and `ingest.companions`, with identity and account events.
 - **Which repos count.** Jetstream cannot know which repos the app follows, so the app decides. A record in one of the app's own collections counts from any repo, and adds that repo, whose handle and PDS are then looked up in the queue (`ResolveIdentity`). A companion record, an identity change or an account change counts only for a repo the index already knows. The set of known repos is held in memory and reread every `ingest.jetstream.known_refresh` seconds (60).
@@ -83,6 +86,8 @@ ATP_APPVIEW_JETSTREAM_URL=wss://jetstream.us-east.bsky.network
 - **Live only.** Records written before the cursor started are not fetched. Backfill the collections another way, such as Tap or a discovery and reconcile, then follow Jetstream from then on. A cursor older than the instance keeps (36 hours on Bluesky's) stops the command with a message saying so.
 
 It takes the same `--max-time`, `--max-batches` and `--memory` limits as `appview:consume`, stops on `appview:restart` and when its config changes, and is lossless on exit. Measured following a few collections, it uses about 2% of one core.
+
+While it runs it writes a heartbeat every 10 seconds, which `AppviewStatus::streams()` reads to say whether it is up. `appview:labels:stream` does the same.
 
 ## Handlers
 

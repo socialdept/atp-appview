@@ -10,7 +10,10 @@ use SocialDept\AtpAppview\Index\IndexStats;
 use SocialDept\AtpAppview\Index\ReconcileErrors;
 use SocialDept\AtpAppview\Index\RecordValidation;
 use SocialDept\AtpAppview\Ingest\Collections;
+use SocialDept\AtpAppview\Ingest\Heartbeats;
 use SocialDept\AtpAppview\Ingest\IngestStats;
+use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
+use SocialDept\AtpAppview\Ingest\Labels\LabelSource;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
 use SocialDept\AtpAppview\Models\Block;
@@ -36,6 +39,7 @@ class AppviewStatus
         protected Cache $cache,
         protected IndexStats $stats,
         protected IngestStats $ingest,
+        protected Heartbeats $heartbeats,
     ) {
     }
 
@@ -65,6 +69,59 @@ class AppviewStatus
                 return ['healthy' => false, 'error' => $e->getMessage()];
             }
         });
+    }
+
+    /**
+     * Where records come from, tap or jetstream, and where labels come from,
+     * tack or streams.
+     *
+     * @return array{records: string, labels: string}
+     */
+    public function sources(): array
+    {
+        return [
+            'records' => (string) config('atp-appview.ingest.source', 'tap'),
+            'labels' => (string) config('atp-appview.labels.source', 'tack'),
+        ];
+    }
+
+    /**
+     * The websocket sources: whether each process is running, as its
+     * heartbeat says, and where its cursors stand. A cursor is saved with
+     * the batch it ends, so savedAt is when the source last wrote. Jetstream
+     * carries account and identity events from the whole network, so its
+     * cursor moves every few seconds. A labeler can go quiet for hours.
+     *
+     * @return array{jetstream: array{running: bool, seenAt: string|null, cursor: int|null, savedAt: string|null}, labels: array{running: bool, seenAt: string|null, following: int|null, labelers: list<array{did: string, cursor: int, savedAt: string}>}}
+     */
+    public function streams(): array
+    {
+        $cursors = $this->cache->remember(self::CACHE.'cursors', 5, fn () => $this->connection()->table('atp_ingest_cursors')
+            ->get(['source', 'cursor', 'updated_at'])
+            ->map(fn ($row) => ['source' => $row->source, 'cursor' => (int) $row->cursor, 'savedAt' => Carbon::parse($row->updated_at, 'UTC')->toIso8601ZuluString()])
+            ->all());
+
+        $jetstream = collect($cursors)->firstWhere('source', JetstreamSource::CURSOR);
+
+        return [
+            'jetstream' => [
+                'running' => $this->heartbeats->running(JetstreamSource::HEARTBEAT),
+                'seenAt' => $this->heartbeats->seenAt(JetstreamSource::HEARTBEAT)?->toIso8601ZuluString(),
+                'cursor' => $jetstream['cursor'] ?? null,
+                'savedAt' => $jetstream['savedAt'] ?? null,
+            ],
+            'labels' => [
+                'running' => $this->heartbeats->running(LabelSource::HEARTBEAT),
+                'seenAt' => $this->heartbeats->seenAt(LabelSource::HEARTBEAT)?->toIso8601ZuluString(),
+                'following' => $this->heartbeats->state(LabelSource::HEARTBEAT)['following'] ?? null,
+                'labelers' => collect($cursors)
+                    ->filter(fn (array $row) => str_starts_with($row['source'], LabelSource::CURSOR_PREFIX))
+                    ->map(fn (array $row) => ['did' => substr($row['source'], strlen(LabelSource::CURSOR_PREFIX)), 'cursor' => $row['cursor'], 'savedAt' => $row['savedAt']])
+                    ->sortByDesc('savedAt')
+                    ->values()
+                    ->all(),
+            ],
+        ];
     }
 
     /**
@@ -272,7 +329,7 @@ class AppviewStatus
 
     public function forget(): void
     {
-        foreach (['tap', 'writes', 'storage', 'accounts', 'reconciliation', 'recent:24'] as $key) {
+        foreach (['tap', 'cursors', 'writes', 'storage', 'accounts', 'reconciliation', 'recent:24'] as $key) {
             $this->cache->forget(self::CACHE.$key);
         }
     }

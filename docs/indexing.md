@@ -197,7 +197,9 @@ use SocialDept\AtpAppview\Status\AppviewStatus;
 
 $status = app(AppviewStatus::class);
 
+$status->sources();         // where records and labels come from: tap or jetstream, tack or streams
 $status->tap();             // Tap's health, repos followed, outbox, resync buffer, firehose cursor
+$status->streams();         // Jetstream and label streams: running, last seen, cursors and when each was saved
 $status->ingest();          // events a minute, live and backfill, and whether a backfill is arriving
 $status->writes();          // rows written to the index lately, and the latest write
 $status->recentRecords();   // records the network made in the last 24 hours, by their own timestamps
@@ -211,6 +213,6 @@ $status->validation();      // the validation mode, and invalid records per coll
 $status->blocklist();       // rules, records dropped and the latest drop
 ```
 
-Each figure is cheap. Whole-index counts come from `IndexStats`, kept by `appview:stats`, and the rest is cached for a few seconds, so a page that polls costs little. Tap is asked with a short timeout, and a Tap that is down is reported rather than thrown.
+Each figure is cheap. Whole-index counts come from `IndexStats`, kept by `appview:stats`, and the rest is cached for a few seconds, so a page that polls costs little. Tap is asked with a short timeout, and a Tap that is down is reported rather than thrown. A websocket source reads as running when its heartbeat is under 30 seconds old. Jetstream's cursor moves every few seconds, since it carries account and identity events from the whole network, so a stale `savedAt` there means trouble. A labeler can go quiet for hours, so an old cursor there means nothing on its own.
 
 To reconcile one repo from a button and keep the outcome on its identity, the way the scheduled run does, call `Reconciler::reconcileAndRecord($did)`. `ReconcileResult::summary()` says what it found in one line, and `ReconcileErrors::kind()` groups errors such as "Host not found" or "Timed out". `FollowedLexicon` is the model for `atp_lexicons`.
