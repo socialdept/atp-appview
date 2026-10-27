@@ -94,6 +94,30 @@ class LabelsTest extends TestCase
         $this->assertSame(0, Label::query()->count());
     }
 
+    public function test_a_label_stored_by_another_writer_meanwhile_does_not_fail_the_batch(): void
+    {
+        // The stream and a label backfill store the same label at once: the
+        // other writer's row lands between this one's read and its insert.
+        $race = function (string $cts) {
+            $raced = false;
+            DB::connection()->beforeExecuting(function (string $sql) use (&$raced, $cts) {
+                if (! $raced && str_starts_with($sql, 'insert') && str_contains($sql, 'atp_labels')) {
+                    $raced = true;
+                    DB::table('atp_labels')->insert(['src' => self::MOD, 'uri' => self::ALICE, 'val' => 'spam', 'subject' => self::ALICE, 'cts' => $cts, 'verified' => true, 'self' => false]);
+                }
+            });
+        };
+
+        $race('2026-01-01T00:00:00.000Z');
+        $this->label(self::ALICE, 'spam', '2026-02-01T00:00:00.000Z');
+        $this->assertSame('2026-02-01T00:00:00.000Z', Label::query()->sole()->cts, 'The newer label replaces the one stored meanwhile.');
+
+        DB::table('atp_labels')->delete();
+        $race('2026-03-01T00:00:00.000Z');
+        $this->label(self::ALICE, 'spam', '2026-02-01T00:00:00.000Z');
+        $this->assertSame('2026-03-01T00:00:00.000Z', Label::query()->sole()->cts, 'An older one leaves it.');
+    }
+
     public function test_a_labelers_declaration_is_kept_and_removing_it_takes_its_labels(): void
     {
         (new LabelIndexer())->handle(new Batch([new LabelerEvent(1, self::MOD, 'https://mod.example', ['policies' => ['labelValues' => ['spam']]], false)]));
