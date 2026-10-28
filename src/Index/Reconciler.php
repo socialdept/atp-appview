@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Index;
 
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -12,6 +13,7 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpClient\Exceptions\AtpResponseException;
 use SocialDept\AtpClient\Facades\Atp;
@@ -45,7 +47,7 @@ class Reconciler
 {
     public function __construct(
         protected ConnectionResolverInterface $db,
-        protected RecordIndexer $indexer,
+        protected Container $container,
         protected Blocklist $blocklist,
         protected PdsLookup $pdsLookup,
     ) {
@@ -164,8 +166,10 @@ class Reconciler
             }
         }
 
+        // Through the ingest pipes and every handler, as a backfill from Tap
+        // would be: repairs and hooks apply, and features see the changes.
         if (! $dryRun && $events !== []) {
-            $this->indexer->handle(new Batch($events));
+            Pipeline::fromConfig($this->container)->run(new Batch($events));
         }
 
         return new ReconcileResult(
