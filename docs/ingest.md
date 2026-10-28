@@ -75,7 +75,7 @@ ATP_APPVIEW_INGEST_SOURCE=jetstream
 ATP_APPVIEW_JETSTREAM_URL=wss://jetstream.us-east.bsky.network
 ```
 
-`ingest.source` tells the status page and the admin panel which source to report on.
+`ingest.source` tells the status page and the admin panel which source to report on, and has backfills read repos from their PDSes rather than through Tap.
 
 - **One stream** follows `ingest.collections` and `ingest.companions`, with identity and account events.
 - **Which repos count.** Jetstream cannot know which repos the app follows, so the app decides. A record in one of the app's own collections counts from any repo, and adds that repo, whose handle and PDS are then looked up in the queue (`ResolveIdentity`). A companion record, an identity change or an account change counts only for a repo the index already knows. The set of known repos is held in memory and reread every `ingest.jetstream.known_refresh` seconds (60).
@@ -83,7 +83,7 @@ ATP_APPVIEW_JETSTREAM_URL=wss://jetstream.us-east.bsky.network
 - **Batches and failures** go through the same buffer as Tap's: retries, then failing records parked as [failed deliveries](#failed-deliveries) while the rest go through.
 - **The cursor** is kept in `atp_ingest_cursors`, saved in the same transaction as the batch it ends. A batch that fails in every attempt is not saved, so it comes again. `--from-live` forgets the cursor and starts at the live tip.
 - **Trust.** Jetstream checks commit signatures upstream, so records are as trusted as the Jetstream instance. Run your own instance to verify them yourself.
-- **Live only.** Records written before the cursor started are not fetched. Backfill the collections another way, such as Tap or a discovery and reconcile, then follow Jetstream from then on. A cursor older than the instance keeps (36 hours on Bluesky's) stops the command with a message saying so.
+- **Live only.** Records written before the cursor started are not fetched. `appview:backfill` reads them from each repo's PDS instead, with no Tap: see [Backfilling without Tap](#backfilling-without-tap). A cursor older than the instance keeps (36 hours on Bluesky's) stops the command with a message saying so.
 
 It takes the same `--max-time`, `--max-batches` and `--memory` limits as `appview:consume`, stops on `appview:restart` and when its config changes, and is lossless on exit. Measured following a few collections, it uses about 2% of one core.
 
@@ -264,6 +264,31 @@ A companion collection is indexed only for repos already followed. `appview:disc
 On a Tap with resync routes, such as [Tab](https://tangled.org/pds.dad/tab), `resyncRepo($did)` backfills a tracked repo again while keeping what Tap already sent, so only records it never delivered go out. That is how a collection added to Tap's filters reaches repos it already follows, since `addRepos()` ignores them. `resyncAll()` does the same for every repo, and `supportsResync()` says whether the Tap has the routes. On a Tap without them, both resync methods throw `TapFeatureUnavailableException`.
 
 [Tab](https://tangled.org/pds.dad/tab) also adds multiple signal collections, and speaks the same protocol as Tap otherwise.
+
+## Backfilling without Tap
+
+With `ingest.source` set to `jetstream`, backfills read records from each repo's own PDS rather than through Tap, in queued jobs, so run a queue worker beside `appview:jetstream`. The same commands, progress and events apply as with Tap below.
+
+```bash
+php artisan appview:backfill app.example.post    # each collection, once, on a fresh install
+```
+
+It finds every repo holding the collection through `listReposByCollection`, as `appview:discover` does, and queues `ReconcileRepos` jobs of `backfill.reconcile_chunk` (25) repos each. Each repo is reconciled for that collection alone: its latest revision, its collections, then a listing of this one a hundred records at a time. The records go through the ingest pipes and handlers, so hooks and repairs apply, and `BackfillTracker` counts them. A repo new to the index gets its identity, handle and PDS first.
+
+A repo counts as delivered once read, even with nothing in the collection. One its PDS answers with an account status, such as taken down, or that cannot be read, keeps the reason in `atp_backfill_repos.error` and counts as unreachable. A job only reads repos that are neither, so a retry carries on where a worker stopped, and the last job to finish ends the backfill. It fails only if no repo could be read. A companion collection reads the repos the index already knows.
+
+Listing beats downloading whole repos for an AppView's collections, which are a small part of most repos. Backfilling `xyz.statusphere.status` from 1,449 repos, with 16 requests at a time and no database:
+
+| | Listing (this) | Whole repo CARs (`getRepo`) | Tap | Jetstream snapshot |
+| --- | --- | --- | --- | --- |
+| Time | 33 s | 231 s | 13 to 15 min | 4.6 min |
+| CPU | 5.4 CPU-seconds | 197 CPU-seconds | about 2,200 CPU-seconds | 52 CPU-seconds |
+| Peak memory | 16 MB | 430 MB | 1.57 GB | 224 MB |
+| Downloaded | 3.8 MB | 4.2 GB | every repo's CAR | 552 MB |
+
+Through the package, with the index and its handlers, a queue worker reads about 45 repos a minute at about 0.06 CPU-seconds a repo, nearly all of it waiting on PDSes. More workers read more repos at once.
+
+The trade is trust. Listed records are the PDS's word, as Jetstream's are Bluesky's, where a CAR carries the signed commit Tap checks. `atp-cbor`'s `RecordProof` checks a single record's proof from `com.atproto.sync.getRecord` when one needs checking.
 
 ## Backfilling a new collection
 
