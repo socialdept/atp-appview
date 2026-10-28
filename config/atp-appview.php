@@ -131,7 +131,8 @@ return [
 
     'ingest' => [
         // Where records come from: tap, or jetstream for appview:jetstream
-        // below. It decides what the status page and admin panel report.
+        // below. It decides what the status page and admin panel report, and
+        // with jetstream, backfills read repos from their PDSes, not Tap.
         'source' => env('ATP_APPVIEW_INGEST_SOURCE', 'tap'),
 
         // Tap's websocket channel, for appview:consume.

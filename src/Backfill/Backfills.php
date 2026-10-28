@@ -25,8 +25,13 @@ use Throwable;
 
 /**
  * Backfilling a collection the index starts ingesting, tracked so an app can
- * show progress. Tap does the backfilling. This finds the repos, hands them
- * to Tap, and watches their records arrive.
+ * show progress. This finds the repos, then has them backfilled one of two
+ * ways, and watches their records arrive:
+ *
+ * - With Jetstream as the source (atp-appview.ingest.source), by reading
+ *   each repo's records in the collection from its PDS, in queued
+ *   ReconcileRepos jobs. No Tap is needed.
+ * - Otherwise by handing them to Tap.
  *
  * Tap ignores repos it already follows when they are added, and its
  * collection filters only filter what it sends, so a new collection never
@@ -96,6 +101,10 @@ class Backfills
         $dids = $this->blocklist->withoutBlockedRepos(array_keys($dids));
         $backfill = Backfill::query()->create(['collection' => $collection, 'source' => $source, 'started_at' => Carbon::now('UTC')]);
 
+        if (self::reconciles()) {
+            return $this->reconcile($backfill, $dids);
+        }
+
         try {
             $resync = $this->tap->supportsResync();
             // Repos an attempt that failed in the last hour already handed to
@@ -139,6 +148,48 @@ class Backfills
 
         $this->forget();
         event(new BackfillStarted($backfill));
+
+        return $backfill;
+    }
+
+    /**
+     * Whether backfills read repos from their PDSes rather than through Tap:
+     * when records come from Jetstream.
+     */
+    public static function reconciles(): bool
+    {
+        return config('atp-appview.ingest.source') === 'jetstream';
+    }
+
+    /**
+     * Queue the repos to be read from their PDSes, a few to a job, so queue
+     * workers read them in parallel.
+     *
+     * @param  array<int, string>  $dids
+     */
+    protected function reconcile(Backfill $backfill, array $dids): Backfill
+    {
+        try {
+            foreach (array_chunk($dids, $this->chunk()) as $chunk) {
+                BackfillRepo::query()->insert(array_map(fn (string $did) => ['backfill_id' => $backfill->id, 'did' => $did, 'method' => BackfillRepo::PDS], $chunk));
+            }
+        } catch (Throwable $e) {
+            $backfill->update(['status' => Backfill::FAILED, 'error' => Str::limit("Recording its repos failed: {$e->getMessage()}", 1000), 'finished_at' => Carbon::now('UTC')]);
+            $this->forget();
+
+            throw $e;
+        }
+
+        $this->forget();
+        event(new BackfillStarted($backfill));
+
+        foreach (array_chunk($dids, max(1, (int) config('atp-appview.backfill.reconcile_chunk', 25))) as $chunk) {
+            ReconcileRepos::dispatch($backfill->id, $backfill->collection, $chunk);
+        }
+
+        if ($dids === []) {
+            $this->finishReconciled($backfill);
+        }
 
         return $backfill;
     }
@@ -525,10 +576,19 @@ class Backfills
      * nothing at all arrived by then, Tap most likely backfilled the repos
      * without the collection in its filters, so it fails instead of
      * finishing.
+     *
+     * A backfill read from PDSes is done once every repo was read or failed.
      */
-    protected function finishIfDone(Backfill $backfill): void
+    public function finishIfDone(Backfill $backfill): void
     {
         $repos = BackfillRepo::query()->where('backfill_id', $backfill->id);
+
+        if ((clone $repos)->where('method', BackfillRepo::PDS)->exists()) {
+            $this->finishReconciled($backfill);
+
+            return;
+        }
+
         $total = (clone $repos)->count();
         $delivered = (clone $repos)->whereNotNull('delivered_at')->count();
         $last = Carbon::parse($backfill->last_delivery_at ?? $backfill->started_at, 'UTC');
@@ -554,6 +614,30 @@ class Backfills
         ]);
 
         event(new BackfillFinished($backfill));
+    }
+
+    protected function finishReconciled(Backfill $backfill): void
+    {
+        $repos = BackfillRepo::query()->where('backfill_id', $backfill->id);
+
+        if ((clone $repos)->whereNull('delivered_at')->whereNull('error')->exists()) {
+            return;
+        }
+
+        $total = (clone $repos)->count();
+        $failed = $total > 0 && ! (clone $repos)->whereNotNull('delivered_at')->exists();
+
+        // The last two jobs can finish together, so only one ends it.
+        $ended = Backfill::query()->whereKey($backfill->id)->where('status', Backfill::RUNNING)->update([
+            'status' => $failed ? Backfill::FAILED : Backfill::FINISHED,
+            'error' => $failed ? "No repo could be read for {$backfill->collection}. Each repo keeps its error." : null,
+            'finished_at' => Carbon::now('UTC'),
+        ]);
+
+        if ($ended === 1) {
+            $this->forget();
+            event(new BackfillFinished($backfill->refresh()));
+        }
     }
 
     /**
@@ -582,6 +666,10 @@ class Backfills
      */
     protected function stillBackfilling(): bool
     {
+        if (self::reconciles()) {
+            return $this->stillBackfilling = false;
+        }
+
         try {
             return $this->stillBackfilling ??= $this->ingest->backfilling() && $this->tap->supportsResync();
         } catch (Throwable) {

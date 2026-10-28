@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
+use SocialDept\AtpAppview\Backfill\Backfills;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
@@ -23,6 +24,12 @@ class DiscoverCommand extends Command
 
     public function handle(TapAdmin $tap, Blocklist $blocklist): int
     {
+        if (Backfills::reconciles()) {
+            $this->components->error('With Jetstream there is no Tap to hand repos to. Run appview:backfill with each collection instead, which discovers the repos and reads them from their PDSes.');
+
+            return self::FAILURE;
+        }
+
         $collections = $this->argument('collection') ?: Collections::followed();
 
         if ($collections === []) {
