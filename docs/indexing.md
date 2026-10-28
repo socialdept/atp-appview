@@ -159,6 +159,8 @@ When Tap resyncs a repo after losing track of it, it sends only the records whos
 
 Every write carries the revision read before listing, so nothing indexed at a newer revision, such as a record created or deleted while the listing ran, is touched. A listing that fails, or a collection past `index.reconcile.max_records`, writes nothing, since a partial listing would read as deletes. Blocked repos and collections are left alone.
 
+What it finds goes through the ingest pipes and every handler, as a backfill from Tap would: ingest hooks reject records, repairs rewrite them, and features such as the graph and notifications see the changes as backfill (`isBackfill()`).
+
 Schedule it and it works through the active repos, least recently checked first, `index.reconcile.batch` per run, checking each again after `index.reconcile.every_hours`:
 
 ```php

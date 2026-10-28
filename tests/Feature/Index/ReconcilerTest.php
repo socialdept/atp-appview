@@ -9,6 +9,8 @@ use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Index\Reconciler;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
+use SocialDept\AtpAppview\Ingest\Contracts\IngestRepair;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Identity;
@@ -102,6 +104,21 @@ class ReconcilerTest extends TestCase
     protected function record(string $collection, string $rkey): ?Record
     {
         return Record::withTrashed()->find('at://'.self::DID."/{$collection}/{$rkey}");
+    }
+
+    public function test_a_reconcile_goes_through_the_ingest_hooks_and_repairs(): void
+    {
+        config([
+            'atp-appview.ingest.hooks' => [RejectSpam::class],
+            'atp-appview.ingest.repairs' => [TrimText::class],
+        ]);
+        $this->onPds(self::POSTS, 'spam', 'cid-spam', ['text' => 'buy now']);
+        $this->onPds(self::POSTS, 'fine', 'cid-fine', ['text' => '  hello  ']);
+
+        app(Reconciler::class)->reconcile(self::DID);
+
+        $this->assertNull($this->record(self::POSTS, 'spam'), 'A record a hook rejects is not indexed by a reconcile either.');
+        $this->assertSame('hello', $this->record(self::POSTS, 'fine')->record['text'], 'A repair rewrites a reconciled record, as it would one from Tap.');
     }
 
     public function test_a_record_the_pds_no_longer_has_is_tombstoned(): void
@@ -313,5 +330,31 @@ class ReconcilerTest extends TestCase
 
         $this->assertNull(Identity::find(self::DID)->reconciled_at);
         $this->assertNull($this->record(self::POSTS, 'gone')->deleted_at);
+    }
+}
+
+class RejectSpam implements IngestHook
+{
+    public function reject(array $records): array
+    {
+        $rejected = [];
+
+        foreach ($records as $record) {
+            if (str_contains($record->record['text'] ?? '', 'buy now')) {
+                $rejected[$record->uri()] = 'spam';
+            }
+        }
+
+        return $rejected;
+    }
+}
+
+class TrimText implements IngestRepair
+{
+    public function repair(RecordEvent $record): ?array
+    {
+        $text = $record->record['text'] ?? null;
+
+        return is_string($text) && $text !== trim($text) ? ['text' => trim($text)] + $record->record : null;
     }
 }
