@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 use SocialDept\AtpAppview\Auth\AccountResolver;
+use SocialDept\AtpAppview\Auth\SignOut;
 use SocialDept\AtpClient\Auth\ClientAssertionManager;
 use SocialDept\AtpClient\Auth\OAuthEngine;
 use Throwable;
@@ -113,6 +114,8 @@ class OAuthController extends Controller
             $request->session()->get(self::FLOW_KEY.'.issuer'),
             $request->session()->get(self::EXCHANGE_KEY),
             ($did = $this->signedInDid()) !== null ? $accounts->issuer($did) : null,
+            // A server sign-out, whose browser revokes its tokens next.
+            ($revoking = SignOut::pullRevoking($request)) !== null ? $accounts->issuer($revoking) : null,
         ]));
 
         if (! in_array($issuer, $allowed, true)) {

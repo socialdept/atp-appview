@@ -76,10 +76,15 @@ class FrontendAuth
      * page, such as through Inertia's shared props. `proxy` says whether a PDS
      * can reach this AppView, so calls go through one, or stay same origin.
      *
-     * @return array{sessionMethod: string|null, audience: string|null, xrpcPrefix: string, syncRecord: string|null, proxy: bool}
+     * `signOut` is set on the page after a server sign-out ({@see SignOut}),
+     * so the browser signs out too instead of starting a new session.
+     *
+     * @return array{sessionMethod: string|null, audience: string|null, xrpcPrefix: string, syncRecord: string|null, proxy: bool, realtime: array{authorize: string}|null, signOut: string|null}
      */
     public static function browserConfig(): array
     {
+        $request = request();
+
         return [
             'sessionMethod' => config('atp-appview.auth.frontend.session_method'),
             'audience' => config('atp-client.service_auth.audience'),
@@ -90,6 +95,7 @@ class FrontendAuth
             'realtime' => RealtimeFeature::on() && filled(config('atp-appview.realtime.xrpc.authorize'))
                 ? ['authorize' => config('atp-appview.realtime.xrpc.authorize')]
                 : null,
+            'signOut' => $request->hasSession() ? $request->session()->get(SignOut::FLASH_KEY) : null,
         ];
     }
 

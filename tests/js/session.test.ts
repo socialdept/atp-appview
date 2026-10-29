@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const keys = new Map<string, object>();
 const refreshResponses: Array<() => Response | Promise<Response>> = [];
@@ -38,6 +38,7 @@ vi.mock('../../resources/js/server-session', () => ({
 const { configureAtproto } = await import('../../resources/js/config');
 const session = await import('../../resources/js/session');
 const http = await import('../../resources/js/http');
+const dpop = await import('../../resources/js/dpop');
 const {
     withSession,
     reconnectState,
@@ -48,18 +49,23 @@ const {
 
 const route = (path: string) => ({ url: () => path });
 
-configureAtproto({
-    routes: {
-        prepare: route('/oauth/prepare'),
-        clientAssertion: route('/oauth/client-assertion'),
-        flow: route('/oauth/flow'),
-        account: route('/oauth/account'),
-        startSession: route('/session'),
-        endSession: route('/session'),
-    },
-    sessionMethod: 'com.example.createSession',
-    audience: 'did:web:app.example',
-});
+// As each page configures it, with what FrontendAuth::browserConfig() sends.
+const configure = (signOut: string | null = null) =>
+    configureAtproto({
+        routes: {
+            prepare: route('/oauth/prepare'),
+            clientAssertion: route('/oauth/client-assertion'),
+            flow: route('/oauth/flow'),
+            account: route('/oauth/account'),
+            startSession: route('/session'),
+            endSession: route('/session'),
+        },
+        sessionMethod: 'com.example.createSession',
+        audience: 'did:web:app.example',
+        signOut,
+    });
+
+configure();
 
 const DID = 'did:plc:alice';
 
@@ -68,6 +74,7 @@ function store(
         accessToken: string;
         refreshToken: string;
         expiresIn: number;
+        revocationEndpoint: string | null;
     }> = {},
 ) {
     keys.set(DID, { privateKey: 'k', publicJwk: {} });
@@ -77,7 +84,7 @@ function store(
         pds: 'https://pds.example',
         issuer: 'https://auth.example',
         tokenEndpoint: 'https://auth.example/oauth/token',
-        revocationEndpoint: null,
+        revocationEndpoint: overrides.revocationEndpoint ?? null,
         tokens: {
             accessToken: overrides.accessToken ?? 'access-1',
             refreshToken: overrides.refreshToken ?? 'refresh-1',
@@ -347,5 +354,53 @@ describe('reconcile', () => {
         expect(await reconcile({ did: DID, handle: 'alice.test' })).toBeNull();
         expect(reconnectState().needed).toBeNull();
         expect(vouch).not.toHaveBeenCalled();
+    });
+    describe('after a server sign-out', () => {
+        afterEach(() => configure());
+
+        it('signs the browser out instead of rebuilding the server session', async () => {
+            store({ revocationEndpoint: 'https://auth.example/oauth/revoke' });
+            refreshResponses.push(() => new Response('', { status: 200 }));
+            configure('sign-out-1');
+
+            expect(await reconcile(null)).toBeNull();
+            expect(vouch).not.toHaveBeenCalled();
+            expect(vi.mocked(dpop.dpopFormPost)).toHaveBeenLastCalledWith(
+                'https://auth.example/oauth/revoke',
+                expect.objectContaining({
+                    token: 'refresh-1',
+                    token_type_hint: 'refresh_token',
+                }),
+                expect.anything(),
+            );
+            expect(session.account(DID)).toBeNull();
+            expect(keys.has(DID)).toBe(false);
+            expect(reconnectState().needed).toBeNull();
+            expect(http.appFetch).not.toHaveBeenCalledWith('/session', {
+                method: 'DELETE',
+            });
+        });
+
+        it('follows each sign-out once', async () => {
+            configure('sign-out-2');
+            await reconcile(null);
+
+            // Signed back in on the same page, whose config still says so.
+            store();
+            reconnected();
+
+            expect(await reconcile(null)).toBe('reload');
+            expect(vouch).toHaveBeenCalledOnce();
+        });
+
+        it('leaves a session the server already has alone', async () => {
+            store();
+            configure('sign-out-3');
+
+            expect(
+                await reconcile({ did: DID, handle: 'alice.test' }),
+            ).toBeNull();
+            expect(session.account(DID)?.tokens?.refreshToken).toBe('refresh-1');
+        });
     });
 });
