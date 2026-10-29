@@ -9,6 +9,8 @@ use SocialDept\AtpAppview\Console\SpacesSyncCommand;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Spaces\Listeners\DropDeletedSpace;
 use SocialDept\AtpAppview\Spaces\Listeners\SyncNotifiedWrite;
+use SocialDept\AtpAppview\Xrpc\Auth;
+use SocialDept\AtpAppview\Xrpc\Handlers\EnterSpaceHandler;
 use SocialDept\AtpSpaces\Enums\SpaceNsid;
 use SocialDept\AtpSpaces\Events\SpaceDeletedNotified;
 use SocialDept\AtpSpaces\Events\SpaceWriteNotified;
@@ -17,12 +19,14 @@ use SocialDept\AtpSpaces\Http\Controllers\SyncerController;
 /**
  * A copy of the spaces the app follows: permissioned records synced from
  * each member's own PDS with atp-spaces, kept in atp_space_records apart
- * from the public index. Adds atp_spaces, atp_space_repos and
- * atp_space_records, appview:spaces:sync, and listeners for the
- * notifications a space's authority sends, whose routes atp-spaces serves.
+ * from the public index and read only by viewers SpaceAccess allows.
+ * Adds atp_spaces, atp_space_repos, atp_space_records and atp_space_grants,
+ * appview:spaces:sync, listeners for the notifications a space's authority
+ * sends, whose routes atp-spaces serves, and the procedure a browser enters
+ * a space through, when one is named.
  *
- * Off, nothing is synced, no notification routes are served for it, and
- * the public index is unchanged.
+ * Off, nothing is synced, no notification routes or procedure are served
+ * for it, and the public index is unchanged.
  */
 class Spaces implements Feature
 {
@@ -46,6 +50,10 @@ class Spaces implements Feature
         // be before or after this, so they are added here when missing.
         config()->set('atp-spaces.syncer.enabled', true);
         $appview->routes(fn (Router $router) => self::syncerRoutes($router));
+
+        if (is_string($nsid = config('atp-appview.spaces.xrpc.enter')) && $nsid !== '') {
+            $appview->xrpc($nsid, EnterSpaceHandler::class, 'procedure', Auth::Required);
+        }
     }
 
     /**
