@@ -15,6 +15,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
+use SocialDept\AtpAppview\Labels\LabelPreferences;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Moderation\AccountActions;
@@ -25,8 +26,9 @@ use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 /**
- * With moderation left out: no label or account action tables, no Tack
- * webhook or commands, nobody banned, neutral view parts, and writes refuse.
+ * With moderation left out: no label, label preference or account action
+ * tables, no Tack webhook or commands, nobody banned, neutral view parts,
+ * and writes refuse.
  */
 class ModerationFeatureOffTest extends TestCase
 {
@@ -77,5 +79,23 @@ class ModerationFeatureOffTest extends TestCase
 
         $this->expectException(LogicException::class);
         app(AccountActions::class)->ban('did:plc:bob');
+    }
+
+    public function test_label_preferences_left_out_keep_nothing_filter_nothing_and_refuse_writes(): void
+    {
+        $this->assertFalse(Schema::hasTable('atp_label_preferences'));
+        $this->assertFalse(Schema::hasTable('atp_label_settings'));
+
+        Pipeline::fromConfig(app())->run(new Batch([
+            new RecordEvent(1, 'did:plc:bob', 'com.example.thing', 't1', RecordAction::Create, 'bafy-t1', '3l2aaaaaaaaaa', ['text' => 'hi'], true),
+        ]));
+
+        $preferences = app(LabelPreferences::class);
+        $preferences->clear('did:plc:alice', 'rude');
+        $this->assertSame(['adultContent' => true, 'labels' => []], $preferences->for('did:plc:alice'));
+        $this->assertSame(1, Record::query()->visibleTo('did:plc:alice')->count());
+
+        $this->expectException(LogicException::class);
+        $preferences->set('did:plc:alice', 'rude', 'hide');
     }
 }

@@ -37,11 +37,12 @@ final class Decision
     }
 
     /**
-     * Decide from labels, all about one target: a record, or an account.
+     * Decide from labels, all about one target: a record, or an account,
+     * as a viewer with these preferences sees it when given.
      *
      * @param  iterable<Label>  $labels
      */
-    public static function from(iterable $labels, string $target, Policies $policies, ?Decision $author = null): self
+    public static function from(iterable $labels, string $target, Policies $policies, ?Decision $author = null, ?ViewerPreferences $preferences = null): self
     {
         $hide = $review = $ban = $noUnauthenticated = false;
         $warnings = $badges = $kept = [];
@@ -58,6 +59,10 @@ final class Decision
             }
 
             $effect = $policies->effect($label->src, $label->val, $target);
+
+            if ($preferences !== null) {
+                $effect = $preferences->effect($effect, $label->src, $label->val);
+            }
             $named = ['src' => $label->src, 'val' => $label->val];
 
             match ($effect) {

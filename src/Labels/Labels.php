@@ -64,18 +64,19 @@ class Labels
 
     /**
      * What to do with an account, from the labels on it and its profile, and
-     * the actions in force on it.
+     * the actions in force on it. For a viewer when given, with their label
+     * preferences.
      */
-    public function account(string $did): Decision
+    public function account(string $did, ?string $viewer = null): Decision
     {
-        return $this->accounts([$did])[$did];
+        return $this->accounts([$did], $viewer)[$did];
     }
 
     /**
      * @param  array<int, string>  $dids
      * @return array<string, Decision> By DID
      */
-    public function accounts(array $dids): array
+    public function accounts(array $dids, ?string $viewer = null): array
     {
         if (! ModerationFeature::on()) {
             return array_fill_keys(array_values(array_unique($dids)), new Decision());
@@ -88,9 +89,11 @@ class Labels
 
         $actions = AccountAction::query()->active()->whereIn('did', $dids)->get(['did', 'action'])->groupBy('did');
 
+        $preferences = $this->preferences($viewer);
+
         $decisions = [];
         foreach ($dids as $did) {
-            $decisions[$did] = Decision::from($labels[$did] ?? [], Target::ACCOUNT, $this->policies)
+            $decisions[$did] = Decision::from($labels[$did] ?? [], Target::ACCOUNT, $this->policies, preferences: $did === $viewer ? null : $preferences)
                 ->withActions(($actions[$did] ?? collect())->pluck('action')->all());
         }
 
@@ -98,8 +101,9 @@ class Labels
     }
 
     /**
-     * What to do with one record, for a viewer when given: a signed-out
-     * viewer is not shown authors who asked not to be.
+     * What to do with one record, for a viewer when given: with their label
+     * preferences, and a signed-out viewer is not shown authors who asked
+     * not to be.
      */
     public function decide(Record $record, ?string $viewer = null): Decision
     {
@@ -123,12 +127,29 @@ class Labels
             return [];
         }
 
-        $authors = $this->accounts($records->pluck('did')->all());
+        $authors = $this->accounts($records->pluck('did')->all(), $viewer);
         $labels = Label::query()->live()->whereIn('uri', $records->pluck('uri')->all())->get()->groupBy('uri');
+        $preferences = $this->preferences($viewer);
 
+        // A viewer's preferences cover what others wrote, not their own.
         return $records->mapWithKeys(fn (Record $record) => [
-            $record->uri => Decision::from($labels[$record->uri] ?? [], Target::CONTENT, $this->policies, $authors[$record->did])->forViewer($viewer),
+            $record->uri => Decision::from($labels[$record->uri] ?? [], Target::CONTENT, $this->policies, $authors[$record->did], $record->did === $viewer ? null : $preferences)->forViewer($viewer),
         ])->all();
+    }
+
+    /**
+     * A signed-in viewer's label preferences, or null when they change
+     * nothing.
+     */
+    protected function preferences(?string $viewer): ?ViewerPreferences
+    {
+        if ($viewer === null) {
+            return null;
+        }
+
+        $preferences = app(LabelPreferences::class)->viewer($viewer);
+
+        return $preferences->neutral() ? null : $preferences;
     }
 
     /**
