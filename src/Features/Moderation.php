@@ -10,6 +10,7 @@ use SocialDept\AtpAppview\Console\LabelsSyncCommand;
 use SocialDept\AtpAppview\Console\ModerationPruneCommand;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Http\Controllers\TackWebhookController;
+use SocialDept\AtpAppview\Index\RecordTables;
 use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Labels\LabelPreferences;
 use SocialDept\AtpAppview\Labels\SelfLabels;
@@ -47,7 +48,7 @@ class Moderation implements Feature
                 // New records of accounts whose labels hide them, hidden too.
                 app(Visibility::class)->arrivals(array_column($rows, 'did'), $selfLabeled);
             })
-            ->recordFilter(fn ($query, string $viewer, string $idColumn) => app(LabelPreferences::class)->apply($query, $viewer, $idColumn))
+            ->recordFilter(fn ($query, string $viewer, string $idColumn, RecordTables $tables) => app(LabelPreferences::class)->apply($query, $viewer, $idColumn, $tables), spaces: true)
             ->commands([LabelsConsumeCommand::class, LabelsSelfCommand::class, LabelsSyncCommand::class, ModerationPruneCommand::class])
             ->routes(function (Router $router) {
                 if (config('atp-appview.labels.webhook.enabled')) {

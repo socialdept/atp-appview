@@ -135,6 +135,7 @@ class SpaceSync
         }
 
         $this->connection()->transaction(function (Connection $connection) use ($space) {
+            $this->container->make(SpaceRecordValues::class)->forget($connection, (string) $space);
             $connection->table(SpaceRecordIndexer::TABLE)->where('space', (string) $space)->delete();
             $connection->table(self::REPOS)->where('space', (string) $space)->delete();
             $connection->table(SpaceGrants::TABLE)->where('space', (string) $space)->delete();
@@ -280,6 +281,7 @@ class SpaceSync
         $now = $this->now();
 
         $this->connection()->transaction(function (Connection $connection) use ($space, $now) {
+            $this->container->make(SpaceRecordValues::class)->forget($connection, (string) $space);
             $connection->table(SpaceRecordIndexer::TABLE)
                 ->where('space', (string) $space)
                 ->whereNull('deleted_at')

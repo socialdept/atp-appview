@@ -18,7 +18,8 @@ use SocialDept\AtpAppview\Spaces\Events\SpaceRecordRemoved;
 /**
  * Writes the records of a space sync to atp_space_records, the way
  * RecordIndexer writes public records to atp_records: through the same
- * revision guard, with deletes as tombstones and repairs kept.
+ * revision guard, with deletes as tombstones and repairs kept, and their
+ * indexed field values to atp_space_record_values.
  *
  * It takes only events carrying a space, and RecordIndexer never runs on
  * a space sync, so a space record never reaches atp_records. Live changes
@@ -50,7 +51,8 @@ class SpaceRecordIndexer implements BatchHandler
             $events = $this->validation()->filter($events);
         }
 
-        $rows = $this->rows($events, $clock->format('Y-m-d H:i:s'), $clock);
+        $now = $clock->format('Y-m-d H:i:s');
+        $rows = $this->rows($events, $now, $clock);
 
         if ($rows === []) {
             return;
@@ -64,6 +66,7 @@ class SpaceRecordIndexer implements BatchHandler
         $previous = $deleted === [] ? [] : $connection->table(self::TABLE)->whereIn('uri', $deleted)->whereNotNull('record')->pluck('record', 'uri')->all();
 
         (new RecordWriter($connection, self::TABLE, self::COLUMNS))->upsert($rows);
+        app(SpaceRecordValues::class)->rewrite($connection, $rows, $now);
 
         if ($live !== []) {
             $connection->afterCommit(fn () => $this->announce($live, $previous));

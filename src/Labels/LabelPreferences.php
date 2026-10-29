@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
+use SocialDept\AtpAppview\Index\RecordTables;
 use SocialDept\AtpAppview\Models\LabelPolicy;
 
 /**
@@ -162,10 +163,12 @@ class LabelPreferences
     /**
      * Leave out of a query the records the viewer hides by their labels, or
      * by their author's account labels, by the column holding each record's
-     * id in atp_records. The viewer's own records stay.
+     * id in atp_records, or in the records table given. The viewer's own
+     * records stay.
      */
-    public function apply(Builder $query, string $viewer, string $idColumn): void
+    public function apply(Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null): void
     {
+        $records = ($tables ?? RecordTables::index())->records;
         $hidden = $this->viewer($viewer)->hidden();
 
         if ($hidden === []) {
@@ -185,7 +188,7 @@ class LabelPreferences
 
         // Labels on the record itself, by the labels' uri index.
         $query->whereNotExists(fn (Builder $exists) => $matches($exists->selectRaw('1')
-            ->from('atp_records as preferred')
+            ->from($records.' as preferred')
             ->join('atp_labels as preferred_label', 'preferred_label.uri', '=', 'preferred.uri')
             ->whereColumn('preferred.id', $idColumn)
             ->where('preferred.did', '!=', $viewer), 'preferred_label'));
@@ -193,7 +196,7 @@ class LabelPreferences
         // Labels on its author: on the DID or the profile record, by the
         // labels' subject index.
         $query->whereNotExists(fn (Builder $exists) => $matches($exists->selectRaw('1')
-            ->from('atp_records as preferred')
+            ->from($records.' as preferred')
             ->join('atp_labels as preferred_label', 'preferred_label.subject', '=', 'preferred.did')
             ->whereColumn('preferred.id', $idColumn)
             ->where('preferred.did', '!=', $viewer)

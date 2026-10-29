@@ -3,12 +3,17 @@
 namespace SocialDept\AtpAppview\Spaces;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use LogicException;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Features\Moderation as ModerationFeature;
 use SocialDept\AtpAppview\Features\Spaces as SpacesFeature;
+use SocialDept\AtpAppview\Index\Field;
+use SocialDept\AtpAppview\Index\RecordTables;
+use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Index\ValueHash;
 use SocialDept\AtpAppview\Labels\Effect;
 use SocialDept\AtpAppview\Labels\Policies;
 use SocialDept\AtpAppview\Labels\Target;
@@ -31,17 +36,27 @@ use SocialDept\AtpSpaces\SpaceRef;
  *
  * Without visibleTo(), or for a viewer SpaceAccess does not allow, it finds
  * nothing. Records come newest first by sort_at, in keyset pages that never
- * skip or repeat a record while new ones arrive.
+ * skip or repeat a record while new ones arrive. With a collection, where()
+ * and orderBy() filter and sort by its indexed fields, as RecordQuery does,
+ * from atp_space_record_values.
  *
  * Moderation applies as it does to public records: nothing by accounts the
  * viewer blocks, is blocked by or muted, or by inactive accounts, and with
  * the moderation feature nothing by banned accounts or that a label hides.
- * What needs review is left out unless the query is for one repo. Record filters, such as muted words, read the public value
- * index, which space records are never in, so they do not apply.
+ * What needs review is left out unless the query is for one repo. Record
+ * filters registered for spaces, such as muted words and the viewer's label
+ * preferences, apply too.
  */
 class SpaceRecordQuery
 {
     protected ?string $collection = null;
+
+    /** @var array<int, array{0: string, 1: mixed}> Field names and values, read once the collection is known */
+    protected array $wheres = [];
+
+    protected ?string $sort = null;
+
+    protected string $direction = 'desc';
 
     protected ?string $did = null;
 
@@ -101,6 +116,29 @@ class SpaceRecordQuery
         return $this;
     }
 
+    /**
+     * Only records whose field has this value. Several are all required.
+     * Needs collection(), since fields are declared per collection.
+     */
+    public function where(string $field, mixed $value): static
+    {
+        $this->wheres[] = [$field, $value];
+
+        return $this;
+    }
+
+    /**
+     * Order by a date or number field, or by sort_at when null. Sorting by a
+     * field leaves out records that have no value for it.
+     */
+    public function orderBy(?string $field = null, string $direction = 'desc'): static
+    {
+        $this->sort = $field;
+        $this->direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+        return $this;
+    }
+
     public function after(?string $cursor): static
     {
         $this->cursor = $cursor === '' ? null : $cursor;
@@ -124,42 +162,146 @@ class SpaceRecordQuery
             return ['records' => new Collection(), 'cursor' => null];
         }
 
-        $rows = $this->query()->limit($this->limit + 1)->get();
+        $filters = $this->filters();
+        $sort = $this->sort === null ? null : $this->sortField();
+
+        // A value that cannot be stored cannot match.
+        if (array_filter($filters, fn (array $filter) => $filter['hash'] === null) !== []) {
+            return ['records' => new Collection(), 'cursor' => null];
+        }
+
+        $rows = $this->query($filters, $sort)->limit($this->limit + 1)->get();
         $page = $rows->take($this->limit)->values();
         $last = $page->last();
+        $cursor = $rows->count() > $this->limit
+            ? self::encode($sort === null ? $last->sort_at->format(PreciseDateTime::FORMAT) : (string) $last->getAttribute('sort_value'), $last->uri)
+            : null;
 
-        return [
-            'records' => $page,
-            'cursor' => $rows->count() > $this->limit ? self::encode($last->sort_at->format(PreciseDateTime::FORMAT), $last->uri) : null,
-        ];
+        // The sort value was only read for the cursor.
+        if ($sort !== null) {
+            $page->each(fn (SpaceRecord $record) => $record->setRawAttributes(Arr::except($record->getAttributes(), 'sort_value'), true));
+        }
+
+        return ['records' => $page, 'cursor' => $cursor];
     }
 
     /**
+     * @param  array<int, array{key: int, hash: int|null}>  $filters
      * @return Builder<SpaceRecord>
      */
-    protected function query(): Builder
+    protected function query(array $filters, ?Field $sort): Builder
     {
+        $records = SpaceRecordIndexer::TABLE;
+        $space = ValueHash::of((string) $this->space);
+        $order = "{$records}.sort_at";
+
         $query = SpaceRecord::query()
-            ->where('space', (string) $this->space)
-            ->whereNotNull('sort_at')
-            ->when($this->collection !== null, fn (Builder $query) => $query->where('collection', $this->collection))
-            ->when($this->did !== null, fn (Builder $query) => $query->where('did', $this->did));
+            ->select("{$records}.*")
+            ->where("{$records}.space", (string) $this->space)
+            ->whereNotNull("{$records}.sort_at")
+            ->when($this->collection !== null, fn (Builder $query) => $query->where("{$records}.collection", $this->collection))
+            ->when($this->did !== null, fn (Builder $query) => $query->where("{$records}.did", $this->did));
+
+        // The rarest filter's rows carry sort_at, so they drive the page.
+        if (($drive = array_shift($filters)) !== null) {
+            $query->join(SpaceRecordValues::TABLE.' as d', fn ($join) => $join->on('d.record_id', '=', "{$records}.id")
+                ->where('d.space_hash', $space)->where('d.key_id', $drive['key'])->where('d.value_hash', $drive['hash']));
+            $order = 'd.sort_at';
+        }
+
+        foreach ($filters as $filter) {
+            $query->whereExists(fn ($exists) => $exists->selectRaw('1')->from(SpaceRecordValues::TABLE.' as f')
+                ->whereColumn('f.record_id', "{$records}.id")
+                ->where('f.key_id', $filter['key'])->where('f.value_hash', $filter['hash']));
+        }
+
+        if ($sort !== null) {
+            $column = $sort->type === 'number' ? 'value_num' : 'value_time';
+            $query->join(SpaceRecordValues::TABLE.' as s', fn ($join) => $join->on('s.record_id', '=', "{$records}.id")
+                ->where('s.space_hash', $space)->where('s.key_id', app(RecordValues::class)->keyId($sort)))
+                ->whereNotNull("s.{$column}")
+                ->addSelect("s.{$column} as sort_value");
+            $order = "s.{$column}";
+        }
 
         if ($this->viewer !== null && ($hidden = app(AppView::class)->hidden($this->viewer)) !== []) {
-            $query->whereNotIn('did', $hidden);
+            $query->whereNotIn("{$records}.did", $hidden);
+        }
+
+        if ($this->viewer !== null) {
+            app(AppView::class)->applyRecordFilters($query, $this->viewer, "{$records}.id", RecordTables::spaces());
         }
 
         $this->moderate($query);
 
         if ($this->cursor !== null) {
             [$value, $uri] = self::decode($this->cursor);
+            $operator = $this->direction === 'desc' ? '<' : '>';
 
-            $query->where('sort_at', '<=', $value);
-            $query->where(fn (Builder $query) => $query->where('sort_at', '<', $value)
-                ->orWhere(fn (Builder $query) => $query->where('sort_at', $value)->where('uri', '<', $uri)));
+            // Redundant with the OR below, but an index can seek to it.
+            $query->where($order, $operator.'=', $value);
+            $query->where(fn (Builder $query) => $query->where($order, $operator, $value)
+                ->orWhere(fn (Builder $query) => $query->where($order, $value)->where("{$records}.uri", $operator, $uri)));
         }
 
-        return $query->orderByDesc('sort_at')->orderByDesc('uri');
+        return $query->orderBy($order, $this->direction)->orderBy("{$records}.uri", $this->direction);
+    }
+
+    /**
+     * The filters, rarest first in this space when there are several, so
+     * the rarest drives the page.
+     *
+     * @return array<int, array{key: int, hash: int|null}>
+     */
+    protected function filters(): array
+    {
+        $values = app(RecordValues::class);
+        $filters = [];
+
+        foreach ($this->wheres as [$name, $value]) {
+            $field = $this->field($name);
+            $filters[] = ['key' => $values->keyId($field), 'hash' => $field->hashOf($value)];
+        }
+
+        if (count($filters) < 2 || in_array(null, array_column($filters, 'hash'), true)) {
+            return $filters;
+        }
+
+        // One count per value, read from the space's own rows.
+        $totals = SpaceRecord::query()->getConnection()->table(SpaceRecordValues::TABLE)
+            ->where('space_hash', ValueHash::of((string) $this->space))
+            ->whereIn('key_id', array_values(array_unique(array_column($filters, 'key'))))
+            ->whereIn('value_hash', array_values(array_unique(array_column($filters, 'hash'))))
+            ->groupBy('key_id', 'value_hash')
+            ->selectRaw('key_id, value_hash, count(*) as n')
+            ->get()
+            ->mapWithKeys(fn ($row) => ["{$row->key_id}#{$row->value_hash}" => (int) $row->n])
+            ->all();
+
+        usort($filters, fn (array $a, array $b) => ($totals["{$a['key']}#{$a['hash']}"] ?? 0) <=> ($totals["{$b['key']}#{$b['hash']}"] ?? 0));
+
+        return $filters;
+    }
+
+    protected function sortField(): Field
+    {
+        $field = $this->field((string) $this->sort);
+
+        if (! in_array($field->type, ['datetime', 'number'], true)) {
+            throw new InvalidArgumentException("{$this->collection} sorts only by date and number fields, and {$field->name} is a {$field->type}.");
+        }
+
+        return $field;
+    }
+
+    protected function field(string $name): Field
+    {
+        if ($this->collection === null) {
+            throw new LogicException("Filtering or sorting space records by {$name} needs collection(), since fields are declared per collection.");
+        }
+
+        return app(RecordValues::class)->field($this->collection, $name)
+            ?? throw new InvalidArgumentException("{$name} is not an indexed field of {$this->collection}. Declare it in atp-appview.fields.");
     }
 
     /**
@@ -194,11 +336,11 @@ class SpaceRecordQuery
         [$accounts, $uris] = $this->labelled();
 
         if ($accounts !== []) {
-            $query->whereNotIn('did', $accounts);
+            $query->whereNotIn("{$records}.did", $accounts);
         }
 
         if ($uris !== []) {
-            $query->whereNotIn('uri', $uris);
+            $query->whereNotIn("{$records}.uri", $uris);
         }
     }
 
