@@ -82,24 +82,100 @@ class NotificationIndexer implements BatchHandler
      * indexed time.
      *
      * @param  (\Closure(int): void)|null  $progress  Called with the records read so far
+     * @param  Carbon|null  $since  Only records indexed at or after this time
+     * @param  Carbon|null  $until  Only records indexed before this time
      * @return int The notifications added
      */
-    public function build(?string $collection = null, ?\Closure $progress = null): int
+    public function build(?string $collection = null, ?\Closure $progress = null, ?Carbon $since = null, ?Carbon $until = null): int
     {
         $reasons = Notifications::reasons();
         $collections = $collection === null ? array_keys($reasons) : array_intersect([$collection], array_keys($reasons));
         $connection = $this->db->connection(config('atp-appview.index.connection'));
         $before = $connection->table('atp_notifications')->count();
+
+        $this->chunks($connection, $collections, $since, $until, $progress, fn (array $uris) => $this->sync($connection, $reasons, $uris, null));
+
+        return $connection->table('atp_notifications')->count() - $before;
+    }
+
+    /**
+     * Run a notifier over records already indexed in its collections, or only
+     * the one given, for a notifier added or changed after they arrived. It
+     * need not be configured. Only adds: what a record gave before stays, so
+     * running it twice, or over records it already notified for live, adds
+     * nothing. Each notification takes its record's indexed time, and
+     * NotificationCreated is dispatched only when announce is true.
+     *
+     * @param  (\Closure(int): void)|null  $progress  Called with the records read so far
+     * @param  Carbon|null  $since  Only records indexed at or after this time
+     * @param  Carbon|null  $until  Only records indexed before this time
+     * @return int The notifications added
+     */
+    public function replay(Notifier $notifier, ?string $collection = null, ?\Closure $progress = null, ?Carbon $since = null, ?Carbon $until = null, bool $announce = false): int
+    {
+        $collections = $collection === null ? $notifier->collections() : array_intersect([$collection], $notifier->collections());
+        $connection = $this->db->connection(config('atp-appview.index.connection'));
+        $before = $connection->table('atp_notifications')->count();
+
+        $this->chunks($connection, array_values(array_unique($collections)), $since, $until, $progress, function (array $uris) use ($connection, $notifier, $announce) {
+            $records = $connection->table('atp_records')
+                ->whereIn('uri', $uris)
+                ->get(['uri', 'did', 'collection', 'record', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at'])
+                ->keyBy('uri');
+            $offered = $this->offered($records, $uris);
+            $rows = [];
+
+            foreach ($this->notified(array_fill_keys($notifier->collections(), [$notifier]), $offered) as $notify) {
+                $record = $records[$notify->source];
+
+                if ($notify->recipient !== $record->did) {
+                    $rows[self::key($record->uri, $notify->recipient, $notify->reason, $notify->subject)] = $this->row($record, $notify->recipient, $notify->reason, $notify->subject, 'notifier', null);
+                }
+            }
+
+            // The unique source key leaves alone any notification already
+            // there, whoever gave it.
+            $existing = $connection->table('atp_notifications')->whereIn('source_uri', array_keys($offered))->get(['source_uri', 'recipient_did', 'reason', 'subject']);
+
+            foreach ($existing as $row) {
+                unset($rows[self::key($row->source_uri, $row->recipient_did, $row->reason, $row->subject)]);
+            }
+
+            if ($rows === []) {
+                return;
+            }
+
+            $connection->table('atp_notifications')->insertOrIgnore(array_values($rows));
+
+            if ($announce) {
+                $this->announce($connection, $rows, $records);
+            }
+        });
+
+        return $connection->table('atp_notifications')->count() - $before;
+    }
+
+    /**
+     * The uris of records not deleted in these collections, within the
+     * window, 500 at a time, each chunk in a transaction.
+     *
+     * @param  array<int, string>  $collections
+     * @param  \Closure(array<int, string>): void  $each
+     */
+    protected function chunks(Connection $connection, array $collections, ?Carbon $since, ?Carbon $until, ?\Closure $progress, \Closure $each): void
+    {
         $read = 0;
 
         foreach ($collections as $name) {
             $connection->table('atp_records')
                 ->where('collection', $name)
                 ->whereNull('deleted_at')
+                ->when($since !== null, fn ($query) => $query->where('indexed_at', '>=', $since->clone()->utc()->format('Y-m-d H:i:s')))
+                ->when($until !== null, fn ($query) => $query->where('indexed_at', '<', $until->clone()->utc()->format('Y-m-d H:i:s')))
                 ->select('uri')
                 ->orderBy('uri')
-                ->chunk(500, function ($rows) use ($connection, $reasons, $progress, &$read) {
-                    $connection->transaction(fn () => $this->sync($connection, $reasons, $rows->pluck('uri')->all(), null));
+                ->chunk(500, function ($rows) use ($connection, $each, $progress, &$read) {
+                    $connection->transaction(fn () => $each($rows->pluck('uri')->all()));
                     $read += $rows->count();
 
                     if ($progress !== null) {
@@ -107,8 +183,6 @@ class NotificationIndexer implements BatchHandler
                     }
                 });
         }
-
-        return $connection->table('atp_notifications')->count() - $before;
     }
 
     /**
@@ -189,12 +263,21 @@ class NotificationIndexer implements BatchHandler
 
         $connection->table('atp_notifications')->insert(array_values($new));
 
-        if ($now === null) {
-            return;
+        if ($now !== null) {
+            $this->announce($connection, $new, $records);
         }
+    }
 
-        // Announced only when their record shows: not one hidden, moderated
-        // or needing review.
+    /**
+     * Dispatch NotificationCreated after commit for these new rows, by key,
+     * only when their record shows: not one hidden, moderated or needing
+     * review.
+     *
+     * @param  array<string, array<string, mixed>>  $new
+     * @param  Collection<string, object>  $records
+     */
+    protected function announce(Connection $connection, array $new, Collection $records): void
+    {
         $visible = array_filter($new, function (array $row) use ($records) {
             $record = $records[$row['source_uri']];
 

@@ -430,6 +430,52 @@ class NotificationsTest extends TestCase
         $this->assertSame(0, DB::table('atp_notifications')->count(), 'Deleting the record removes them.');
     }
 
+    public function test_building_with_a_notifier_replays_it_over_indexed_records_once_without_announcing_them(): void
+    {
+        $alices = $this->thing(self::ALICE, 'a', ['text' => 'hi']);
+        $bobs = $this->thing(self::BOB, 'b', ['text' => 'hi']);
+        $this->thing(self::CAROL, 'c', ['text' => 'bye']);
+        $this->thing(self::CAROL, 'm', ['text' => 'm', 'facets' => [['features' => [['did' => self::BOB]]]]]);
+        $this->assertSame(1, DB::table('atp_notifications')->count(), 'Only the mention, with no notifier configured.');
+        Event::fake([NotificationCreated::class]);
+
+        $this->artisan('appview:notifications:build', ['--notifier' => [SameTextNotifier::class, MentionAgainNotifier::class]])->assertSuccessful();
+
+        $rows = DB::table('atp_notifications')->where('origin', 'notifier')->orderBy('recipient_did')->get();
+        $this->assertSame([[self::ALICE, $bobs, $alices], [self::BOB, $alices, $bobs]], $rows->map(fn ($row) => [$row->recipient_did, $row->source_uri, $row->subject])->all());
+        $this->assertSame(DB::table('atp_records')->where('uri', $bobs)->value('indexed_at'), $rows[0]->indexed_at, 'A replayed notification takes its record\'s time.');
+        $this->assertSame(3, DB::table('atp_notifications')->count(), 'The mention a reason already gave is kept once.');
+        Event::assertNotDispatched(NotificationCreated::class);
+
+        $this->artisan('appview:notifications:build', ['--notifier' => [SameTextNotifier::class]])->assertSuccessful();
+        $this->assertSame(3, DB::table('atp_notifications')->count(), 'Replaying twice adds nothing.');
+
+        // Carol's record, changed in a backfill, gives more on the next replay, and only that is added and announced.
+        $this->thing(self::CAROL, 'c', ['text' => 'hi'], rev: '3l2bbbbbbbbbb', live: false);
+        $this->artisan('appview:notifications:build', [self::THING, '--notifier' => [SameTextNotifier::class], '--announce' => true])->assertSuccessful();
+        $this->assertSame(7, DB::table('atp_notifications')->count());
+        Event::assertDispatchedTimes(NotificationCreated::class, 4);
+    }
+
+    public function test_replaying_a_notifier_keeps_to_the_window_given(): void
+    {
+        $alices = $this->thing(self::ALICE, 'a', ['text' => 'hi']);
+        $bobs = $this->thing(self::BOB, 'b', ['text' => 'hi']);
+        DB::table('atp_records')->where('uri', $alices)->update(['indexed_at' => '2026-09-01 00:00:00']);
+        DB::table('atp_records')->where('uri', $bobs)->update(['indexed_at' => '2026-10-15 00:00:00']);
+
+        $this->artisan('appview:notifications:build', ['--notifier' => [SameTextNotifier::class], '--until' => '2026-09-01'])->assertSuccessful();
+        $this->assertSame(0, DB::table('atp_notifications')->count(), 'Until leaves out its own time.');
+
+        $this->artisan('appview:notifications:build', ['--notifier' => [SameTextNotifier::class], '--since' => '2026-10-01', '--until' => '2026-11-01'])->assertSuccessful();
+        $this->assertSame([[self::ALICE, $bobs]], DB::table('atp_notifications')->get()->map(fn ($row) => [$row->recipient_did, $row->source_uri])->all());
+
+        $this->artisan('appview:notifications:build', ['--notifier' => [SameTextNotifier::class], '--since' => 'soon'])->assertExitCode(2);
+        $this->artisan('appview:notifications:build', ['--notifier' => [Notifications::class]])->assertExitCode(2);
+        $this->artisan('appview:notifications:build', ['--announce' => true])->assertExitCode(2);
+        $this->assertSame(1, DB::table('atp_notifications')->count());
+    }
+
     public function test_a_notifier_and_a_reason_giving_the_same_notification_make_one(): void
     {
         config()->set('atp-appview.notifications.notifiers', [MentionAgainNotifier::class]);
