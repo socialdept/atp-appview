@@ -94,9 +94,11 @@ class MigrationsTest extends TestCase
     {
         $name = '2026_11_08_000001_add_created_at_to_atp_identities_table';
 
+        // Back to before this migration, however many follow it.
         $this->artisan('migrate:fresh')->assertSuccessful();
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertSuccessful();
-        $this->assertFalse(Schema::hasColumn('atp_identities', 'created_at'), "{$name} is no longer the last migration.");
+        $step = DB::table('migrations')->where('migration', '>=', $name)->count();
+        $this->artisan('migrate:rollback', ['--step' => $step])->assertSuccessful();
+        $this->assertFalse(Schema::hasColumn('atp_identities', 'created_at'));
 
         DB::table('atp_identities')->insert([
             ['did' => 'did:plc:alice', 'active' => true, 'updated_at' => '2026-11-05 12:00:00'],
