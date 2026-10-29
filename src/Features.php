@@ -10,6 +10,7 @@ use SocialDept\AtpAppview\Features\Moderation;
 use SocialDept\AtpAppview\Features\Notifications;
 use SocialDept\AtpAppview\Features\Realtime;
 use SocialDept\AtpAppview\Features\Search;
+use SocialDept\AtpAppview\Features\Spaces;
 use SocialDept\AtpAppview\Features\Standing;
 
 /**
@@ -102,6 +103,17 @@ class Features
     public static function realtime(array $options = []): string
     {
         return static::feature(Realtime::class, $options);
+    }
+
+    /**
+     * Spaces: a copy of the permissioned spaces the app follows, synced
+     * from each member's PDS and kept apart from the public index.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.spaces
+     */
+    public static function spaces(array $options = []): string
+    {
+        return static::feature(Spaces::class, $options);
     }
 
     /**
