@@ -562,28 +562,46 @@ class RecordValues
         // Hidden for its account's status, or by moderation.
         $hidden = $record->hidden_at !== null || ($record->moderated_at ?? null) !== null;
 
+        foreach ($this->extract($collection, $value, $only) as $item) {
+            $texts["{$item['key']}#{$item['hash']}"] ??= mb_substr($item['text'], 0, 255);
+            $rows[] = [
+                'key_id' => $item['key'],
+                'record_id' => (int) $record->id,
+                // Only references need their author, for viewer state.
+                'did_hash' => $item['field']->type === 'uri' ? $didHash : null,
+                'value_hash' => $item['hash'],
+                'value_time' => $item['time'],
+                'value_num' => $item['num'],
+                'sort_at' => $record->sort_at,
+                'hidden' => $hidden,
+                'limited' => ($record->limited_at ?? null) !== null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Every value a record's body holds in its collection's indexed fields,
+     * with the field's key.
+     *
+     * @param  array<string, mixed>  $value  The record's body
+     * @param  array<int, Field>|null  $only  Just these fields
+     * @return array<int, array{key: int, field: Field, hash: int, time: string|null, num: float|null, text: string}>
+     */
+    public function extract(string $collection, array $value, ?array $only = null): array
+    {
+        $items = [];
 
         foreach ($only ?? $this->fields()[$collection] ?? [] as $field) {
             $key = $this->keyId($field);
 
             foreach ($field->values($value) as $item) {
-                $texts["{$key}#{$item['hash']}"] ??= mb_substr($item['text'], 0, 255);
-                $rows[] = [
-                    'key_id' => $key,
-                    'record_id' => (int) $record->id,
-                    // Only references need their author, for viewer state.
-                    'did_hash' => $field->type === 'uri' ? $didHash : null,
-                    'value_hash' => $item['hash'],
-                    'value_time' => $item['time'],
-                    'value_num' => $item['num'],
-                    'sort_at' => $record->sort_at,
-                    'hidden' => $hidden,
-                    'limited' => ($record->limited_at ?? null) !== null,
-                ];
+                $items[] = ['key' => $key, 'field' => $field, ...$item];
             }
         }
 
-        return $rows;
+        return $items;
     }
 
     /**
@@ -726,7 +744,7 @@ class RecordValues
     /**
      * @return array<string, mixed>
      */
-    protected static function decode(mixed $record): array
+    public static function decode(mixed $record): array
     {
         return is_string($record) ? (json_decode($record, true) ?: []) : (array) $record;
     }

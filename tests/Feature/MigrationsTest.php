@@ -118,4 +118,61 @@ class MigrationsTest extends TestCase
         $this->assertSame(['did:plc:alice' => '2026-11-02 07:00:00', 'did:plc:bob' => '2026-11-03 09:00:00'], $created, 'The oldest record, or updated_at when that is earlier.');
         $this->assertTrue(Schema::hasIndex('atp_identities', ['created_at']));
     }
+
+    /**
+     * Space records synced before their values existed get an id each, in
+     * the order they were stored, and records synced after get one too.
+     */
+    public function test_space_records_already_synced_get_ids(): void
+    {
+        $name = '2026_11_09_000001_create_atp_space_record_values_table';
+
+        // Back to before this migration, however many follow it.
+        $this->artisan('migrate:fresh')->assertSuccessful();
+        $step = DB::table('migrations')->where('migration', '>=', $name)->count();
+        $this->artisan('migrate:rollback', ['--step' => $step])->assertSuccessful();
+        $this->assertFalse(Schema::hasColumn('atp_space_records', 'id'));
+        $this->assertFalse(Schema::hasTable('atp_space_record_values'));
+
+        $record = fn (string $rkey) => [
+            'uri' => "at://did:plc:authority/space/com.example.forum/main/did:plc:alice/com.example.post/{$rkey}",
+            'space' => 'at://did:plc:authority/space/com.example.forum/main',
+            'did' => 'did:plc:alice', 'collection' => 'com.example.post', 'rkey' => $rkey,
+            'rev' => '3l2aaaaaaaaaa', 'indexed_at' => '2026-11-09 12:00:00', 'sort_at' => '2026-11-09 12:00:00',
+        ];
+
+        DB::table('atp_space_records')->insert([$record('a'), $record('b')]);
+
+        $this->artisan('migrate')->assertSuccessful();
+        DB::table('atp_space_records')->insert($record('c'));
+
+        $ids = DB::table('atp_space_records')->orderBy('rkey')->pluck('id', 'rkey')->map(fn ($id) => (int) $id)->all();
+
+        $this->assertCount(3, array_unique(array_filter($ids)), 'Every record has an id of its own.');
+        $this->assertLessThan($ids['c'], max($ids['a'], $ids['b']));
+        $this->assertTrue(Schema::hasColumn('atp_index_keys', 'spaces_built_at'));
+    }
+
+    /**
+     * MySQL keeps what a failed run of the space values migration created,
+     * so running it again finishes the steps left and skips the rest.
+     */
+    public function test_the_space_values_migration_finishes_after_a_partial_run(): void
+    {
+        $name = '2026_11_09_000001_create_atp_space_record_values_table';
+        $migrations = count(glob(__DIR__.'/../../database/migrations/{,*/}*.php', GLOB_BRACE));
+
+        $this->artisan('migrate:fresh')->assertSuccessful();
+
+        // What a run that failed on its last step left.
+        Schema::table('atp_index_keys', fn ($table) => $table->dropColumn('spaces_built_at'));
+        DB::table('migrations')->where('migration', $name)->delete();
+
+        $this->artisan('migrate')->assertSuccessful();
+
+        $this->assertSame($migrations, DB::table('migrations')->count());
+        $this->assertTrue(Schema::hasColumn('atp_space_records', 'id'));
+        $this->assertTrue(Schema::hasTable('atp_space_record_values'));
+        $this->assertTrue(Schema::hasColumn('atp_index_keys', 'spaces_built_at'));
+    }
 }

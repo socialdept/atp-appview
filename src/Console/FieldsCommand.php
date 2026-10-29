@@ -3,8 +3,10 @@
 namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
+use SocialDept\AtpAppview\Features\Spaces as SpacesFeature;
 use SocialDept\AtpAppview\Index\Field;
 use SocialDept\AtpAppview\Index\RecordValues;
+use SocialDept\AtpAppview\Spaces\SpaceRecordValues;
 
 class FieldsCommand extends Command
 {
@@ -41,11 +43,22 @@ class FieldsCommand extends Command
             $this->components->info("Built {$field}.");
         }
 
+        // Space records' values, for the keys the public run settled.
+        $spaces = SpacesFeature::on() ? app(SpaceRecordValues::class)->work(function (Field $field, int $done) {
+            if ($done % 50000 < 1000) {
+                $this->components->twoColumnDetail("{$field->collection} {$field->name} in spaces", number_format($done).' records');
+            }
+        }) : [];
+
+        foreach ($spaces as $field) {
+            $this->components->info("Built {$field} in spaces.");
+        }
+
         foreach ($result['dropped'] as $field) {
             $this->components->info("Dropped {$field}.");
         }
 
-        if ($result['built'] === [] && $result['dropped'] === []) {
+        if ($result['built'] === [] && $result['dropped'] === [] && $spaces === []) {
             $this->components->info('Every field is built.');
         } else {
             $this->components->info(sprintf('Done in %.1f s.', microtime(true) - $started));
