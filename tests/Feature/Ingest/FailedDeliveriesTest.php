@@ -315,6 +315,35 @@ class FailedDeliveriesTest extends TestCase
         $this->assertSame(1, $worse->fresh()->retries);
     }
 
+    /**
+     * A create parked longer than its collection keeps tombstones may be for
+     * a record deleted since, whose tombstone is gone. Retried as it was, it
+     * would bring the record back, so it is read from its PDS instead.
+     */
+    public function test_a_create_parked_past_the_tombstone_window_is_reindexed_rather_than_retried(): void
+    {
+        config(['atp-appview.retention.tombstones' => ['app.example.post' => 30]]);
+        Picky::$refuse = ['bad', 'worse'];
+        $this->deliver([$this->event(1, 'bad'), $this->event(2, 'worse'), $this->event(3, 'z')]);
+        Picky::$refuse = [];
+        [$old, $recent] = FailedDelivery::query()->orderBy('id')->get()->all();
+        $old->update(['failed_at' => Carbon::now('UTC')->subDays(31)]);
+
+        // Deleted by its author since, and its tombstone already pruned.
+        Resolver::shouldReceive('resolvePds')->andReturn('https://pds.example');
+        $atp = Atp::fake();
+        $atp->stub('com.atproto.sync.getLatestCommit', ['cid' => 'c', 'rev' => '3l2zzzzzzzzzz']);
+        $atp->stub('com.atproto.repo.getRecord', FakeResponse::error('RecordNotFound', 'Could not locate record', 400));
+
+        $this->assertTrue(app(FailedDeliveries::class)->retry($old));
+        $this->assertNull(Record::query()->find('at://did:plc:alice/app.example.post/bad'), 'The deleted record stays deleted.');
+        $this->assertNotNull(Record::withTrashed()->find('at://did:plc:alice/app.example.post/bad')->deleted_at);
+
+        // Within the window, the parked event itself goes through.
+        $this->assertTrue(app(FailedDeliveries::class)->retry($recent));
+        $this->assertSame('bafy-worse', Record::query()->find('at://did:plc:alice/app.example.post/worse')->cid);
+    }
+
     public function test_an_identity_event_cannot_be_reindexed_and_the_command_skips_it(): void
     {
         $identity = app(FailedDeliveries::class)->park(new IdentityEvent(7, 'did:plc:alice', 'alice.test', true, null), new RuntimeException('no'));

@@ -1,8 +1,24 @@
 # Retention
 
-Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records.
+Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, and pruning old tombstones.
 
 Everything here is off until set in `config/atp-appview/retention.php`, so an app that sets nothing keeps every record as it is.
+
+## Pruning
+
+`appview:prune` removes what retention lets go. Schedule it:
+
+```php
+Schedule::command('appview:prune')->everyFiveMinutes()->withoutOverlapping();
+```
+
+```bash
+php artisan appview:prune --dry-run   # count what would go, per collection
+```
+
+It reads a chunk of rows at a time (`--chunk`, 1,000 by default) through an index on their collection and age, deletes them by primary key in a transaction of their own, and stops after `--seconds` (50 by default), so no run holds a lock for long and the next one carries on. With nothing configured it reads nothing and deletes nothing. It works on `atp-appview.index.connection`.
+
+A deleted row takes with it what references it: its [field values](views.md#fields), moving the kept counts, and its notifications. Features keep their own tables in step through `afterPrune()`, as [writing a feature](features.md#writing-a-feature) describes. Labels about a record are the labeler's, so they stay. Pruning dispatches no record events, since nothing changed on the network, and the counts from `appview:stats` catch up on its next run.
 
 ## Compression
 
@@ -44,3 +60,43 @@ On 50,000 synthetic 3 KB documents, LZ4 stored 13 MB against pglz's 16 MB, rewri
 | SQLite | Nothing. It has no column compression |
 
 The command reports that there is nothing to do and succeeds, so the same deploy script runs everywhere.
+
+## Tombstones
+
+A deleted record stays in the index as a tombstone, a row with no body that keeps the delete's revision. It is what stops an older copy of the record from bringing it back, since a write only lands with a newer revision. Tombstones are small, but a collection with many deletes, such as likes, collects them for good. Let them go after a number of days, per collection, with `'*'` for the rest:
+
+```php
+// config/atp-appview/retention.php
+'tombstones' => [
+    '*' => 180,
+    'app.example.like' => 30,
+    'app.example.post' => null,   // kept
+],
+```
+
+Or `ATP_APPVIEW_TOMBSTONE_DAYS=180` for the default alone. Age is `deleted_at`, when the index recorded the delete, so a tombstone written by a backfill or a reconcile counts from then, not from when the author deleted the record.
+
+A tombstone already holds no field values or notifications, since a delete clears them. Those left by an account deletion or a purge go with it.
+
+### What a pruned tombstone no longer stops
+
+Once a tombstone is gone, nothing in the index remembers the record, so an older copy of it arriving later would index it again. Each way a record arrives was checked:
+
+| Source | Why it cannot bring a pruned record back |
+| --- | --- |
+| Tap redelivering a batch | Tap redelivers within minutes, far inside any window |
+| Jetstream after a restart | Its cursor replays what Jetstream still holds, a day or so, not months |
+| A backfill, Tap's or from a PDS | It reads the repo as it is now, which no longer holds the record |
+| `appview:reconcile` | The same, and it tombstones anything the repo lacks |
+| `appview:failed-deliveries --retry` | A create or update parked longer than its collection's window is reindexed from the PDS instead of retried, so it lands as the repo has it now |
+
+What remains is a copy older than the window from somewhere the package does not know about, such as an archive of the firehose replayed by hand. The record would show again until `appview:reconcile` next checks its repo and tombstones it. Keep the window well past any replay you run, and keep reconcile scheduled.
+
+### Indexes
+
+| Database | Index read |
+| --- | --- |
+| Postgres, SQLite | A partial index on `collection, deleted_at` holding only tombstones |
+| MySQL, MariaDB | The plain `collection, deleted_at` index they already have |
+
+The list of collections comes from one seek per collection along the collection index, so finding them never reads the table.

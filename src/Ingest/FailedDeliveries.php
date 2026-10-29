@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use LogicException;
 use SocialDept\AtpAppview\Index\LatestRecord;
+use SocialDept\AtpAppview\Index\Retention;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\LabelerEvent;
 use SocialDept\AtpAppview\Ingest\Events\LabelEvent;
@@ -84,7 +85,26 @@ class FailedDeliveries
      */
     public function retry(FailedDelivery $delivery): bool
     {
+        // Parked longer than its collection keeps tombstones, the record may
+        // have been deleted since and its tombstone pruned, so nothing would
+        // stop this older copy from bringing it back. It is read from its PDS
+        // as it is now instead.
+        if ($this->outlivedTombstones($delivery)) {
+            return $this->reindex($delivery);
+        }
+
         return $this->attempt($delivery, fn () => self::rebuild($delivery->payload));
+    }
+
+    protected function outlivedTombstones(FailedDelivery $delivery): bool
+    {
+        if ($delivery->kind !== 'record' || ($delivery->payload['action'] ?? null) === RecordAction::Delete->value) {
+            return false;
+        }
+
+        $days = Retention::tombstoneDays((string) $delivery->collection);
+
+        return $days !== null && $delivery->failed_at !== null && $delivery->failed_at->lt(Carbon::now('UTC')->subDays($days));
     }
 
     /**

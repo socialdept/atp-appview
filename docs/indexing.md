@@ -149,7 +149,7 @@ It makes one pass over the index, about 0.4 s for 265,000 records on Postgres, a
 Tap delivers at least once, so every write can safely happen twice:
 
 - A record is only overwritten by an event with a newer revision, or the same revision and a different CID. The same record sent again unchanged, as Tap does when it resyncs a repo, leaves the row alone, so `indexed_at` and `sort_at` keep their values. The revision is the repo commit's `rev`, a TID that the repository spec requires to increase within a repo. TIDs are 13 characters from an alphabet in ASCII order, so the `rev` column's binary collation compares them in time order. Every comparison is between versions of the same record, so it never crosses repos.
-- A delete becomes a tombstone that keeps the delete's revision and clears the body. An older create replayed during a backfill cannot bring the record back, and queries skip tombstones unless you call `withTrashed()`.
+- A delete becomes a tombstone that keeps the delete's revision and clears the body. An older create replayed during a backfill cannot bring the record back, and queries skip tombstones unless you call `withTrashed()`. Tombstones are kept for good unless [retention](retention.md#tombstones) lets them go.
 - Several events for one record in a batch collapse to the last, which Tap's per-repo ordering makes the newest.
 
 Each batch is written with one statement per 500 records, inside a single transaction.

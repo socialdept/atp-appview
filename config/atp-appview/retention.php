@@ -17,4 +17,12 @@ return [
     // before. MySQL, MariaDB and SQLite have no column equivalent, so it
     // does nothing there.
     'compression' => env('ATP_APPVIEW_RECORD_COMPRESSION'),
+
+    // Days a tombstone is kept before appview:prune deletes it, by
+    // collection, '*' for every other one. Null keeps them. A tombstone is
+    // what stops an older copy of a deleted record from bringing it back,
+    // so keep the window well past how far back anything can replay.
+    'tombstones' => [
+        '*' => env('ATP_APPVIEW_TOMBSTONE_DAYS'),
+    ],
 ];

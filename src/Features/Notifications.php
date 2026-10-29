@@ -34,6 +34,9 @@ class Notifications implements Feature
             ->config('notifications')
             ->migrations(__DIR__.'/../../database/migrations/notifications')
             ->handler(NotificationIndexer::class)
+            // A pruned record notifies no one, and its rows would only be
+            // skipped by every read.
+            ->afterPrune(fn ($connection, array $uris) => $connection->table('atp_notifications')->whereIn('source_uri', $uris)->delete())
             ->commands([NotificationsBuildCommand::class]);
 
         // Each method under the NSID the app gives it, in its own namespace.
