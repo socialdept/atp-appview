@@ -115,7 +115,7 @@ class SpaceSync
 
     /**
      * Stop following a space: withdraw the notification registration and
-     * drop the copy and its grants.
+     * drop the copy, its grants and its cached blobs.
      */
     public function unfollow(SpaceRef $space): void
     {
@@ -140,6 +140,8 @@ class SpaceSync
             $connection->table(SpaceGrants::TABLE)->where('space', (string) $space)->delete();
             $connection->table(self::SPACES)->where('space', (string) $space)->delete();
         });
+
+        $this->container->make(SpaceBlobs::class)->forget($space);
     }
 
     /**
@@ -266,8 +268,8 @@ class SpaceSync
 
     /**
      * Drop the copy of a deleted space: tombstone its records, forget its
-     * repos, drop its grants, and mark it deleted so nothing syncs it
-     * again. Following it again starts over.
+     * repos, drop its grants and cached blobs, and mark it deleted so
+     * nothing syncs it again. Following it again starts over.
      */
     public function deleted(SpaceRef $space): void
     {
@@ -292,6 +294,34 @@ class SpaceSync
                 'updated_at' => $now,
             ]);
         });
+
+        $this->container->make(SpaceBlobs::class)->forget($space);
+    }
+
+    /**
+     * A blob from a member's repo in the space, read with the space's sync
+     * credential. The bytes are as the host sent them, not yet checked
+     * against the CID.
+     *
+     * @return string|null The bytes, or null when the space is not followed, was deleted or is stale
+     *
+     * @throws SpacesException when the read fails
+     */
+    public function blob(SpaceRef $space, string $did, string $cid): ?string
+    {
+        $row = $this->state($space);
+
+        if ($row === null || $row->deleted_at !== null || ($reader = $this->reader($space, $row)) === null) {
+            return null;
+        }
+
+        try {
+            return $reader->getBlob($did, $cid);
+        } catch (CredentialException $e) {
+            $this->refused($space, $e);
+
+            return null;
+        }
     }
 
     /**
