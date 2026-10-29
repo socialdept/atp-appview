@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Console;
 
 use Illuminate\Console\Command;
+use SocialDept\AtpAppview\Spaces\SpaceGrants;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
 use SocialDept\AtpAppview\Spaces\SyncSpace;
 use SocialDept\AtpSpaces\SpaceRef;
@@ -14,10 +15,13 @@ class SpacesSyncCommand extends Command
                             {spaces?* : Space URIs to sync, every followed space when none}
                             {--queue : Queue a sync of each space instead of running it here}';
 
-    protected $description = 'Catch followed spaces up and renew their notification registrations';
+    protected $description = 'Catch followed spaces up, renew their notification registrations and drop expired grants';
 
-    public function handle(SpaceSync $sync): int
+    public function handle(SpaceSync $sync, SpaceGrants $grants): int
     {
+        // Expired grants allow nothing already, so this only keeps the table small.
+        $grants->prune();
+
         $named = (array) $this->argument('spaces');
         $spaces = [];
 

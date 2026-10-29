@@ -58,7 +58,8 @@ class SpaceSync
 
     /**
      * Follow a space, syncing it with this credential's account from now
-     * on, and queue its first sync. Following again changes the account.
+     * on, grant that account the space, and queue its first sync.
+     * Following again changes the account.
      *
      * @throws LogicException when the spaces feature is off
      * @throws InvalidArgumentException when atp-spaces lists types and this space's is not one
@@ -104,6 +105,9 @@ class SpaceSync
             ]);
         }
 
+        // The authority issued this account a credential, so it may read.
+        $this->container->make(SpaceGrants::class)->grant($credential);
+
         SyncSpace::dispatch((string) $space);
 
         return $space;
@@ -111,7 +115,7 @@ class SpaceSync
 
     /**
      * Stop following a space: withdraw the notification registration and
-     * drop the copy.
+     * drop the copy and its grants.
      */
     public function unfollow(SpaceRef $space): void
     {
@@ -133,6 +137,7 @@ class SpaceSync
         $this->connection()->transaction(function (Connection $connection) use ($space) {
             $connection->table(SpaceRecordIndexer::TABLE)->where('space', (string) $space)->delete();
             $connection->table(self::REPOS)->where('space', (string) $space)->delete();
+            $connection->table(SpaceGrants::TABLE)->where('space', (string) $space)->delete();
             $connection->table(self::SPACES)->where('space', (string) $space)->delete();
         });
     }
@@ -261,8 +266,8 @@ class SpaceSync
 
     /**
      * Drop the copy of a deleted space: tombstone its records, forget its
-     * repos, and mark it deleted so nothing syncs it again. Following it
-     * again starts over.
+     * repos, drop its grants, and mark it deleted so nothing syncs it
+     * again. Following it again starts over.
      */
     public function deleted(SpaceRef $space): void
     {
@@ -279,6 +284,7 @@ class SpaceSync
                 ->update(['record' => null, 'repair' => null, 'cid' => null, 'deleted_at' => $now]);
 
             $connection->table(self::REPOS)->where('space', (string) $space)->delete();
+            $connection->table(SpaceGrants::TABLE)->where('space', (string) $space)->delete();
 
             $connection->table(self::SPACES)->where('space', (string) $space)->update([
                 'notify_expires_at' => null,
