@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
+use Illuminate\Support\Carbon;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Index\RecordWriter;
@@ -163,6 +164,22 @@ class RecordIndexerTest extends TestCase
         $this->assertFalse($identity->active);
         $this->assertSame('deactivated', $identity->status);
         $this->assertSame(1, Identity::count());
+    }
+
+    public function test_an_identity_keeps_when_it_was_first_seen(): void
+    {
+        Carbon::setTestNow('2026-11-01 10:00:00');
+        $this->index(new IdentityEvent(1, self::DID, 'alice.example', true, 'active'));
+
+        Carbon::setTestNow('2026-11-05 12:00:00');
+        $this->index(new IdentityEvent(2, self::DID, 'alice.new', true, 'active'));
+
+        $identity = Identity::find(self::DID);
+
+        $this->assertSame('2026-11-01 10:00:00', $identity->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-11-05 12:00:00', $identity->updated_at->format('Y-m-d H:i:s'));
+        $this->assertSame(1, Identity::query()->where('created_at', '>=', '2026-10-30')->count());
+        $this->assertSame(0, Identity::query()->where('created_at', '>=', '2026-11-02')->count());
     }
 
     public function test_a_batch_larger_than_one_statement_is_written_in_chunks(): void

@@ -144,10 +144,11 @@ class PdsLookup
             'pds' => $pds,
             'pds_resolved_at' => $now,
             'updated_at' => $now,
+            'created_at' => $now,
         ], array_keys($resolved), $resolved);
 
         // Only the PDS columns change on an existing identity. Its handle and
-        // status stay as Tap last reported them.
+        // status stay as Tap last reported them, and created_at as first set.
         Identity::query()->upsert($rows, ['did'], ['pds', 'pds_resolved_at']);
     }
 }

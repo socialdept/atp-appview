@@ -2,7 +2,7 @@
 
 Part of the [atp-appview docs](../README.md#documentation). How records are stored, sorted, validated and reconciled, account status, and index stats.
 
-`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own.
+`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own. On MySQL and MariaDB, the connection's session timezone must be UTC, as the [installation](../README.md#installation) notes.
 
 ```php
 use SocialDept\AtpAppview\Models\Identity;
@@ -108,9 +108,17 @@ Each index on `atp_records` serves a specific read:
 | `collection, sort_at, uri` where hidden | A collection's hidden records, newest first (Postgres and SQLite) |
 | `collection, sort_at, uri` where tombstoned | A collection's tombstones, newest first (Postgres and SQLite) |
 
-Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so there those lists stay slow.
+Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so they get plain indexes on the collection and `hidden_at` or `deleted_at` instead, and the same lists take about a millisecond.
 
 On `atp_identities`, `reconciled_at` serves `appview:reconcile` picking the repos due a check. Postgres builds it nulls first, since the run starts with repos never checked.
+
+`created_at` on `atp_identities` is when the index first saw the repo, by any route: an identity event, a Jetstream record from a new repo, or a PDS lookup for the blocklist. It is set when the row is added and never changed after, and its index serves questions like how many repos arrived this week.
+
+```php
+Identity::query()->where('created_at', '>=', now()->subWeek())->count();
+```
+
+Repos indexed before the column existed got the earliest time the index held for them: their oldest record's `indexed_at`, or the identity's `updated_at` when that is earlier. Both come after the repo was first seen, so for those repos the value can be late, never early.
 
 A cursor adds a plain `sort_at` range next to the tie-breaking comparison on `uri`, so the index seeks to the cursor rather than scanning every row before it. On 220,000 documents, a page 50,000 records deep takes 0.2 ms to execute.
 

@@ -180,6 +180,8 @@ class JetstreamSourceTest extends TestCase
         $this->assertSame(['bob.test', 'https://pds.example'], [$rows[self::BOB]->handle, $rows[self::BOB]->pds]);
         $this->assertNull($rows['did:plc:carol']->handle, 'A handle that points elsewhere is not theirs.');
         $this->assertNull($rows['did:plc:gone']->handle, 'Kept, so its records still show.');
+        $this->assertNotNull($rows[self::BOB]->created_at);
+        $this->assertNotNull($rows['did:plc:gone']->created_at);
     }
 
     public function test_the_command_is_registered_and_from_live_forgets_the_cursor(): void

@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Tests\Feature\Blocklist;
 
 use Illuminate\Cache\Events\RetrievingKey;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -116,6 +117,17 @@ class BlocklistTest extends TestCase
         $this->assertSame(['did:plc:alice', 'did:plc:gone'], array_map(fn ($e) => $e->did, $batch->records()), 'A DID document that cannot be fetched never blocks a repo.');
         $this->assertSame('https://spam1.spam.example', Identity::find('did:plc:spam1')->pds);
         $this->assertCount(3, $this->sentTo(self::PLC), 'Resolved PDS hosts are kept, not looked up again.');
+    }
+
+    public function test_a_pds_lookup_sets_when_a_repo_was_first_seen_and_keeps_it(): void
+    {
+        Identity::query()->insert(['did' => 'did:plc:alice', 'active' => true, 'updated_at' => '2026-11-01 10:00:00', 'created_at' => '2026-11-01 10:00:00']);
+
+        Carbon::setTestNow('2026-11-05 12:00:00');
+        $this->app->make(\SocialDept\AtpAppview\Blocklist\PdsLookup::class)->resolve(['did:plc:spam1', 'did:plc:alice']);
+
+        $this->assertSame('2026-11-01 10:00:00', Identity::find('did:plc:alice')->created_at->format('Y-m-d H:i:s'));
+        $this->assertSame('2026-11-05 12:00:00', Identity::find('did:plc:spam1')->created_at->format('Y-m-d H:i:s'));
     }
 
     public function test_no_pds_is_looked_up_without_a_host_rule(): void

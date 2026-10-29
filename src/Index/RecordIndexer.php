@@ -72,6 +72,7 @@ class RecordIndexer implements BatchHandler
             }
 
             if ($identities !== []) {
+                // created_at is left out of the update, so it keeps when the repo was first seen.
                 $connection->table('atp_identities')->upsert($identities, ['did'], ['handle', 'active', 'status', 'updated_at']);
 
                 $status->apply(array_column(array_map(fn (array $row) => [
@@ -204,6 +205,7 @@ class RecordIndexer implements BatchHandler
                 'active' => $event->active,
                 'status' => $event->status,
                 'updated_at' => $now,
+                'created_at' => $now,
             ];
         }
 

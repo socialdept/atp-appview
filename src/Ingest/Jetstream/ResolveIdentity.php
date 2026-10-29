@@ -55,7 +55,7 @@ class ResolveIdentity implements ShouldQueue
 
             $exists
                 ? $connection->table('atp_identities')->where('did', $did)->whereNull('handle')->update(array_filter(['handle' => $handle, 'pds' => $pds, 'pds_resolved_at' => $pds === null ? null : $now, 'updated_at' => $now]))
-                : $connection->table('atp_identities')->insert(['did' => $did, 'handle' => $handle, 'active' => true, 'pds' => $pds, 'pds_resolved_at' => $pds === null ? null : $now, 'updated_at' => $now]);
+                : $connection->table('atp_identities')->insert(['did' => $did, 'handle' => $handle, 'active' => true, 'pds' => $pds, 'pds_resolved_at' => $pds === null ? null : $now, 'updated_at' => $now, 'created_at' => $now]);
         }
     }
 }
