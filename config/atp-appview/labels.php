@@ -59,4 +59,9 @@ return [
     //         'did:plc:ar7c4by46qjdydhdevvrndac' => ['porn' => ['content' => 'hide']],
     //     ],
     'policies' => [],
+
+    // Whether a viewer who has not chosen sees adult content. Off, adult-only
+    // labels hide what they are on for them, as Bluesky's adultContentEnabled
+    // does. On keeps the policies above as they are.
+    'adult_content' => (bool) env('ATP_APPVIEW_ADULT_CONTENT', true),
 ];

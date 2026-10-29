@@ -49,6 +49,12 @@ class Policies
         '!no-promote' => Effect::Review,
     ];
 
+    /**
+     * Values Bluesky shows only to viewers who turned adult content on,
+     * besides those a labeler declares adultOnly.
+     */
+    public const ADULT = ['porn', 'sexual'];
+
     protected const CACHE_KEY = 'atp-appview:label-policies';
 
     /** @var array<string, Effect>|null Operator policies by "labeler value target" */
@@ -91,6 +97,37 @@ class Policies
         $blurs = $declared?->definition($value)['blurs'] ?? self::DEFAULTS[$value][2] ?? 'content';
 
         return $blurs === 'media' ? 'media' : 'content';
+    }
+
+    /**
+     * Whether a label is for adults only: one of Bluesky's adult values, or
+     * declared adultOnly by its labeler.
+     */
+    public function adultOnly(string $labeler, string $value): bool
+    {
+        return in_array($value, self::ADULT, true)
+            || (bool) (($this->labelers()[$labeler] ?? null)?->definition($value)['adultOnly'] ?? false);
+    }
+
+    /**
+     * Every adult-only label, as [labeler, value], with * for Bluesky's
+     * values from any labeler.
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    public function adultValues(): array
+    {
+        $values = array_map(fn (string $value) => [LabelPolicy::ANY, $value], self::ADULT);
+
+        foreach ($this->labelers() as $did => $labeler) {
+            foreach ((array) ($labeler->declaration['policies']['labelValueDefinitions'] ?? []) as $definition) {
+                if (is_array($definition) && ($definition['adultOnly'] ?? false) && is_string($definition['identifier'] ?? null)) {
+                    $values[] = [(string) $did, $definition['identifier']];
+                }
+            }
+        }
+
+        return $values;
     }
 
     /**
