@@ -1,6 +1,6 @@
 # Moderation
 
-Part of the [atp-appview docs](../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels and account actions.
+Part of the [atp-appview docs](../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 
 ## Labels
 
@@ -118,6 +118,39 @@ $labels->clear('*', 'spam', Target::ACCOUNT);
 $labels->follow('did:plc:...');                        // ask Tack to follow a labeler
 $labels->labelers();                                   // the labelers, with their declarations
 ```
+
+## Viewer preferences
+
+Each viewer can choose what they see for a label value, in the shape of Bluesky's `contentLabelPref` and `adultContentEnabled`, so an app can map those preferences onto it. A choice names a value, from one labeler or any, and a visibility: `ignore` (shown without a warning), `warn` or `hide`. Bluesky's `show` is taken as `ignore`.
+
+```php
+use SocialDept\AtpAppview\Labels\LabelPreferences;
+
+$preferences = app(LabelPreferences::class);
+
+$preferences->set($did, 'graphic-media', 'ignore');                    // from any labeler
+$preferences->set($did, 'spoiler', 'hide', labeler: 'did:plc:...');    // from one
+$preferences->clear($did, 'spoiler', labeler: 'did:plc:...');
+$preferences->setAdultContent($did, false);
+$preferences->for($did);   // ['adultContent' => false, 'labels' => [['labeler' => null, 'value' => 'graphic-media', 'visibility' => 'ignore']]]
+```
+
+A viewer changes only what the operator left to viewers:
+
+| The policy's effect | What a viewer can do |
+| --- | --- |
+| `ignore`, `badge`, `warn`, `blur` | Ignore it, warn on it or hide it. `warn` keeps the policy's blur, if it has one |
+| `review` | Only hide it |
+| `hide`, `ban` | Nothing |
+
+System labels, those starting with `!`, are never the viewer's to change, and `set()` refuses them. A choice for one labeler wins over one for any. With adult content off, adult-only labels hide what they are on, whatever was chosen for them: Bluesky's `porn` and `sexual`, and any value a labeler declares `adultOnly`. A viewer who has not chosen takes `labels.adult_content` (on), which keeps the policies as they are.
+
+Choices apply to what others wrote, never to the viewer's own records, in the same places as [mutes](social-graph.md):
+
+- **Hidden** records leave the viewer's queries: `visibleTo()`, `RecordQuery`, the built-in XRPC lists and notifications. Hiding an account label leaves out everything the account wrote. A record asked for by its uri gets `hide` in its `Moderation` part instead.
+- **Warnings and blurs** reach the client in the `Moderation` view part, and in `decide($record, $viewer)` and `account($did, $viewer)`.
+
+The viewer comes from the request, so preferences apply the same with a session cookie and with a service auth token. They are read once per request. Choices are private, kept in `atp_label_preferences` and `atp_label_settings`, and served over XRPC only by endpoints the app writes.
 
 ## Account actions
 

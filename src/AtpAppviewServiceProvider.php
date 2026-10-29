@@ -163,6 +163,9 @@ class AtpAppviewServiceProvider extends ServiceProvider
         // half minute so workers see an operator's change.
         $this->app->singleton(\SocialDept\AtpAppview\Labels\Policies::class);
 
+        // Each viewer's label preferences are read once per request or job.
+        $this->app->scoped(\SocialDept\AtpAppview\Labels\LabelPreferences::class);
+
         $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
             plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
             ttl: (int) config('atp-appview.blocklist.pds_ttl', 86400),
