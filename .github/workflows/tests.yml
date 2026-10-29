@@ -8,7 +8,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    name: Tests (PHP 8.4 - Laravel 13)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: 8.3
+            laravel: 13
+            testbench: 11
+          - php: 8.4
+            laravel: 13
+            testbench: 11
+
+    name: Tests (PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }} - SQLite)
 
     steps:
       - name: Checkout code
@@ -17,13 +28,13 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.4
+          php-version: ${{ matrix.php }}
           extensions: mbstring, json
           coverage: none
 
       - name: Install dependencies
         run: |
-          composer require "laravel/framework:^13.0" "orchestra/testbench:^11.0" --no-interaction --no-update
+          composer require "laravel/framework:^${{ matrix.laravel }}.0" "orchestra/testbench:^${{ matrix.testbench }}.0" --no-interaction --no-update
           composer update --prefer-stable --prefer-dist --no-interaction
 
       - name: Execute tests
