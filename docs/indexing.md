@@ -91,7 +91,7 @@ A fresh server or deploy gets every followed lexicon from the database: each syn
 
 ## Stored values
 
-- **Postgres** stores `record` as `jsonb`, so fields can be read and indexed without re-parsing each document.
+- **Postgres** stores `record` as `jsonb`, so fields can be read and indexed without re-parsing each document. [Retention](retention.md#compression) sets it to LZ4 compression.
 - **NUL characters** in a record's keys and strings are stored as U+FFFD. Postgres cannot read a field from json holding an escaped NUL, nor store one as jsonb, so a single such record would otherwise break queries across the table or fail its batch forever. For those rare records the stored value no longer matches the record's CID.
 - **MySQL and MariaDB** store the index's dates as `DATETIME`, not `TIMESTAMP`, which holds only 1970 to 2038 and converts through the session timezone.
 
