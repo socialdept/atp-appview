@@ -2,7 +2,7 @@
 
 Part of the [atp-appview docs](../README.md#documentation). How records are stored, sorted, validated and reconciled, account status, and index stats.
 
-`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own.
+`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own. On MySQL and MariaDB, the connection's session timezone must be UTC, as the [installation](../README.md#installation) notes.
 
 ```php
 use SocialDept\AtpAppview\Models\Identity;
