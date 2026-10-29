@@ -15,7 +15,8 @@ return new class () extends Migration {
      * collection to find them: 406 ms for 19 hidden records among 229,000.
      * Partial indexes hold only that sliver, so the list reads it directly.
      *
-     * MySQL and MariaDB have no partial indexes, so they keep the slow path.
+     * MySQL and MariaDB have no partial indexes, so they get plain ones in a
+     * later migration instead.
      */
     public function up(): void
     {
