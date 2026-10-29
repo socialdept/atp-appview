@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Backfill\BackfillTracker;
@@ -15,6 +14,7 @@ use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class TapWebhookTest extends TestCase
 {
@@ -27,7 +27,6 @@ class TapWebhookTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.ingest.password', 'secret');
         $app['config']->set('atp-appview.ingest.handlers', [RecordIndexer::class, BackfillTracker::class]);

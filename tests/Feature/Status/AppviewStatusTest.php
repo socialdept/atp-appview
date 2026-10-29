@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Status;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\IndexStats;
 use SocialDept\AtpAppview\Index\ReconcileErrors;
@@ -14,6 +13,7 @@ use SocialDept\AtpAppview\Models\Block;
 use SocialDept\AtpAppview\Models\FollowedLexicon;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Status\AppviewStatus;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
@@ -29,7 +29,6 @@ class AppviewStatusTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.ingest.admin_url', 'http://tap.test');
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS, self::LIKES]);

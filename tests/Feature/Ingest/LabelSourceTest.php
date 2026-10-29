@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
-use Orchestra\Testbench\TestCase;
 use phpseclib3\Crypt\EC;
 use phpseclib3\Crypt\EC\PrivateKey;
 use React\EventLoop\Loop;
@@ -27,6 +26,7 @@ use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSignals\Labels\LabelStream;
 use SocialDept\AtpSignals\Support\WebSocketConnection;
 
@@ -58,7 +58,6 @@ class LabelSourceTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.labels.source', 'streams');
     }

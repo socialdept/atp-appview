@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Feeds;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Facades\Xrpc;
 use SocialDept\AtpAppview\Features;
@@ -18,6 +17,7 @@ use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Tests\Fixtures\Feeds\LatestThings;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Auth\ServiceAuth;
@@ -50,7 +50,6 @@ class FeedsTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);

@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Route;
 use InvalidArgumentException;
 use Mockery;
 use Mockery\MockInterface;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Index\Events\RecordIndexed;
@@ -25,6 +24,7 @@ use SocialDept\AtpAppview\Spaces\Events\SpaceRecordRemoved;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
 use SocialDept\AtpAppview\Spaces\SyncSpace;
 use SocialDept\AtpAppview\Spaces\SyncSpaceRepo;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSpaces\AtpSpacesServiceProvider;
 use SocialDept\AtpSpaces\Auth\CredentialKey;
@@ -77,7 +77,6 @@ class SpaceSyncTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.features', [Features::spaces()]);

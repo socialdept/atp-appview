@@ -2,8 +2,8 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature;
 
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class ConfigTest extends TestCase
 {

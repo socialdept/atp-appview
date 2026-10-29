@@ -2,8 +2,8 @@
 
 namespace SocialDept\AtpAppview\Tests\Unit\Ingest;
 
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\Ingest\Collections;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class CollectionsTest extends TestCase
 {

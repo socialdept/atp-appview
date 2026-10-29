@@ -6,12 +6,12 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Spaces\SpaceBlobUrls;
 use SocialDept\AtpAppview\Spaces\SpaceGrants;
 use SocialDept\AtpAppview\Spaces\SpaceRecordQuery;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSpaces\AtpSpacesServiceProvider;
 use SocialDept\AtpSpaces\Auth\CredentialKey;
@@ -35,7 +35,6 @@ class SpacesFeatureOffTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.features', []);
         $app['config']->set('atp-appview.spaces.xrpc.enter', 'com.example.space.enter');

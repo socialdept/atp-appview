@@ -6,11 +6,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Auth\FrontendAuth;
 use SocialDept\AtpAppview\Http\Controllers\Auth\OAuthController;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Auth\AuthorizationServerDiscovery;
 use SocialDept\AtpClient\Auth\ClientAssertionManager;
@@ -37,7 +37,6 @@ class FrontendSignInTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('auth.providers.users.model', SignInTestUser::class);
         $app['config']->set('atp-client.service_auth.audience', self::AUDIENCE);
         $app['config']->set('atp-appview.auth.frontend.session_method', self::METHOD);

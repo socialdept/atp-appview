@@ -4,10 +4,10 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapFeatureUnavailableException;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class TapAdminTest extends TestCase
 {

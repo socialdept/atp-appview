@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Views;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -17,6 +16,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Views\Hydrator;
 use SocialDept\AtpAppview\Views\ViewPage;
 use SocialDept\AtpClient\AtpClientServiceProvider;
@@ -36,7 +36,6 @@ class HydratedViewsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('auth.guards.atp', ['driver' => 'atp', 'provider' => 'users', 'session_guard' => 'web']);
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);

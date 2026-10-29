@@ -3,7 +3,6 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Realtime;
 
 use Illuminate\Support\Facades\Event;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Auth\FrontendAuth;
 use SocialDept\AtpAppview\Index\Events\RecordIndexed;
@@ -12,6 +11,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Realtime\Ping;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -29,7 +29,6 @@ class RealtimeFeatureOffTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.ingest.collections', ['com.example.post']);

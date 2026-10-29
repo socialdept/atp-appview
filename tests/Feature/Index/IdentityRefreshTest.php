@@ -3,11 +3,11 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
 use Illuminate\Support\Facades\Cache;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\IdentityRefresh;
 use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 use SocialDept\AtpSupport\Data\DidDocument;
 use SocialDept\AtpSupport\Facades\Resolver;
@@ -23,7 +23,6 @@ class IdentityRefreshTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.profiles.sources', [['collection' => 'app.bsky.actor.profile']]);
     }

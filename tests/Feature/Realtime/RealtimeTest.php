@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Auth\FrontendAuth;
 use SocialDept\AtpAppview\Features;
@@ -23,6 +22,7 @@ use SocialDept\AtpAppview\Notifications\Events\NotificationCreated;
 use SocialDept\AtpAppview\Realtime\FlushPings;
 use SocialDept\AtpAppview\Realtime\Ping;
 use SocialDept\AtpAppview\Realtime\Realtime;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
@@ -55,7 +55,6 @@ class RealtimeTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

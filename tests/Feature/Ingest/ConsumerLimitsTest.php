@@ -5,9 +5,9 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class ConsumerLimitsTest extends TestCase
 {
@@ -18,7 +18,6 @@ class ConsumerLimitsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
     }
 

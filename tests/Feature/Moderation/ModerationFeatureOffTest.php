@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Ingest\Batch;
@@ -19,6 +18,7 @@ use SocialDept\AtpAppview\Labels\LabelIndexer;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Moderation\AccountActions;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Views\Parts\Moderation;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -37,7 +37,6 @@ class ModerationFeatureOffTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

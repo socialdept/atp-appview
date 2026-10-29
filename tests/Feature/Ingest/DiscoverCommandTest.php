@@ -5,9 +5,9 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Ingest\RepoDiscovery;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class DiscoverCommandTest extends TestCase
 {
@@ -23,7 +23,6 @@ class DiscoverCommandTest extends TestCase
     {
         $app['config']->set('atp-appview.ingest.discovery_url', self::RELAY);
         $app['config']->set('atp-appview.ingest.admin_url', self::TAP);
-        $app['config']->set('database.default', 'testing');
     }
 
     protected function setUp(): void

@@ -6,7 +6,6 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
-use Orchestra\Testbench\TestCase;
 use phpseclib3\Crypt\EC;
 use phpseclib3\Crypt\EC\PrivateKey;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
@@ -21,6 +20,7 @@ use SocialDept\AtpAppview\Ingest\Labels\LabelVerifier;
 use SocialDept\AtpAppview\Labels\Labels;
 use SocialDept\AtpAppview\Labels\SubjectSync;
 use SocialDept\AtpAppview\Models\Label;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 /**
  * Labels a labeler already had, fetched with queryLabels in place of Tack's
@@ -52,7 +52,6 @@ class BackfillLabelsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.labels.source', 'streams');
         $app['config']->set('atp-appview.labels.streams.query_rate', 1000);

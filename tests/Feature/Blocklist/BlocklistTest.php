@@ -6,7 +6,6 @@ use Illuminate\Cache\Events\RetrievingKey;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -18,6 +17,7 @@ use SocialDept\AtpAppview\Ingest\IngestBuffer;
 use SocialDept\AtpAppview\Models\Block;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class BlocklistTest extends TestCase
 {
@@ -34,7 +34,6 @@ class BlocklistTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.admin_url', self::TAP);
         $app['config']->set('atp-appview.ingest.discovery_url', self::RELAY);
         $app['config']->set('atp-support.plc_directory', self::PLC);

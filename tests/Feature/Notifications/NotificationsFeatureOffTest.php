@@ -6,7 +6,6 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Ingest\Batch;
@@ -16,6 +15,7 @@ use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Notifications\NotificationIndexer;
 use SocialDept\AtpAppview\Notifications\NotificationPreferences;
 use SocialDept\AtpAppview\Notifications\Notifications;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -34,7 +34,6 @@ class NotificationsFeatureOffTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

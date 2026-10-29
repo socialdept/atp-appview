@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Backfill;
 
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Backfill\Backfills;
 use SocialDept\AtpAppview\Backfill\Events\BackfillFinished;
@@ -13,6 +12,7 @@ use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeAtpManager;
@@ -56,7 +56,6 @@ class ReconcileBackfillTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.source', 'jetstream');
         $app['config']->set('atp-appview.ingest.discovery_url', self::RELAY);
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS]);

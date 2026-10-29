@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Lexicons;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Mockery;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -17,6 +16,7 @@ use SocialDept\AtpAppview\Lexicons\FollowedLexiconsHandler;
 use SocialDept\AtpAppview\Lexicons\FollowResult;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSchema\Parser\SchemaLoader;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -49,7 +49,6 @@ class LexiconFollowerTest extends TestCase
     {
         $this->dir = sys_get_temp_dir().'/atp-appview-lexicons-'.bin2hex(random_bytes(4));
 
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.sources', []);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-schema.cache.enabled', false);

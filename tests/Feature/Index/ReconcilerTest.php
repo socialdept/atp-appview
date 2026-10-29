@@ -3,7 +3,6 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
 use Illuminate\Support\Carbon;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Index\Reconciler;
@@ -15,6 +14,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeAtpManager;
@@ -50,7 +50,6 @@ class ReconcilerTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS, self::LIKES]);
     }
 

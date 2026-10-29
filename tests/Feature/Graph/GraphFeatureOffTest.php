@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Graph;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Graph\Graph;
@@ -15,6 +14,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -32,7 +32,6 @@ class GraphFeatureOffTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);
