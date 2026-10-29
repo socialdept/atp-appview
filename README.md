@@ -54,7 +54,7 @@ The [Features](docs/features.md) doc covers what an app turns on beyond the core
 - **[Feeds](docs/feeds.md)**: Custom feeds in the shapes of Bluesky's feed generators, under Bluesky's names or your own.
 - **[Standing](docs/standing.md)**: Follower and link counts, proven verification by pluggable verifiers, and weighted scores.
 - **[Realtime](docs/realtime.md)**: Pings over Laravel broadcasting when records and notifications change, and the record events behind them.
-- **[Spaces](docs/spaces.md)**: A copy of the permissioned spaces the app follows, synced from each member's PDS and kept apart from the public index.
+- **[Spaces](docs/spaces.md)**: A copy of the permissioned spaces the app follows, synced from each member's PDS, kept apart from the public index, and read only by viewers the space lets in.
 
 ## License
 
