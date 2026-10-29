@@ -90,7 +90,7 @@ class ViewQueryHandler extends DefaultQueryHandler
         }
 
         return array_filter([
-            $this->listKey() => $this->presentPage($page['records']),
+            $this->listKey() => $this->presentPage($this->warm($page['records'])),
             'cursor' => $page['cursor'],
         ], fn ($value) => $value !== null);
     }

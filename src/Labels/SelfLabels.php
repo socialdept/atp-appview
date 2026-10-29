@@ -58,6 +58,8 @@ class SelfLabels
         $connection->table('atp_records')
             ->when($collection !== null, fn ($query) => $query->where('collection', $collection))
             ->whereNull('deleted_at')
+            // A cold record keeps the self-labels its body gave.
+            ->whereNull('hollowed_at')
             ->select(['uri', 'did', 'cid', 'record', 'indexed_at'])
             ->orderBy('uri')
             ->chunk(500, function ($rows) use ($connection, $progress, &$changed, &$read) {

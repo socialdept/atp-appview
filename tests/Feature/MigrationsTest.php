@@ -175,4 +175,26 @@ class MigrationsTest extends TestCase
         $this->assertTrue(Schema::hasTable('atp_space_record_values'));
         $this->assertTrue(Schema::hasColumn('atp_index_keys', 'spaces_built_at'));
     }
+
+    /**
+     * Records indexed before cold records existed all hold their bodies.
+     */
+    public function test_records_already_indexed_are_not_cold(): void
+    {
+        $name = '2026_11_10_000002_add_hollowed_at_to_atp_records_table';
+
+        // Back to before this migration, however many follow it.
+        $this->artisan('migrate:fresh')->assertSuccessful();
+        $step = DB::table('migrations')->where('migration', '>=', $name)->count();
+        $this->artisan('migrate:rollback', ['--step' => $step])->assertSuccessful();
+        $this->assertFalse(Schema::hasColumn('atp_records', 'hollowed_at'));
+
+        DB::table('atp_records')->insert(['uri' => 'at://did:plc:alice/app.example.post/a', 'did' => 'did:plc:alice', 'collection' => 'app.example.post', 'rkey' => 'a', 'rev' => '3l2aaaaaaaaaa', 'record' => '{}', 'indexed_at' => '2026-11-04 08:00:00']);
+
+        $this->artisan('migrate')->assertSuccessful();
+
+        $this->assertTrue(Schema::hasColumn('atp_records', 'hollowed_at'));
+        $this->assertNull(DB::table('atp_records')->value('hollowed_at'));
+        $this->assertSame('{}', DB::table('atp_records')->value('record'));
+    }
 }

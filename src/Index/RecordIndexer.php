@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Index;
 
+use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Support\Carbon;
 use SocialDept\AtpAppview\Features\AppView;
@@ -67,7 +68,7 @@ class RecordIndexer implements BatchHandler
 
         // What live deletes held, read before they are cleared, for RecordRemoved.
         $deleted = array_map(fn (RecordEvent $event) => $event->uri(), array_filter($live, fn (RecordEvent $event) => $event->action === RecordAction::Delete));
-        $previous = $deleted === [] ? [] : $connection->table('atp_records')->whereIn('uri', array_values($deleted))->whereNotNull('record')->pluck('record', 'uri')->all();
+        $previous = $deleted === [] ? [] : $this->previous($connection, array_values($deleted));
 
         $connection->transaction(function () use ($connection, $records, $identities, $now) {
             $status = new AccountStatus($connection);
@@ -116,6 +117,28 @@ class RecordIndexer implements BatchHandler
                 ? new RecordRemoved($event->uri(), $event->did, $event->collection, $event->rkey, (array) json_decode((string) ($previous[$event->uri()] ?? '[]'), true))
                 : new RecordIndexed($event->uri(), $event->did, $event->collection, $event->rkey, $event->action, $event->record ?? []));
         }
+    }
+
+    /**
+     * What these records held before a delete, by uri: the stored body, or a
+     * cold record's from the cache, never fetched for a record being deleted.
+     *
+     * @param  array<int, string>  $uris
+     * @return array<string, string>
+     */
+    protected function previous(Connection $connection, array $uris): array
+    {
+        $previous = [];
+
+        foreach ($connection->table('atp_records')->whereIn('uri', $uris)->get(['uri', 'cid', 'record', 'hollowed_at']) as $row) {
+            $body = $row->record ?? ($row->hollowed_at !== null ? app(ColdRecords::class)->cached($row->cid) : null);
+
+            if ($body !== null) {
+                $previous[$row->uri] = is_string($body) ? $body : json_encode($body);
+            }
+        }
+
+        return $previous;
     }
 
     protected function validation(): RecordValidation

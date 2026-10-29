@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Views;
 
 use Closure;
 use SocialDept\AtpAppview\Graph\Graph;
+use SocialDept\AtpAppview\Index\ColdRecords;
 
 /**
  * A thread as a tree, from records that point at their parent: the anchor,
@@ -34,6 +35,9 @@ class ReplyTree
     public static function parents(iterable $records, string $path): array
     {
         $parents = [];
+        // Rows selected with hollowed_at get cold bodies back, all at once.
+        $records = $records instanceof \Traversable ? iterator_to_array($records, false) : $records;
+        app(ColdRecords::class)->thaw($records);
 
         foreach ($records as $record) {
             $data = is_array($record->record) ? $record->record : (array) json_decode((string) $record->record, true);

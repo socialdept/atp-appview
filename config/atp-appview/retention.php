@@ -33,4 +33,21 @@ return [
     //
     //     'com.example.read' => 30,
     'max_age' => [],
+
+    // Days before a record's body is cleared to save space, by sort_at, by
+    // collection, '*' for every other one. Null keeps bodies. The row stays,
+    // with its field values, counts and references, and appview:prune clears
+    // only the body, which is fetched again when something reads it.
+    'cold' => [
+        '*' => env('ATP_APPVIEW_COLD_AFTER_DAYS'),
+    ],
+
+    // Where cold bodies are fetched from: slingshot, at
+    // atp-support.microcosm.slingshot.url, or pds, each record's own. Bodies
+    // are cached by CID for cache_ttl seconds.
+    'cold_fetch' => [
+        'from' => env('ATP_APPVIEW_COLD_FETCH_FROM', 'slingshot'),
+        'timeout' => (int) env('ATP_APPVIEW_COLD_FETCH_TIMEOUT', 5),
+        'cache_ttl' => (int) env('ATP_APPVIEW_COLD_FETCH_CACHE_TTL', 86400),
+    ],
 ];

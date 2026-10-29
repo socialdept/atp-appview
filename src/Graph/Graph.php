@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use LogicException;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\Graph as GraphFeature;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Index\Field;
 use SocialDept\AtpAppview\Index\RecordTables;
 use SocialDept\AtpAppview\Index\RecordValues;
@@ -531,8 +532,10 @@ class Graph
             ->whereNull('hidden_at')
             ->whereNull('moderated_at')
             ->orderBy('uri')
-            ->select('record')
+            ->select(['uri', 'cid', 'record', 'hollowed_at', 'deleted_at'])
             ->chunk(1000, function ($rows) use ($relation, &$subjects) {
+                app(ColdRecords::class)->thaw($rows);
+
                 foreach ($rows as $row) {
                     $value = is_array($row->record) ? $row->record : (array) json_decode((string) $row->record, true);
                     $subject = data_get($value, $relation['path']);

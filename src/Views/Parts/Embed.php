@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Views\Parts;
 
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Views\Contracts\Part;
 use SocialDept\AtpAppview\Views\View;
@@ -44,6 +45,8 @@ class Embed implements Part
             ->whereIn('uri', array_values(array_unique($targets)))
             ->get()
             ->keyBy('uri');
+
+        app(ColdRecords::class)->thaw($found);
 
         return collect($targets)
             ->filter(fn (string $target) => isset($found[$target]))
