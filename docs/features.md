@@ -20,7 +20,7 @@ A helper's options go over that feature's config section, so `Features::notifica
 
 Feeds are a fourth, `Features::feeds()`, off unless listed. See [Feeds](feeds.md). Search is a fifth, `Features::search()`, off unless listed. See [Search](search.md). Standing is a sixth, `Features::standing()`, off unless listed. See [Standing](standing.md). Realtime is a seventh, `Features::realtime()`, off unless listed. See [Realtime](realtime.md). Spaces is an eighth, `Features::spaces()`, off unless listed. See [Spaces](spaces.md).
 
-All three ship enabled, and leaving one out turns it off: its tables are not created, its routes, commands and XRPC methods are not registered, and nothing is kept for it as records are indexed. Left out, the graph answers as though nobody follows, blocks or mutes anyone. Left out, moderation applies no labels and nobody counts as banned or under review, and the `Moderation` and `Labels` view parts are neutral. The notifications, notification preferences, mutes, label policy and account action APIs refuse when their feature is off, naming the feature to add.
+All three ship enabled, and leaving one out turns it off: its tables are not created, its routes, commands and XRPC methods are not registered, and nothing is kept for it as records are indexed. Left out, the graph answers as though nobody follows, blocks or mutes anyone. Left out, moderation applies no labels or label preferences and nobody counts as banned or under review, and the `Moderation` and `Labels` view parts are neutral. The notifications, notification preferences, mutes, label policy, label preference and account action APIs refuse when their feature is off, naming the feature to add.
 
 ## Scheduling
 
