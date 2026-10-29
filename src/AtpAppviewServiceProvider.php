@@ -19,6 +19,7 @@ use SocialDept\AtpAppview\Console\BackfillCommand;
 use SocialDept\AtpAppview\Console\BackfillWorkCommand;
 use SocialDept\AtpAppview\Console\BlockCommand;
 use SocialDept\AtpAppview\Console\BlocksCommand;
+use SocialDept\AtpAppview\Console\CompressCommand;
 use SocialDept\AtpAppview\Console\ConsumeCommand;
 use SocialDept\AtpAppview\Console\DiscoverCommand;
 use SocialDept\AtpAppview\Console\FailedDeliveriesCommand;
@@ -216,6 +217,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 BackfillWorkCommand::class,
                 BlockCommand::class,
                 BlocksCommand::class,
+                CompressCommand::class,
                 ConsumeCommand::class,
                 JetstreamCommand::class,
                 LabelsStreamCommand::class,

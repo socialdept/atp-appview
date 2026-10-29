@@ -22,6 +22,7 @@
 
 - **Ingest:** sync any set of collections from the network through Tap or Tab, in batches, without flooding the app during backfill.
 - **Index:** keep every ingested record in the application's own database, queryable through Eloquent.
+- **Retention:** opt in to keeping the index small, with LZ4 compression for stored records on Postgres.
 - **XRPC:** serve queries and procedures generated from lexicons, with custom handlers where the default is not enough.
 - **Auth:** one guard that works whether OAuth tokens live on the server or in the browser, with service proxying in both cases.
 
@@ -34,7 +35,7 @@ composer require socialdept/atp-appview
 php artisan vendor:publish --tag=atp-appview-config
 ```
 
-The config is split: `config/atp-appview.php` holds what is global (auth, ingest, the index, the service identity, XRPC), and `config/atp-appview/` holds a file per area (`fields.php`, `views.php`, `profiles.php`, `images.php`, `lexicons.php`, `backfill.php`, `blocklist.php`). Laravel loads each as a key of its own, `atp-appview.fields` and so on. Every section keeps the package's defaults for settings it does not mention, so a setting added in a later release reaches a config published before it.
+The config is split: `config/atp-appview.php` holds what is global (auth, ingest, the index, the service identity, XRPC), and `config/atp-appview/` holds a file per area (`fields.php`, `views.php`, `profiles.php`, `images.php`, `lexicons.php`, `backfill.php`, `blocklist.php`, `retention.php`). Laravel loads each as a key of its own, `atp-appview.fields` and so on. Every section keeps the package's defaults for settings it does not mention, so a setting added in a later release reaches a config published before it.
 
 Then run `php artisan migrate`. Postgres, MySQL, MariaDB and SQLite are supported. On MySQL and MariaDB, set the connection's session timezone to UTC with `'timezone' => '+00:00'` in its entry in `config/database.php`. The package writes times in UTC, and MySQL converts TIMESTAMP columns through the session timezone, so in any other zone a time near a daylight saving change shifts by an hour.
 
@@ -48,6 +49,7 @@ The [Features](docs/features.md) doc covers what an app turns on beyond the core
 - **[Moderation](docs/moderation.md)**: Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 - **[Blocklist](docs/blocklist.md)**: Keeping repos, collections and hosts out of the index.
 - **[Index](docs/indexing.md)**: How records are stored, sorted, validated and reconciled, account status, and index stats.
+- **[Retention](docs/retention.md)**: Keeping the index small: LZ4 compression for stored records on Postgres.
 - **[XRPC](docs/xrpc.md)**: Default queries and procedures, custom handlers, calling methods, and writing records.
 - **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, reply trees, fields kept in the index, profiles and images.
 - **[Social graph](docs/social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.
