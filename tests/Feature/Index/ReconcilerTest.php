@@ -120,6 +120,19 @@ class ReconcilerTest extends TestCase
         $this->assertSame('hello', $this->record(self::POSTS, 'fine')->record['text'], 'A repair rewrites a reconciled record, as it would one from Tap.');
     }
 
+    public function test_records_past_their_collections_max_age_are_not_indexed_by_a_reconcile(): void
+    {
+        config(['atp-appview.retention.max_age' => [self::LIKES => 30]]);
+        $this->onPds(self::LIKES, 'old', 'cid-old', ['createdAt' => now('UTC')->subDays(31)->toIso8601ZuluString()]);
+        $this->onPds(self::LIKES, 'recent', 'cid-recent', ['createdAt' => now('UTC')->subDays(1)->toIso8601ZuluString()]);
+
+        $result = app(Reconciler::class)->reconcile(self::DID);
+
+        $this->assertSame(['at://'.self::DID.'/'.self::LIKES.'/recent'], $result->indexed, 'Not listed as indexed on every run either.');
+        $this->assertNull($this->record(self::LIKES, 'old'));
+        $this->assertNotNull($this->record(self::LIKES, 'recent'));
+    }
+
     public function test_a_record_the_pds_no_longer_has_is_tombstoned(): void
     {
         foreach (['a', 'b', 'c'] as $rkey) {

@@ -4,10 +4,16 @@ namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
+use SocialDept\AtpAppview\Index\Events\RecordIndexed;
+use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\Retention;
+use SocialDept\AtpAppview\Ingest\Batch;
+use SocialDept\AtpAppview\Ingest\Events\RecordAction;
+use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
@@ -68,7 +74,7 @@ class RetentionTest extends TestCase
         $this->tombstone(self::POSTS, 'old', 900);
         $this->record(self::POSTS, 'live', ['indexed_at' => now('UTC')->subYears(3), 'sort_at' => now('UTC')->subYears(3)]);
 
-        $this->artisan('appview:prune')->expectsOutputToContain('0 tombstones deleted')->assertSuccessful();
+        $this->artisan('appview:prune')->expectsOutputToContain('0 tombstones, 0 expired records deleted')->assertSuccessful();
 
         $this->assertSame(['live', 'old'], $this->rkeys());
     }
@@ -85,7 +91,7 @@ class RetentionTest extends TestCase
         $this->tombstone('com.example.kept', 'f-kept', 900);
 
         $this->artisan('appview:prune')
-            ->expectsOutputToContain('2 tombstones deleted')
+            ->expectsOutputToContain('2 tombstones, 0 expired records deleted')
             ->assertSuccessful();
 
         $this->assertSame(['f-kept', 'e-recent', 'b-recent', 'c-live'], $this->rkeys(), 'Live records, recent tombstones and exempt collections stay.');
@@ -99,7 +105,7 @@ class RetentionTest extends TestCase
         $this->tombstone(self::LIKES, 'c', 31);
 
         $this->artisan('appview:prune', ['--dry-run' => true])
-            ->expectsOutputToContain('3 tombstones would be deleted')
+            ->expectsOutputToContain('3 tombstones, 0 expired records would be deleted')
             ->assertSuccessful();
 
         $this->assertCount(3, $this->rkeys());
@@ -176,7 +182,71 @@ class RetentionTest extends TestCase
             'rev' => '3l2aaaaaaaaaa', 'indexed_at' => now('UTC'), 'sort_at' => now('UTC'), 'deleted_at' => now('UTC')->subDays(31),
         ]);
 
-        $this->artisan('appview:prune')->expectsOutputToContain('1 tombstones deleted')->assertSuccessful();
+        $this->artisan('appview:prune')->expectsOutputToContain('1 tombstones, 0 expired records deleted')->assertSuccessful();
         $this->assertSame(0, DB::connection('index')->table('atp_records')->count());
+    }
+
+    public function test_records_past_their_collections_max_age_are_deleted_with_what_references_them(): void
+    {
+        // '*' is never a default for age: posts are kept however old.
+        config(['atp-appview.retention.max_age' => [self::LIKES => 30, '*' => 1]]);
+        $old = now('UTC')->subDays(31);
+
+        $this->record(self::LIKES, 'a-old', ['sort_at' => $old, 'indexed_at' => now('UTC')]);
+        $this->record(self::LIKES, 'b-recent', ['sort_at' => now('UTC')->subDays(29)]);
+        $this->record(self::LIKES, 'c-old-tombstone', ['sort_at' => $old, 'cid' => null, 'record' => null, 'deleted_at' => now('UTC')]);
+        $this->record(self::LIKES, 'd-old-hidden', ['sort_at' => $old, 'hidden_at' => now('UTC')]);
+        $this->record(self::POSTS, 'e-old-post', ['sort_at' => now('UTC')->subYears(2)]);
+
+        $id = (int) DB::table('atp_records')->where('rkey', 'a-old')->value('id');
+        $values = app(RecordValues::class);
+        $key = $values->keyId($values->field(self::LIKES, 'subject.uri'));
+        DB::table('atp_record_values')->insert(['key_id' => $key, 'record_id' => $id, 'value_hash' => 7, 'sort_at' => $old, 'hidden' => false]);
+        DB::table('atp_value_counts')->insert(['key_id' => $key, 'value_hash' => 7, 'total' => 1]);
+
+        $this->artisan('appview:prune', ['--dry-run' => true])
+            ->expectsOutputToContain('0 tombstones, 3 expired records would be deleted')
+            ->assertSuccessful();
+        $this->assertCount(5, $this->rkeys());
+
+        $this->artisan('appview:prune')
+            ->expectsOutputToContain('0 tombstones, 3 expired records deleted')
+            ->assertSuccessful();
+
+        $this->assertSame(['b-recent', 'e-old-post'], $this->rkeys());
+        $this->assertNull(Retention::maxAgeDays(self::POSTS));
+        $this->assertFalse(Retention::outlived(self::POSTS, ['createdAt' => '2001-01-01T00:00:00Z'], 'x', now('UTC')), 'Ingest does not age posts either.');
+        $this->assertSame(0, DB::table('atp_record_values')->count());
+        $this->assertSame(0, (int) DB::table('atp_value_counts')->where('key_id', $key)->value('total'));
+    }
+
+    public function test_ingest_skips_records_already_past_max_age_but_not_deletes(): void
+    {
+        config(['atp-appview.retention.max_age' => [self::LIKES => 30]]);
+        Event::fake([RecordIndexed::class]);
+
+        $event = fn (string $rkey, string $createdAt, RecordAction $action = RecordAction::Create, bool $live = true) => new RecordEvent(
+            0,
+            'did:plc:alice',
+            self::LIKES,
+            $rkey,
+            $action,
+            $action === RecordAction::Delete ? null : "cid-{$rkey}",
+            '3l2aaaaaaaaab',
+            $action === RecordAction::Delete ? null : ['createdAt' => $createdAt],
+            $live,
+        );
+
+        app(RecordIndexer::class)->handle(new Batch([
+            $event('old', now('UTC')->subDays(31)->toIso8601ZuluString()),
+            $event('recent', now('UTC')->subDays(29)->toIso8601ZuluString()),
+            $event('backfilled', now('UTC')->subYear()->toIso8601ZuluString(), live: false),
+            $event('gone', '', RecordAction::Delete),
+        ]));
+
+        $this->assertSame(['gone', 'recent'], $this->rkeys(), 'A delete still leaves a tombstone.');
+        Event::assertDispatchedTimes(RecordIndexed::class, 1);
+        $this->assertTrue(Retention::outlived(self::LIKES, ['createdAt' => now('UTC')->subDays(31)->toIso8601ZuluString()], 'x', now('UTC')));
+        $this->assertFalse(Retention::outlived(self::POSTS, ['createdAt' => '2001-01-01T00:00:00Z'], 'x', now('UTC')), 'Only collections named are aged.');
     }
 }

@@ -1,12 +1,12 @@
 # Retention
 
-Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, and pruning old tombstones.
+Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, and keeping some collections only while recent.
 
 Everything here is off until set in `config/atp-appview/retention.php`, so an app that sets nothing keeps every record as it is.
 
 ## Pruning
 
-`appview:prune` removes what retention lets go. Schedule it:
+`appview:prune` removes what retention lets go: old [tombstones](#tombstones), then records past their collection's [max age](#max-age). Schedule it:
 
 ```php
 Schedule::command('appview:prune')->everyFiveMinutes()->withoutOverlapping();
@@ -100,3 +100,30 @@ What remains is a copy older than the window from somewhere the package does not
 | MySQL, MariaDB | The plain `collection, deleted_at` index they already have |
 
 The list of collections comes from one seek per collection along the collection index, so finding them never reads the table.
+
+## Max age
+
+Some collections only matter while recent, such as read receipts or presence. Name them with the number of days to keep, and `appview:prune` deletes older records outright, row and all, with what references them:
+
+```php
+// config/atp-appview/retention.php
+'max_age' => [
+    'app.example.read' => 30,
+],
+```
+
+There is no `'*'`, and one set is ignored: no collection is ever aged unless named.
+
+Age is `sort_at`, when the record was made as far as the index can trust it ([sort order](indexing.md#sort-order)):
+
+- `indexed_at` would count a backfilled receipt from a year ago as new, and keep it for another whole window.
+- `created_at` is not a column, and the record's own date is what `sort_at` already reads, capped at the time it was indexed, so a record claiming a future date ages from when it arrived.
+- It is what the collection is listed by, so the oldest go first and the read uses the `collection, sort_at, uri` index every database already has. No migration is needed.
+
+A record whose author dated it in the past ages from that date. It is their record saying how old it is. After changing `index.sort_fields`, run `appview:resort` before pruning, so the ages are read from the new fields.
+
+Tombstones in the collection go by the same `sort_at`. Their delete would only stop an older copy of a record already past the window, which ingest leaves out anyway.
+
+### Ingest leaves them out
+
+A record already older than the window when it arrives is not indexed only to be pruned: Tap, Jetstream, backfills, `appview:reconcile`, the sync procedure and failed delivery retries all go through the same check, by the `sort_at` the record would get. It dispatches no record event, and handlers that read what the index stored, as notifications do, find nothing. A handler of the app's own that reads the batch's events directly still sees it, and can ask `Retention::outlived()`. Deletes still go through, so a delete of a recent record leaves its tombstone. `appview:reconcile` does not count the records it leaves out as indexed, so it does not report them on every run.

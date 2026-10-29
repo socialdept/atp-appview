@@ -140,6 +140,7 @@ class Reconciler
         $indexed = [];
         $tombstoned = [];
         $connection = $this->db->connection(config('atp-appview.index.connection'));
+        $now = Carbon::now('UTC');
 
         foreach ($listed as $collection => $records) {
             $rows = $connection->table('atp_records')
@@ -149,6 +150,11 @@ class Reconciler
                 ->keyBy('uri');
 
             foreach ($records as $uri => $record) {
+                // Past what the collection keeps, so the index never holds it.
+                if (Retention::outlived($collection, $record['value'], $record['rkey'], $now)) {
+                    continue;
+                }
+
                 $row = $rows[$uri] ?? null;
                 $current = $row !== null && $row->deleted_at === null && $row->cid === $record['cid'];
 

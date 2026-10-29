@@ -28,7 +28,8 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  * is in the repo in the repair column, which is null for every other record.
  *
  * Records are checked against their lexicon first when
- * atp-appview.index.validate asks for it, through RecordValidation.
+ * atp-appview.index.validate asks for it, through RecordValidation, and
+ * those older than atp-appview.retention.max_age keeps are left out.
  *
  * An account event changes its records too, through AccountStatus: a deleted
  * account's records are tombstoned, an inactive account's hidden.
@@ -50,6 +51,10 @@ class RecordIndexer implements BatchHandler
         // A record in a space belongs in atp_space_records, never here.
         $public = array_values(array_filter($batch->records(), fn (RecordEvent $event) => $event->space === null));
         $events = RecordValidation::mode() === RecordValidation::OFF ? $public : $this->validation()->filter($public);
+        // A record already older than its collection keeps records is not
+        // indexed only to be pruned. Deletes still go through.
+        $events = array_values(array_filter($events, fn (RecordEvent $event) => $event->action === RecordAction::Delete
+            || ! Retention::outlived($event->collection, $event->record, $event->rkey, $clock)));
         $records = $this->recordRows($events, $now, $clock);
         $identities = $this->identityRows($batch->identities(), $now);
 
