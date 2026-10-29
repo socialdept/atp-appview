@@ -108,7 +108,7 @@ Each index on `atp_records` serves a specific read:
 | `collection, sort_at, uri` where hidden | A collection's hidden records, newest first (Postgres and SQLite) |
 | `collection, sort_at, uri` where tombstoned | A collection's tombstones, newest first (Postgres and SQLite) |
 
-Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so there those lists stay slow.
+Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so they get plain indexes on the collection and `hidden_at` or `deleted_at` instead, and the same lists take about a millisecond.
 
 On `atp_identities`, `reconciled_at` serves `appview:reconcile` picking the repos due a check. Postgres builds it nulls first, since the run starts with repos never checked.
 
