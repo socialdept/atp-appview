@@ -110,6 +110,9 @@ class StandingTest extends TestCase
         // Constellation's client is Guzzle, not Laravel's HTTP client, so it
         // is mocked rather than faked, and nothing reaches the network.
         Http::preventStrayRequests();
+        // Profiles are read from Slingshot through a pool, which throws a
+        // stray request on Laravel 12, so the read fails as a connection.
+        Http::fake(['slingshot.microcosm.blue/*' => Http::failedConnection()]);
         $this->constellation(99);
         Resolver::shouldReceive('resolvePds')->andReturn('https://pds.example')->byDefault();
         $atp = Atp::fake();
