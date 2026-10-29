@@ -57,6 +57,8 @@ use SocialDept\AtpAppview\Ingest\TapAdmin;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Lexicons\LexiconFollower;
 use SocialDept\AtpAppview\Profiles\Profiles;
+use SocialDept\AtpAppview\Spaces\Contracts\SpaceAccess;
+use SocialDept\AtpAppview\Spaces\SpaceGrants;
 use SocialDept\AtpAppview\Xrpc\ServiceIdentity;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
@@ -169,6 +171,9 @@ class AtpAppviewServiceProvider extends ServiceProvider
         $this->app->singleton(Blocklist::class);
 
         $this->app->singleton(XrpcRegistry::class);
+
+        // Who may read a space, unless the app answers itself.
+        $this->app->bindIf(SpaceAccess::class, SpaceGrants::class);
 
         $this->app->singleton(RecordValues::class);
 

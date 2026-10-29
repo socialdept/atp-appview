@@ -13,6 +13,11 @@
 | atp_space_records, apart from the public index. Space types themselves
 | are configured in atp-spaces.
 |
+| A viewer reads a space's records through SpaceRecordQuery while they
+| hold a grant: the space's authority issued them a credential through
+| the AppView, with SpaceGrants::enter() in backend mode or the enter
+| procedure below in frontend mode, and it has not expired.
+|
 */
 
 return [
@@ -31,4 +36,17 @@ return [
 
     // Entries per page when listing a space's repos and a repo's operations.
     'page_size' => 100,
+
+    // The procedure a browser enters a space through, in frontend mode,
+    // under your own namespace. It takes {space, delegationToken}, the
+    // token from the viewer's PDS (getDelegationToken), exchanges it for a
+    // credential and answers {space, expiresAt}, when the viewer's grant
+    // lapses unless they enter again. The token must name the viewer, who
+    // comes from a Laravel session or a service auth token, as any XRPC
+    // method does. Null serves no procedure.
+    //
+    //     'enter' => 'com.example.space.enter',
+    'xrpc' => [
+        'enter' => null,
+    ],
 ];

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Schema;
 use LogicException;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
+use SocialDept\AtpAppview\Spaces\SpaceGrants;
+use SocialDept\AtpAppview\Spaces\SpaceRecordQuery;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSpaces\AtpSpacesServiceProvider;
@@ -19,8 +21,9 @@ use SocialDept\AtpSpaces\SpaceRef;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 /**
- * Without Features::spaces(), no space tables, command or notification
- * routes exist, and following a space refuses, naming the feature.
+ * Without Features::spaces(), no space tables, command, notification
+ * routes or enter procedure exist, and following, entering or querying a
+ * space refuses, naming the feature.
  */
 class SpacesFeatureOffTest extends TestCase
 {
@@ -34,6 +37,7 @@ class SpacesFeatureOffTest extends TestCase
         $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.features', []);
+        $app['config']->set('atp-appview.spaces.xrpc.enter', 'com.example.space.enter');
     }
 
     public function test_nothing_of_spaces_is_registered(): void
@@ -42,8 +46,26 @@ class SpacesFeatureOffTest extends TestCase
 
         $this->assertFalse(Schema::hasTable('atp_spaces'));
         $this->assertFalse(Schema::hasTable('atp_space_records'));
+        $this->assertFalse(Schema::hasTable('atp_space_grants'));
         $this->assertArrayNotHasKey('appview:spaces:sync', Artisan::all());
         $this->assertFalse(Route::has('atp-spaces.com.atproto.space.notifyWrite'));
+        $this->postJson('/xrpc/com.example.space.enter', ['space' => 'at://did:plc:authority/space/com.example.forum/main', 'delegationToken' => 'a.b.c'])->assertStatus(501);
+    }
+
+    public function test_entering_a_space_refuses(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Features::spaces()');
+
+        app(SpaceGrants::class)->enterFromDelegation(SpaceRef::make('did:plc:authority', 'com.example.forum', 'main'), 'did:plc:alice', 'a.b.c');
+    }
+
+    public function test_querying_a_space_refuses(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Features::spaces()');
+
+        SpaceRecordQuery::in(SpaceRef::make('did:plc:authority', 'com.example.forum', 'main'))->visibleTo('did:plc:alice')->get();
     }
 
     public function test_following_a_space_refuses(): void
