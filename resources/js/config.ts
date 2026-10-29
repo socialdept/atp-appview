@@ -45,6 +45,9 @@ export interface AtprotoConfig {
     // The procedure the browser joins its private channel through, when the
     // app has the realtime feature. Null otherwise.
     realtime?: { authorize: string } | null;
+    // Set on the page after the server signed the user out, so the browser
+    // signs out too instead of starting a new server session. Null otherwise.
+    signOut?: string | null;
     // Prefixes the browser storage the library uses, so two apps on one
     // origin keep their sessions apart.
     namespace?: string;
