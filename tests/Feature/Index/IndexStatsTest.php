@@ -118,12 +118,19 @@ class IndexStatsTest extends TestCase
         $this->assertSame(1, app(IndexStats::class)->totals()['records']);
     }
 
+    /**
+     * Partial indexes where the database has them, and plain ones on the
+     * collection and the column on MySQL and MariaDB, which do not.
+     */
     public function test_hidden_records_and_tombstones_have_their_own_indexes(): void
     {
         $indexes = collect(Schema::getIndexes('atp_records'))->pluck('name');
 
-        // MySQL and MariaDB have no partial indexes, so they go without.
-        if (! in_array(DB::connection()->getDriverName(), ['pgsql', 'sqlite'], true)) {
+        // MySQL and MariaDB have no partial indexes, so they get plain
+        // composite ones in their place.
+        if (in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+            $this->assertContains('atp_records_collection_hidden_at_index', $indexes);
+            $this->assertContains('atp_records_collection_deleted_at_index', $indexes);
             $this->assertNotContains('atp_records_hidden_in_sort_order', $indexes);
             $this->assertNotContains('atp_records_tombstones_in_sort_order', $indexes);
 
