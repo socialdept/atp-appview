@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Standing\Verifiers;
 use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 use LogicException;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
@@ -171,7 +172,8 @@ class RecordVerifier implements Verifier
                 ->where('collection', $this->collection)
                 ->whereIn('did', $this->issuers())
                 ->where('record->'.str_replace('.', '->', $this->subjectPath), $did)
-                ->get(['did', 'rkey', 'record'])
+                ->get(['uri', 'did', 'rkey', 'cid', 'record', 'hollowed_at'])
+                ->tap(fn ($records) => app(ColdRecords::class)->thaw($records))
                 ->map(fn (Record $record) => [$record->did, $record->rkey, $record->record])
                 ->all();
         }

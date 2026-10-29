@@ -22,7 +22,7 @@
 
 - **Ingest:** sync any set of collections from the network through Tap or Tab, in batches, without flooding the app during backfill.
 - **Index:** keep every ingested record in the application's own database, queryable through Eloquent.
-- **Retention:** opt in to keeping the index small: LZ4 compression for stored records on Postgres, pruning old tombstones, and collections kept only while recent.
+- **Retention:** opt in to keeping the index small: LZ4 compression for stored records on Postgres, pruning old tombstones, collections kept only while recent, and cold records whose bodies are fetched again when read.
 - **XRPC:** serve queries and procedures generated from lexicons, with custom handlers where the default is not enough.
 - **Auth:** one guard that works whether OAuth tokens live on the server or in the browser, with service proxying in both cases.
 
@@ -49,7 +49,7 @@ The [Features](docs/features.md) doc covers what an app turns on beyond the core
 - **[Moderation](docs/moderation.md)**: Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 - **[Blocklist](docs/blocklist.md)**: Keeping repos, collections and hosts out of the index.
 - **[Index](docs/indexing.md)**: How records are stored, sorted, validated and reconciled, account status, and index stats.
-- **[Retention](docs/retention.md)**: Keeping the index small: LZ4 compression on Postgres, pruning old tombstones, and a max age per collection.
+- **[Retention](docs/retention.md)**: Keeping the index small: LZ4 compression on Postgres, pruning old tombstones, a max age per collection, and cold records.
 - **[XRPC](docs/xrpc.md)**: Default queries and procedures, custom handlers, calling methods, and writing records.
 - **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, reply trees, fields kept in the index, profiles and images.
 - **[Social graph](docs/social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.

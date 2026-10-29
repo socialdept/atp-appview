@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview\Xrpc\Handlers;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
@@ -47,6 +48,10 @@ class DefaultQueryHandler
         $record = Record::collection($collection)->find($uri)
             ?? throw XrpcException::notFound('RecordNotFound', "Could not locate record: {$uri}");
 
+        if ($this->warm(new Collection([$record]))->isEmpty()) {
+            throw new XrpcException('UpstreamFailure', "Could not fetch the body of cold record: {$uri}", 502);
+        }
+
         return $this->presentOne($record);
     }
 
@@ -82,7 +87,7 @@ class DefaultQueryHandler
         $page = $rows->take($limit);
 
         return array_filter([
-            $this->listKey() => $this->presentPage($page->values()),
+            $this->listKey() => $this->presentPage($this->warm($page->values())),
             'cursor' => $rows->count() > $limit ? $this->cursorFor($page->last()) : null,
         ], fn ($value) => $value !== null);
     }
@@ -147,6 +152,20 @@ class DefaultQueryHandler
             $query->where('sort_at', $operator, $sortAt)
                 ->orWhere(fn (Builder $query) => $query->where('sort_at', $sortAt)->where('uri', $operator, $uri));
         });
+    }
+
+    /**
+     * The page with cold records' bodies fetched, leaving out any that could
+     * not be. The cursor is taken before, so the next page starts after them.
+     *
+     * @param  Collection<int, Record>  $records
+     * @return Collection<int, Record>
+     */
+    protected function warm(Collection $records): Collection
+    {
+        $missing = app(ColdRecords::class)->thaw($records);
+
+        return $missing === [] ? $records : $records->reject(fn (Record $record) => in_array($record->uri, $missing, true))->values();
     }
 
     protected function cursorFor(Record $record): string

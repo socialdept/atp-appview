@@ -74,7 +74,7 @@ class RetentionTest extends TestCase
         $this->tombstone(self::POSTS, 'old', 900);
         $this->record(self::POSTS, 'live', ['indexed_at' => now('UTC')->subYears(3), 'sort_at' => now('UTC')->subYears(3)]);
 
-        $this->artisan('appview:prune')->expectsOutputToContain('0 tombstones, 0 expired records deleted')->assertSuccessful();
+        $this->artisan('appview:prune')->expectsOutputToContain('Deleted 0 tombstones and 0 expired records, hollowed 0 cold records')->assertSuccessful();
 
         $this->assertSame(['live', 'old'], $this->rkeys());
     }
@@ -91,7 +91,7 @@ class RetentionTest extends TestCase
         $this->tombstone('com.example.kept', 'f-kept', 900);
 
         $this->artisan('appview:prune')
-            ->expectsOutputToContain('2 tombstones, 0 expired records deleted')
+            ->expectsOutputToContain('Deleted 2 tombstones and 0 expired records, hollowed 0 cold records')
             ->assertSuccessful();
 
         $this->assertSame(['f-kept', 'e-recent', 'b-recent', 'c-live'], $this->rkeys(), 'Live records, recent tombstones and exempt collections stay.');
@@ -105,7 +105,7 @@ class RetentionTest extends TestCase
         $this->tombstone(self::LIKES, 'c', 31);
 
         $this->artisan('appview:prune', ['--dry-run' => true])
-            ->expectsOutputToContain('3 tombstones, 0 expired records would be deleted')
+            ->expectsOutputToContain('Would delete 3 tombstones and 0 expired records, would hollow 0 cold records')
             ->assertSuccessful();
 
         $this->assertCount(3, $this->rkeys());
@@ -182,7 +182,7 @@ class RetentionTest extends TestCase
             'rev' => '3l2aaaaaaaaaa', 'indexed_at' => now('UTC'), 'sort_at' => now('UTC'), 'deleted_at' => now('UTC')->subDays(31),
         ]);
 
-        $this->artisan('appview:prune')->expectsOutputToContain('1 tombstones, 0 expired records deleted')->assertSuccessful();
+        $this->artisan('appview:prune')->expectsOutputToContain('Deleted 1 tombstones and 0 expired records, hollowed 0 cold records')->assertSuccessful();
         $this->assertSame(0, DB::connection('index')->table('atp_records')->count());
     }
 
@@ -205,12 +205,12 @@ class RetentionTest extends TestCase
         DB::table('atp_value_counts')->insert(['key_id' => $key, 'value_hash' => 7, 'total' => 1]);
 
         $this->artisan('appview:prune', ['--dry-run' => true])
-            ->expectsOutputToContain('0 tombstones, 3 expired records would be deleted')
+            ->expectsOutputToContain('Would delete 0 tombstones and 3 expired records, would hollow 0 cold records')
             ->assertSuccessful();
         $this->assertCount(5, $this->rkeys());
 
         $this->artisan('appview:prune')
-            ->expectsOutputToContain('0 tombstones, 3 expired records deleted')
+            ->expectsOutputToContain('Deleted 0 tombstones and 3 expired records, hollowed 0 cold records')
             ->assertSuccessful();
 
         $this->assertSame(['b-recent', 'e-old-post'], $this->rkeys());

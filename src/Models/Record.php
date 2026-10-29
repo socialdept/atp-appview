@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Graph\Graph;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Models\Casts\PreciseDateTime;
 use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
 
@@ -32,6 +33,7 @@ use SocialDept\AtpAppview\Models\Scopes\HiddenScope;
  * @property \Illuminate\Support\Carbon $indexed_at
  * @property \Illuminate\Support\Carbon|null $sort_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property \Illuminate\Support\Carbon|null $hollowed_at  When appview:prune cleared its body, fetched again by ColdRecords::thaw()
  * @property \Illuminate\Support\Carbon|null $hidden_at
  * @property \Illuminate\Support\Carbon|null $moderated_at  When moderation hid it: a label or a ban
  * @property \Illuminate\Support\Carbon|null $limited_at  When it began to need review: shown where asked for, not in discovery
@@ -76,6 +78,7 @@ class Record extends Model
             'indexed_at' => 'datetime',
             'sort_at' => PreciseDateTime::class,
             'deleted_at' => 'datetime',
+            'hollowed_at' => 'datetime',
             'hidden_at' => 'datetime',
             'moderated_at' => 'datetime',
             'limited_at' => 'datetime',
@@ -142,6 +145,15 @@ class Record extends Model
     public function scopeBy(Builder $query, string $did): void
     {
         $query->where('did', $did);
+    }
+
+    /**
+     * Whether its body was cleared to save space and has not been fetched
+     * again: app(ColdRecords::class)->thaw($records) fetches a page at once.
+     */
+    public function isCold(): bool
+    {
+        return ColdRecords::isCold($this);
     }
 
     /**

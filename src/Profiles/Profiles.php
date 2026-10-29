@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use SocialDept\AtpAppview\Backfill\Backfills;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Images\Blobs;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Ingest\Collections;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
@@ -174,14 +175,24 @@ class Profiles
             // The index answers only for accounts it knows, in collections it
             // ingests. For anyone else, absence from the index proves nothing.
             $indexed = Collections::ingests($collection) ? $known : [];
+            $cold = [];
 
             if ($indexed !== []) {
                 // By primary key: each profile's uri is known from its DID.
-                Record::query()->whereIn('uri', array_map(fn (string $did) => "at://{$did}/{$collection}/{$source->rkey}", $indexed))
-                    ->get(['did', 'record'])
-                    ->each(function (Record $record) use (&$records, $collection) {
+                $found = Record::query()->whereIn('uri', array_map(fn (string $did) => "at://{$did}/{$collection}/{$source->rkey}", $indexed))
+                    ->get(['uri', 'did', 'cid', 'record', 'hollowed_at']);
+
+                // A cold profile whose body cannot be fetched is not taken as
+                // proof of absence: it is fetched below like an unknown one.
+                $unfetched = app(ColdRecords::class)->thaw($found);
+
+                foreach ($found as $record) {
+                    if (in_array($record->uri, $unfetched, true)) {
+                        $cold[] = $record->did;
+                    } else {
                         $records[$record->did][$collection] = (array) $record->record;
-                    });
+                    }
+                }
             }
 
             // Nor does it while the collection is still being backfilled: an
@@ -192,7 +203,7 @@ class Profiles
                 $backfilling ??= array_column(app(Backfills::class)->active(), 'collection');
             }
 
-            $trusted = $unanswered !== [] && in_array($collection, $backfilling ?? [], true) ? [] : $indexed;
+            $trusted = $unanswered !== [] && in_array($collection, $backfilling ?? [], true) ? [] : array_diff($indexed, $cold);
 
             foreach (array_diff($dids, $trusted) as $did) {
                 if (! isset($records[$did][$collection])) {

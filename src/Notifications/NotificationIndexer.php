@@ -120,7 +120,7 @@ class NotificationIndexer implements BatchHandler
         $this->chunks($connection, array_values(array_unique($collections)), $since, $until, $progress, function (array $uris) use ($connection, $notifier, $announce) {
             $records = $connection->table('atp_records')
                 ->whereIn('uri', $uris)
-                ->get(['uri', 'did', 'collection', 'record', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at'])
+                ->get(['uri', 'did', 'collection', 'record', 'indexed_at', 'deleted_at', 'hollowed_at', 'hidden_at', 'moderated_at', 'limited_at'])
                 ->keyBy('uri');
             $offered = $this->offered($records, $uris);
             $rows = [];
@@ -170,6 +170,8 @@ class NotificationIndexer implements BatchHandler
             $connection->table('atp_records')
                 ->where('collection', $name)
                 ->whereNull('deleted_at')
+                // A cold record's body is not fetched for a rebuild.
+                ->whereNull('hollowed_at')
                 ->when($since !== null, fn ($query) => $query->where('indexed_at', '>=', $since->clone()->utc()->format('Y-m-d H:i:s')))
                 ->when($until !== null, fn ($query) => $query->where('indexed_at', '<', $until->clone()->utc()->format('Y-m-d H:i:s')))
                 ->select('uri')
@@ -196,13 +198,13 @@ class NotificationIndexer implements BatchHandler
     {
         $records = $connection->table('atp_records')
             ->whereIn('uri', $uris)
-            ->get(['uri', 'did', 'collection', 'record', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at'])
+            ->get(['uri', 'did', 'collection', 'record', 'indexed_at', 'deleted_at', 'hollowed_at', 'hidden_at', 'moderated_at', 'limited_at'])
             ->keyBy('uri');
 
         $want = [];
 
         foreach ($records as $record) {
-            if ($record->deleted_at !== null || $record->record === null) {
+            if ($record->deleted_at !== null || $record->record === null || $record->hollowed_at !== null) {
                 continue;
             }
 
@@ -237,12 +239,13 @@ class NotificationIndexer implements BatchHandler
 
             // A configured reason is kept while the record still gives it, a
             // notifier's while the record was not offered again, and a sent
-            // one while its record exists.
-            $kept = $record !== null && $record->deleted_at === null && $record->record !== null && match ($row->origin) {
+            // one while its record exists. A cold record's body is the one
+            // its notifications were built from, so they all stay.
+            $kept = $record !== null && $record->deleted_at === null && ($record->hollowed_at !== null || $record->record !== null && match ($row->origin) {
                 'notifier' => isset($offered[$row->source_uri]) ? isset($want[$key]) : true,
                 'sent' => true,
                 default => isset($want[$key]),
-            };
+            });
 
             if ($kept) {
                 $have[$key] = true;

@@ -318,8 +318,11 @@ class RecordValues
             $records = $connection->table('atp_records')
                 ->where('collection', $field->collection)->whereNull('deleted_at')->where('id', '>', $after)
                 ->orderBy('id')->limit(1000)
-                ->get(['id', 'did', 'record', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at']);
+                ->get(['id', 'uri', 'did', 'cid', 'record', 'hollowed_at', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at']);
 
+            // A cold record's values come from its body, fetched for the
+            // chunk at once. One that cannot be fetched gets none.
+            app(ColdRecords::class)->thaw($records);
             $rows = [];
 
             foreach ($records as $record) {

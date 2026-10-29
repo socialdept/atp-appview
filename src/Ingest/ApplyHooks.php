@@ -43,6 +43,8 @@ class ApplyHooks
         $this->db->connection(config('atp-appview.index.connection'))->table('atp_records')
             ->when($collection !== null, fn ($query) => $query->where('collection', $collection))
             ->whereNull('deleted_at')
+            // Hooks judge bodies, and a cold record has none to judge.
+            ->whereNull('hollowed_at')
             ->select(['did', 'collection', 'rkey', 'cid', 'rev', 'record'])
             ->orderBy('uri')
             ->chunk(500, function ($rows) use ($hooks, $dryRun, $progress, &$removed, &$read) {

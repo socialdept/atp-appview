@@ -1,12 +1,12 @@
 # Retention
 
-Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, and keeping some collections only while recent.
+Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, keeping some collections only while recent, and fetching old bodies again instead of storing them.
 
 Everything here is off until set in `config/atp-appview/retention.php`, so an app that sets nothing keeps every record as it is.
 
 ## Pruning
 
-`appview:prune` removes what retention lets go: old [tombstones](#tombstones), then records past their collection's [max age](#max-age). Schedule it:
+`appview:prune` removes what retention lets go: old [tombstones](#tombstones), then records past their collection's [max age](#max-age), then the bodies of [cold records](#cold-records). Schedule it:
 
 ```php
 Schedule::command('appview:prune')->everyFiveMinutes()->withoutOverlapping();
@@ -127,3 +127,60 @@ Tombstones in the collection go by the same `sort_at`. Their delete would only s
 ### Ingest leaves them out
 
 A record already older than the window when it arrives is not indexed only to be pruned: Tap, Jetstream, backfills, `appview:reconcile`, the sync procedure and failed delivery retries all go through the same check, by the `sort_at` the record would get. It dispatches no record event, and handlers that read what the index stored, as notifications do, find nothing. A handler of the app's own that reads the batch's events directly still sees it, and can ask `Retention::outlived()`. Deletes still go through, so a delete of a recent record leaves its tombstone. `appview:reconcile` does not count the records it leaves out as indexed, so it does not report them on every run.
+
+## Cold records
+
+Most of a record row is its body, and old records are read far less than new ones. A collection can let its old bodies go and fetch them again when read:
+
+```php
+// config/atp-appview/retention.php
+'cold' => [
+    '*' => 365,
+    'app.example.like' => null,   // kept whole
+],
+```
+
+Or `ATP_APPVIEW_COLD_AFTER_DAYS=365` for the default alone. `appview:prune` clears the body of each live record whose `sort_at` is older than the window, the same age [max age](#max-age) reads, and marks the row with `hollowed_at`. Everything else stays: the uri, CID and dates, its [field values](views.md#fields) and the counts they keep, the [graph](social-graph.md) edges, labels and notifications. Lists, filters, counts and joins answer as before, since none of them read the body.
+
+A record an ingest [repair](ingest.md#ingest-repairs) rewrote keeps its body, since a fetch would return the unrepaired one. Each collection's pass keeps its place in the cache and starts over once a day, so a run reads only rows that aged since, and a record a backfill indexes with an older date is picked up the next day.
+
+### Reading a cold record
+
+When something reads a body, the page's cold records are fetched together: one cache read, then one parallel round of `com.atproto.repo.getRecord` calls for what the cache lacks, asking for the stored CID. They go to Slingshot by default, or to each record's own PDS:
+
+```dotenv
+ATP_APPVIEW_COLD_FETCH_FROM=pds        # slingshot by default
+ATP_APPVIEW_COLD_FETCH_TIMEOUT=5       # seconds per request
+ATP_APPVIEW_COLD_FETCH_CACHE_TTL=86400 # seconds a fetched body is cached
+```
+
+A fetched body is used only when the response carries the stored CID. With `socialdept/atp-cbor` installed, the body's own CID is computed from its DAG-CBOR form and must match too, so neither Slingshot nor a PDS can hand back another body. A body holding bytes or a float cannot be carried faithfully through JSON, so for those only the response's CID is compared. Bodies are cached by CID, so each version is fetched once, and a failed fetch is remembered for five minutes so a missing record does not cost a request on every page.
+
+A record whose body cannot be fetched, because its PDS is down or it was deleted there, is handled by what reads it:
+
+| Reader | A cold record |
+| --- | --- |
+| XRPC lists, default and [view](views.md) queries | Fetched with the page. One that cannot be fetched is left out, and the cursor still moves past it |
+| XRPC get by `uri` | Fetched, or `502 UpstreamFailure` |
+| `Hydrator`, embeds, `ReplyTree::parents()` | Fetched with the page. One that cannot be fetched keeps its place with a null `record` |
+| [Profiles](views.md#profiles) | Fetched. One that cannot be fetched is asked of Slingshot like any profile the index lacks |
+| Field values rebuild, graph subjects, standing verifiers | Fetched a chunk at a time, and given no values when it cannot be |
+| Notifications as records arrive | Kept as they are. A cold record's notifications were built from its body |
+| Notification rebuilds and replays, self-label rebuild, `appview:hooks:apply` | Skipped. They would fetch the whole collection, and what they built before stays |
+| A delete's `RecordRemoved` event | The body from the cache when it is there, null otherwise. Nothing is fetched for a record being deleted |
+| `appview:resort` | Skipped, as it skips any row without a body |
+
+Code of the app's own that reads `$record->record` gets null for a cold record. `$record->isCold()` says so, and `app(ColdRecords::class)->thaw($records)` fills in a page of them at once, models or query rows selected with `uri`, `cid`, `record` and `hollowed_at`.
+
+A query on the body itself, a `where('record->...')`, cannot match a cold record. Read through [field values](views.md#fields) instead, or keep that collection whole. A newer version of the record stores its body again.
+
+### Space reclaimed
+
+| Database | When the space comes back |
+| --- | --- |
+| Postgres | Plain `VACUUM` (or autovacuum) makes it reusable by new rows. Only `VACUUM FULL` or `pg_repack` returns it to the operating system |
+| MySQL, MariaDB | InnoDB reuses it for new rows. `OPTIMIZE TABLE atp_records` rebuilds the table to shrink the file |
+| SQLite | Reused by new rows. `VACUUM`, or `auto_vacuum`, shrinks the file |
+
+Clearing a body is an update, so it writes a row version and write-ahead log like any other. [Spaces](spaces.md) records are never hollowed.
+

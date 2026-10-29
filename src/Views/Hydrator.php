@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Views;
 
 use Illuminate\Support\Collection;
+use SocialDept\AtpAppview\Index\ColdRecords;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Views\Contracts\Part;
 use SocialDept\AtpAppview\Views\Contracts\ResolvesTogether;
@@ -10,6 +11,9 @@ use SocialDept\AtpAppview\Views\Contracts\ResolvesTogether;
 /**
  * Turns a page of records into views: each part resolves the whole page,
  * then the results are put together per record, in the page's order.
+ *
+ * Cold records get their bodies back first, fetched together for the page.
+ * One that cannot be fetched keeps its place with a null record.
  */
 class Hydrator
 {
@@ -22,6 +26,8 @@ class Hydrator
         if ($records->isEmpty()) {
             return [];
         }
+
+        app(ColdRecords::class)->thaw($records);
 
         $parts = $view->parts();
         $together = $this->resolveTogether($parts, $records, $viewer);

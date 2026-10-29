@@ -10,8 +10,9 @@ use SocialDept\AtpAppview\Features\AppView;
 
 /**
  * What appview:prune removes from the index, as atp-appview.retention asks:
- * tombstones older than their collection's window, and records of
- * collections kept only while recent, older than theirs.
+ * tombstones older than their collection's window, records of collections
+ * kept only while recent, older than theirs, and the bodies of records past
+ * the cold window, through ColdRecords.
  *
  * Each pass reads a chunk of rows by an index on their collection and age,
  * deletes them by primary key in one transaction with what references them
@@ -149,6 +150,20 @@ class Retention
         }
 
         return ['counts' => $counts, 'done' => true];
+    }
+
+    /**
+     * Clear the bodies of records past their collection's cold window,
+     * until the deadline.
+     *
+     * @param  float  $until  A microtime(true) deadline
+     * @return array{counts: array<string, int>, done: bool} Bodies cleared, or found with $dryRun, by collection
+     */
+    public function hollow(int $chunk, float $until, bool $dryRun = false): array
+    {
+        $collections = array_values(array_filter($this->collections(), fn (string $collection) => ColdRecords::days($collection) !== null));
+
+        return app(ColdRecords::class)->hollow($this->connection, $collections, $chunk, $until, $dryRun);
     }
 
     /**
