@@ -36,6 +36,9 @@ return [
     // sharing a status. They see records as they arrive live.
     'notifiers' => [],
 
+    // Reasons no field gives, from notifiers or send(), which the preference
+    // methods accept beside the configured ones. They list both.
+    'other_reasons' => [],
 
     // Ways the app delivers notifications outside its own list, such as push
     // or email, each with whether it carries a reason nobody chose for.
@@ -53,9 +56,13 @@ return [
     //     'list' => 'com.example.notification.listNotifications',
     //     'unread_count' => 'com.example.notification.getUnreadCount',
     //     'update_seen' => 'com.example.notification.updateSeen',
+    //     'get_preferences' => 'com.example.notification.getPreferences',
+    //     'put_preferences' => 'com.example.notification.putPreferences',
     'xrpc' => [
         'list' => null,
         'unread_count' => null,
         'update_seen' => null,
+        'get_preferences' => null,
+        'put_preferences' => null,
     ],
 ];
