@@ -36,11 +36,13 @@ return new class () extends Migration {
         });
 
         // What ingest hooks rejected, tallied by hook, collection and reason,
-        // with the latest record, so the table stays small.
+        // with the latest record, so the table stays small. hook and reason
+        // are 191 characters so the primary key fits InnoDB's 3072 byte limit
+        // in utf8mb4: (191 + 317 + 191) * 4 = 2796 bytes.
         $schema->create('atp_ingest_rejections', function (Blueprint $table) {
-            $table->string('hook', 255);
+            $table->string('hook', 191);
             $table->string('collection', 317);
-            $table->string('reason', 255);
+            $table->string('reason', 191);
             $table->unsignedBigInteger('total')->default(0);
             $table->string('last_uri', 512)->nullable();
             $table->dateTime('last_rejected_at');

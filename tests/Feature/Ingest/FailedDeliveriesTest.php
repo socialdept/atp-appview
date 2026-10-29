@@ -192,6 +192,16 @@ class FailedDeliveriesTest extends TestCase
         $this->artisan('appview:hooks:apply')->expectsOutputToContain('Removed 0 records')->assertSuccessful();
     }
 
+    public function test_a_rejection_keeps_hook_and_reason_within_their_columns(): void
+    {
+        app(Rejections::class)->record(str_repeat('H', 300), $this->event(1, 'spam'), str_repeat('é', 300));
+
+        $row = app(Rejections::class)->all()[0];
+
+        $this->assertSame(str_repeat('H', 191), $row['hook']);
+        $this->assertSame(str_repeat('é', 191), $row['reason'], 'Cut by characters, as the 191 character columns count them.');
+    }
+
     public function test_a_rejection_is_tallied_only_once_the_batch_goes_through(): void
     {
         config(['atp-appview.ingest.hooks' => [Spammy::class]]);
