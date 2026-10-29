@@ -40,6 +40,7 @@ class NotificationsFeatureOffTest extends TestCase
         $app['config']->set('atp-appview.features', [Features::moderation(), Features::graph()]);
         $app['config']->set('atp-appview.notifications.reasons', ['com.example.like' => ['subject.uri' => 'like']]);
         $app['config']->set('atp-appview.notifications.xrpc.list', 'com.example.listNotifications');
+        $app['config']->set('atp-appview.notifications.xrpc.put_preferences', 'com.example.putPreferences');
         // As a config published before notifications were a feature lists it.
         $app['config']->set('atp-appview.ingest.handlers', [\SocialDept\AtpAppview\Index\RecordIndexer::class, NotificationIndexer::class]);
     }
@@ -58,6 +59,7 @@ class NotificationsFeatureOffTest extends TestCase
         $this->assertFalse(Schema::hasTable('atp_notification_preferences'));
         $this->assertArrayNotHasKey('appview:notifications:build', Artisan::all());
         $this->assertNull(app(XrpcRegistry::class)->find('com.example.listNotifications'));
+        $this->assertNull(app(XrpcRegistry::class)->find('com.example.putPreferences'));
         $this->assertNotContains(NotificationIndexer::class, array_map('get_class', Pipeline::handlers(app())));
 
         // A like still indexes, with nothing kept for it.

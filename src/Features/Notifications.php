@@ -7,8 +7,10 @@ use SocialDept\AtpAppview\Console\NotificationsBuildCommand;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Notifications\NotificationIndexer;
 use SocialDept\AtpAppview\Xrpc\Auth;
+use SocialDept\AtpAppview\Xrpc\Handlers\GetNotificationPreferencesHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\GetUnreadCountHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\ListNotificationsHandler;
+use SocialDept\AtpAppview\Xrpc\Handlers\PutNotificationPreferencesHandler;
 use SocialDept\AtpAppview\Xrpc\Handlers\UpdateSeenHandler;
 
 /**
@@ -39,6 +41,8 @@ class Notifications implements Feature
             'list' => [ListNotificationsHandler::class, 'query'],
             'unread_count' => [GetUnreadCountHandler::class, 'query'],
             'update_seen' => [UpdateSeenHandler::class, 'procedure'],
+            'get_preferences' => [GetNotificationPreferencesHandler::class, 'query'],
+            'put_preferences' => [PutNotificationPreferencesHandler::class, 'procedure'],
         ];
 
         foreach ($methods as $key => [$handler, $type]) {

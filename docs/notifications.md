@@ -44,6 +44,8 @@ The same is served over XRPC under NSIDs in the app's own namespace. A lexicon f
 ],
 ```
 
+Each account's choices are served too, [below](#over-xrpc).
+
 ## Choices
 
 Each account chooses, per reason, whether it shows in the app, whether from everyone or only the accounts they follow, and whether each of the app's channels carries it. A reason nobody chose for is shown, from everyone, and on each channel as configured.
@@ -67,6 +69,31 @@ $preferences->set($did, 'reply', channels: ['email' => true]);   // other channe
 ```
 
 Shown and from apply as notifications are read, so turning a reason off leaves it out of lists and the unread count, and turning it back on brings back what it held. The app lists the reasons and their labels, since a notifier's reasons only exist in app code. Setting a channel the app does not configure throws.
+
+### Over XRPC
+
+Two more methods let the signed-in account read and change its own choices, with a server session or a token its PDS signed, as the other notification methods do:
+
+```php
+'other_reasons' => ['thread', 'trending'],   // from notifiers or send(), offered beside the configured ones
+
+'xrpc' => [
+    // ...
+    'get_preferences' => 'com.example.notification.getPreferences',   // ?reasons=like&reasons=reply, or every reason
+    'put_preferences' => 'com.example.notification.putPreferences',   // {preferences: {like: {inApp?, from?, channels?}}}
+],
+```
+
+```ts
+await xrpc.query('com.example.notification.getPreferences');
+// {preferences: {like: {inApp: true, from: 'everyone', channels: {push: true, email: false}}, ...}}
+
+await xrpc.procedure('com.example.notification.putPreferences', {
+    preferences: { like: { inApp: false }, reply: { from: 'follows', channels: { email: true } } },
+});
+```
+
+They follow Bluesky's `app.bsky.notification.getPreferences` and `putPreferencesV2`, with this package's choices in place of Bluesky's fixed set. Only the reasons configured in `reasons` and listed in `other_reasons` can be read or chosen, so a client cannot keep choices for reasons that never notify. A put changes only what it names and answers every reason with its choices. Its input is checked whole before anything is kept: an unknown reason, field or channel, or a value of the wrong type, answers `InvalidRequest` and changes nothing.
 
 Before sending on a channel, a `NotificationCreated` listener asks `wants()`, which also holds "only the accounts they follow":
 

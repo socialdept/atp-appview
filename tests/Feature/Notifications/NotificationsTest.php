@@ -23,7 +23,9 @@ use SocialDept\AtpAppview\Notifications\Notify;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
+use SocialDept\AtpClient\Auth\ServiceAuth;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
+use SocialDept\AtpClient\Data\ServiceAuthToken;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
@@ -64,7 +66,11 @@ class NotificationsTest extends TestCase
             'list' => 'com.example.listNotifications',
             'unread_count' => 'com.example.getUnreadCount',
             'update_seen' => 'com.example.updateSeen',
+            'get_preferences' => 'com.example.getPreferences',
+            'put_preferences' => 'com.example.putPreferences',
         ]);
+        $app['config']->set('atp-appview.notifications.other_reasons', ['same', 'like']);
+        $app['config']->set('atp-client.service_auth.audience', 'did:web:appview.example#atproto_appview');
         $app['config']->set('auth.providers.users.model', NotificationsUser::class);
         $app['config']->set('auth.guards.atp', ['driver' => 'atp', 'provider' => 'users', 'session_guard' => 'web']);
     }
@@ -476,6 +482,102 @@ class NotificationsTest extends TestCase
 
         $this->actingAs($alice, 'web')->postJson('/xrpc/com.example.updateSeen', [])->assertOk()->assertJsonStructure(['seenAt']);
         $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getUnreadCount')->assertExactJson(['count' => 0]);
+    }
+
+    public function test_preferences_are_read_and_changed_over_xrpc_with_a_session(): void
+    {
+        $alice = NotificationsUser::create(['did' => self::ALICE]);
+        $defaults = ['inApp' => true, 'from' => 'everyone', 'channels' => ['push' => true, 'email' => false]];
+
+        $this->getJson('/xrpc/com.example.getPreferences')->assertStatus(401);
+        $this->postJson('/xrpc/com.example.putPreferences', ['preferences' => []])->assertStatus(401);
+
+        $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getPreferences')
+            ->assertOk()
+            ->assertExactJson(['preferences' => ['like' => $defaults, 'reply' => $defaults, 'mention' => $defaults, 'follow' => $defaults, 'same' => $defaults]]);
+
+        $this->actingAs($alice, 'web')->postJson('/xrpc/com.example.putPreferences', ['preferences' => [
+            'like' => ['inApp' => false],
+            'reply' => ['from' => 'follows', 'channels' => ['email' => true]],
+            'mention' => [],
+        ]])
+            ->assertOk()
+            ->assertJsonPath('preferences.like', ['inApp' => false, 'from' => 'everyone', 'channels' => ['push' => true, 'email' => false]])
+            ->assertJsonPath('preferences.reply', ['inApp' => true, 'from' => 'follows', 'channels' => ['push' => true, 'email' => true]]);
+
+        $this->assertSame(['like', 'reply'], DB::table('atp_notification_preferences')->orderBy('reason')->pluck('reason')->all(), 'An empty choice stores nothing.');
+
+        $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getPreferences?reasons=reply&reasons=same')
+            ->assertOk()
+            ->assertExactJson(['preferences' => [
+                'reply' => ['inApp' => true, 'from' => 'follows', 'channels' => ['push' => true, 'email' => true]],
+                'same' => $defaults,
+            ]]);
+    }
+
+    public function test_preferences_over_xrpc_carry_channels_as_an_object_when_none_are_configured(): void
+    {
+        config(['atp-appview.notifications.channels' => []]);
+        $alice = NotificationsUser::create(['did' => self::ALICE]);
+
+        $body = $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getPreferences?reasons=like')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"channels":{}', $body);
+    }
+
+    public function test_preferences_over_xrpc_belong_to_the_account_a_pds_signed_for(): void
+    {
+        $this->mock(ServiceAuth::class, function ($mock) {
+            $mock->shouldReceive('fromHeader')->andReturn('jwt');
+            $mock->shouldReceive('verify')->with('jwt', 'did:web:appview.example#atproto_appview', 'com.example.putPreferences')
+                ->andReturn(new ServiceAuthToken(self::ALICE, 'did:web:appview.example', 'com.example.putPreferences', time() + 60));
+            $mock->shouldReceive('verify')->with('jwt', 'did:web:appview.example#atproto_appview', 'com.example.getPreferences')
+                ->andReturn(new ServiceAuthToken(self::ALICE, 'did:web:appview.example', 'com.example.getPreferences', time() + 60));
+        });
+
+        $this->postJson('/xrpc/com.example.putPreferences', ['preferences' => ['like' => ['channels' => ['push' => false]]]], ['Authorization' => 'Bearer jwt'])
+            ->assertOk()
+            ->assertJsonPath('preferences.like.channels.push', false);
+
+        $this->getJson('/xrpc/com.example.getPreferences?reasons=like', ['Authorization' => 'Bearer jwt'])
+            ->assertOk()
+            ->assertJsonPath('preferences.like.channels.push', false);
+        $this->assertFalse(app(NotificationPreferences::class)->wants(self::ALICE, 'like', self::BOB, 'push'));
+        $this->assertTrue(app(NotificationPreferences::class)->wants(self::BOB, 'like', self::ALICE, 'push'), 'Nobody else changed.');
+    }
+
+    public function test_preferences_over_xrpc_take_only_what_the_app_offers_and_keep_nothing_from_a_bad_input(): void
+    {
+        $alice = NotificationsUser::create(['did' => self::ALICE]);
+
+        $bad = [
+            [],
+            ['preferences' => 'like'],
+            ['preferences' => [['inApp' => false]]],
+            ['preferences' => ['like' => ['inApp' => false]], 'extra' => true],
+            ['preferences' => ['like' => ['inApp' => false], 'pigeon' => ['inApp' => false]]],
+            ['preferences' => ['like' => ['inApp' => 'no']]],
+            ['preferences' => ['like' => ['inApp' => 0]]],
+            ['preferences' => ['like' => ['from' => 'friends']]],
+            ['preferences' => ['like' => ['push' => false]]],
+            ['preferences' => ['like' => 'off']],
+            ['preferences' => ['like' => ['channels' => ['pigeon' => true]]]],
+            ['preferences' => ['like' => ['channels' => ['push' => 1]]]],
+            ['preferences' => ['like' => ['channels' => [true]]]],
+            ['preferences' => ['reply' => ['inApp' => false], 'like' => ['from' => 'nobody']]],
+        ];
+
+        foreach ($bad as $input) {
+            $this->actingAs($alice, 'web')->postJson('/xrpc/com.example.putPreferences', $input)
+                ->assertStatus(400)
+                ->assertJsonPath('error', 'InvalidRequest');
+        }
+
+        $this->assertSame(0, DB::table('atp_notification_preferences')->count(), 'A bad input keeps nothing, even its good reasons.');
+
+        $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getPreferences?reasons=pigeon')
+            ->assertStatus(400)
+            ->assertJsonPath('error', 'InvalidRequest');
     }
 }
 

@@ -59,6 +59,25 @@ class NotificationPreferences
     }
 
     /**
+     * The reasons an account can choose for over XRPC: those the configured
+     * fields give, then atp-appview.notifications.other_reasons.
+     *
+     * @return array<int, string>
+     */
+    public static function reasons(): array
+    {
+        $reasons = [];
+
+        foreach (Notifications::reasons() as $paths) {
+            array_push($reasons, ...array_values($paths));
+        }
+
+        array_push($reasons, ...array_map('strval', (array) config('atp-appview.notifications.other_reasons', [])));
+
+        return array_values(array_unique(array_filter($reasons, fn (string $reason) => $reason !== '')));
+    }
+
+    /**
      * The app's channels, each with whether it carries a reason nobody chose
      * for.
      *
