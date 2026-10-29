@@ -8,7 +8,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    name: Tests (PHP 8.4 - Laravel 13)
+    name: Tests (PHP 8.4 - Laravel 13 - SQLite)
 
     steps:
       - name: Checkout code
