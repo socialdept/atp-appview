@@ -58,4 +58,32 @@ class MigrationsTest extends TestCase
         $this->artisan('migrate')->assertSuccessful();
         $this->assertSame($migrations, DB::table('migrations')->count());
     }
+
+    /**
+     * Before its keys were shortened, the failed deliveries migration failed
+     * on MySQL after creating atp_failed_deliveries, which MySQL keeps. An
+     * install left that way must be able to migrate.
+     */
+    public function test_an_install_left_by_the_failed_deliveries_migration_can_migrate(): void
+    {
+        $name = '2026_10_19_000003_create_atp_failed_deliveries_tables';
+        $migrations = count(glob(__DIR__.'/../../database/migrations/{,*/}*.php', GLOB_BRACE));
+
+        $this->artisan('migrate:fresh')->assertSuccessful();
+
+        // What a failed run left: the first table, and no record of the run.
+        Schema::dropIfExists('atp_ingest_repairs');
+        Schema::dropIfExists('atp_ingest_rejections');
+        Schema::table('atp_records', fn ($table) => $table->dropColumn('repair'));
+        DB::table('migrations')->where('migration', $name)->delete();
+
+        $this->assertTrue(Schema::hasTable('atp_failed_deliveries'));
+
+        $this->artisan('migrate')->assertSuccessful();
+
+        $this->assertSame($migrations, DB::table('migrations')->count());
+        $this->assertTrue(Schema::hasTable('atp_ingest_rejections'));
+        $this->assertTrue(Schema::hasTable('atp_ingest_repairs'));
+        $this->assertTrue(Schema::hasColumn('atp_records', 'repair'));
+    }
 }
