@@ -9,6 +9,7 @@ use LogicException;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\Graph as GraphFeature;
 use SocialDept\AtpAppview\Index\Field;
+use SocialDept\AtpAppview\Index\RecordTables;
 use SocialDept\AtpAppview\Index\RecordValues;
 use SocialDept\AtpAppview\Index\ValueHash;
 
@@ -268,10 +269,12 @@ class Graph
 
     /**
      * Leave out of a query the records holding any of $viewer's muted words,
-     * by the column holding each record's id in atp_records.
+     * by the column holding each record's id in atp_records, or in the
+     * records table given.
      */
-    public function applyMutedWords(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn): void
+    public function applyMutedWords(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null): void
     {
+        $tables ??= RecordTables::index();
         $muted = $this->mutedWords($viewer);
 
         if ($muted === []) {
@@ -293,11 +296,11 @@ class Graph
                 $following ??= $this->following($viewer);
             }
 
-            $query->where(function ($query) use ($hashes, $keys, $idColumn, $entry, $following) {
+            $query->where(function ($query) use ($hashes, $keys, $idColumn, $entry, $following, $tables) {
                 // Not holding every word of the entry...
-                $query->whereNot(function ($all) use ($hashes, $keys, $idColumn) {
+                $query->whereNot(function ($all) use ($hashes, $keys, $idColumn, $tables) {
                     foreach ($hashes as $hash) {
-                        $all->whereExists(fn ($exists) => $exists->selectRaw('1')->from(RecordValues::VALUES.' as muted')
+                        $all->whereExists(fn ($exists) => $exists->selectRaw('1')->from($tables->values.' as muted')
                             ->whereColumn('muted.record_id', $idColumn)
                             ->whereIn('muted.key_id', $keys)
                             ->where('muted.value_hash', $hash));
@@ -306,7 +309,7 @@ class Graph
 
                 // ...or by an account the viewer follows, when that is excused.
                 if ($entry['excludeFollowing'] && $following !== []) {
-                    $query->orWhereExists(fn ($exists) => $exists->selectRaw('1')->from('atp_records as muted_author')
+                    $query->orWhereExists(fn ($exists) => $exists->selectRaw('1')->from($tables->records.' as muted_author')
                         ->whereColumn('muted_author.id', $idColumn)
                         ->whereIn('muted_author.did', $following));
                 }

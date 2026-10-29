@@ -3,6 +3,7 @@
 namespace SocialDept\AtpAppview\Features;
 
 use SocialDept\AtpAppview\Graph\Graph as SocialGraph;
+use SocialDept\AtpAppview\Index\RecordTables;
 
 /**
  * The social graph: follows and blocks read from the collections
@@ -44,6 +45,6 @@ class Graph implements Feature
             }
         }
 
-        $appview->recordFilter(fn ($query, string $viewer, string $idColumn) => app(SocialGraph::class)->applyMutedWords($query, $viewer, $idColumn));
+        $appview->recordFilter(fn ($query, string $viewer, string $idColumn, RecordTables $tables) => app(SocialGraph::class)->applyMutedWords($query, $viewer, $idColumn, $tables), spaces: true);
     }
 }

@@ -6,6 +6,7 @@ use Closure;
 use Illuminate\Contracts\Container\Container;
 use InvalidArgumentException;
 use SocialDept\AtpAppview\Features;
+use SocialDept\AtpAppview\Index\RecordTables;
 use SocialDept\AtpAppview\Xrpc\Auth;
 
 /**
@@ -44,7 +45,7 @@ class AppView
     /** @var array<int, Closure> */
     protected array $readFilters = [];
 
-    /** @var array<int, Closure> */
+    /** @var array<int, array{0: Closure, 1: bool}> Each filter, and whether it reads space records too */
     protected array $recordFilters = [];
 
     /** @var array<string, string> Service id => type, for the DID document */
@@ -215,13 +216,17 @@ class AppView
 
     /**
      * Records a viewer should not see, by what they hold rather than who
-     * wrote them: fn (Builder $query, string $viewer, string $idColumn),
-     * narrowing a query by the column holding each record's atp_records id.
-     * Applied wherever read filters are.
+     * wrote them: fn (Builder $query, string $viewer, string $idColumn,
+     * RecordTables $tables), narrowing a query by the column holding each
+     * record's id in $tables->records. Applied wherever read filters are.
+     *
+     * With $spaces, it also narrows SpaceRecordQuery, and must then read the
+     * tables it is given rather than atp_records and atp_record_values. A
+     * filter without it never sees a space query.
      */
-    public function recordFilter(Closure $callback): static
+    public function recordFilter(Closure $callback, bool $spaces = false): static
     {
-        $this->recordFilters[] = $callback;
+        $this->recordFilters[] = [$callback, $spaces];
 
         return $this;
     }
@@ -273,12 +278,17 @@ class AppView
     }
 
     /**
-     * Narrow a query for a viewer with every record filter.
+     * Narrow a query for a viewer with every record filter, or for space
+     * records, with those that read them.
      */
-    public function applyRecordFilters(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn): void
+    public function applyRecordFilters(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null): void
     {
-        foreach ($this->recordFilters as $filter) {
-            $filter($query, $viewer, $idColumn);
+        $tables ??= RecordTables::index();
+
+        foreach ($this->recordFilters as [$filter, $spaces]) {
+            if ($spaces || $tables->isIndex()) {
+                $filter($query, $viewer, $idColumn, $tables);
+            }
         }
     }
 
