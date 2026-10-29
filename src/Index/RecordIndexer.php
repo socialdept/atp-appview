@@ -32,6 +32,8 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
  *
  * An account event changes its records too, through AccountStatus: a deleted
  * account's records are tombstoned, an inactive account's hidden.
+ *
+ * Events carrying a space are left alone, for SpaceRecordIndexer.
  */
 class RecordIndexer implements BatchHandler
 {
@@ -45,7 +47,9 @@ class RecordIndexer implements BatchHandler
     {
         $clock = Carbon::now('UTC');
         $now = $clock->format('Y-m-d H:i:s');
-        $events = RecordValidation::mode() === RecordValidation::OFF ? $batch->records() : $this->validation()->filter($batch->records());
+        // A record in a space belongs in atp_space_records, never here.
+        $public = array_values(array_filter($batch->records(), fn (RecordEvent $event) => $event->space === null));
+        $events = RecordValidation::mode() === RecordValidation::OFF ? $public : $this->validation()->filter($public);
         $records = $this->recordRows($events, $now, $clock);
         $identities = $this->identityRows($batch->identities(), $now);
 

@@ -36,14 +36,18 @@ class RecordWriter
      */
     public const CHUNK = 500;
 
+    /**
+     * @param  array<int, string>  $columns  In the order of COLUMNS: uri first, cid and rev last
+     */
     public function __construct(
         protected Connection $connection,
         protected string $table = 'atp_records',
+        protected array $columns = self::COLUMNS,
     ) {
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $rows  Keyed by COLUMNS, at most one per uri
+     * @param  array<int, array<string, mixed>>  $rows  Keyed by the columns, at most one per uri
      */
     public function upsert(array $rows): void
     {
@@ -56,8 +60,8 @@ class RecordWriter
     {
         $grammar = $this->connection->getQueryGrammar();
         $table = $grammar->wrapTable($this->table);
-        $columns = implode(', ', array_map(fn ($column) => $grammar->wrap($column), self::COLUMNS));
-        $values = implode(', ', array_fill(0, $rows, '('.implode(', ', array_fill(0, count(self::COLUMNS), '?')).')'));
+        $columns = implode(', ', array_map(fn ($column) => $grammar->wrap($column), $this->columns));
+        $values = implode(', ', array_fill(0, $rows, '('.implode(', ', array_fill(0, count($this->columns), '?')).')'));
         $insert = "insert into {$table} ({$columns}) values {$values}";
 
         return match ($this->connection->getDriverName()) {
@@ -74,7 +78,7 @@ class RecordWriter
 
         $assignments = implode(', ', array_map(
             fn ($column) => $grammar->wrap($column).' = excluded.'.$grammar->wrap($column),
-            array_slice(self::COLUMNS, 1),
+            array_slice($this->columns, 1),
         ));
 
         $cid = $grammar->wrap('cid');
@@ -97,7 +101,7 @@ class RecordWriter
             $wrapped = $grammar->wrap($column);
 
             return "{$wrapped} = if({$newer}, values({$wrapped}), {$wrapped})";
-        }, array_slice(self::COLUMNS, 1)));
+        }, array_slice($this->columns, 1)));
 
         return "on duplicate key update {$assignments}";
     }
@@ -111,7 +115,7 @@ class RecordWriter
         $bindings = [];
 
         foreach ($rows as $row) {
-            foreach (self::COLUMNS as $column) {
+            foreach ($this->columns as $column) {
                 $bindings[] = $row[$column] ?? null;
             }
         }
