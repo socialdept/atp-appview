@@ -25,4 +25,12 @@ return [
     'tombstones' => [
         '*' => env('ATP_APPVIEW_TOMBSTONE_DAYS'),
     ],
+
+    // Days a record is kept, by sort_at, for collections that only matter
+    // while recent, such as read receipts. appview:prune deletes older ones
+    // outright, and ingest skips records already older. There is no '*':
+    // only collections named here are ever pruned by age.
+    //
+    //     'com.example.read' => 30,
+    'max_age' => [],
 ];

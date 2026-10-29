@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Index;
 
+use DateTimeInterface;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -9,7 +10,8 @@ use SocialDept\AtpAppview\Features\AppView;
 
 /**
  * What appview:prune removes from the index, as atp-appview.retention asks:
- * tombstones older than their collection's window.
+ * tombstones older than their collection's window, and records of
+ * collections kept only while recent, older than theirs.
  *
  * Each pass reads a chunk of rows by an index on their collection and age,
  * deletes them by primary key in one transaction with what references them
@@ -32,6 +34,39 @@ class Retention
     public static function tombstoneDays(string $collection): ?int
     {
         return self::days((array) config('atp-appview.retention.tombstones', []), $collection);
+    }
+
+    /**
+     * Days a record in this collection is kept, from
+     * atp-appview.retention.max_age, or null to keep it. There is no '*':
+     * a collection is only ever pruned by age when named.
+     */
+    public static function maxAgeDays(string $collection): ?int
+    {
+        $map = (array) config('atp-appview.retention.max_age', []);
+        unset($map['*']);
+
+        return self::days($map, $collection);
+    }
+
+    /**
+     * Whether a record arriving now is already older than its collection
+     * keeps records, by the sort_at it would be given, so it is not indexed
+     * only to be pruned.
+     *
+     * @param  array<string, mixed>|null  $record
+     */
+    public static function outlived(string $collection, ?array $record, string $rkey, DateTimeInterface $now): bool
+    {
+        $days = self::maxAgeDays($collection);
+
+        if ($days === null) {
+            return false;
+        }
+
+        $sortAt = SortAt::for($record, $rkey, $now, RecordIndexer::sortFields($collection));
+
+        return $sortAt < Carbon::instance($now)->utc()->subDays($days)->format('Y-m-d H:i:s.u');
     }
 
     /**
@@ -76,6 +111,39 @@ class Retention
                 ->where('deleted_at', '<', self::cutoff($days));
 
             if (! $this->drain($query, $collection, $chunk, $until, $dryRun, $counts)) {
+                return ['counts' => $counts, 'done' => false];
+            }
+        }
+
+        return ['counts' => $counts, 'done' => true];
+    }
+
+    /**
+     * Delete records older than their collection's max_age, by sort_at,
+     * tombstones included, until the deadline.
+     *
+     * @param  float  $until  A microtime(true) deadline
+     * @return array{counts: array<string, int>, done: bool} Rows deleted, or found with $dryRun, by collection
+     */
+    public function expire(int $chunk, float $until, bool $dryRun = false): array
+    {
+        $counts = [];
+        $map = (array) config('atp-appview.retention.max_age', []);
+        unset($map['*']);
+
+        foreach (array_keys($map) as $collection) {
+            $days = self::maxAgeDays((string) $collection);
+
+            if ($days === null) {
+                continue;
+            }
+
+            $cutoff = Carbon::now('UTC')->subDays($days)->format('Y-m-d H:i:s.u');
+            $query = fn () => $this->connection->table('atp_records')
+                ->where('collection', $collection)
+                ->where('sort_at', '<', $cutoff);
+
+            if (! $this->drain($query, (string) $collection, $chunk, $until, $dryRun, $counts)) {
                 return ['counts' => $counts, 'done' => false];
             }
         }
