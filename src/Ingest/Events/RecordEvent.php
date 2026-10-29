@@ -3,7 +3,8 @@
 namespace SocialDept\AtpAppview\Ingest\Events;
 
 /**
- * A record created, updated or deleted in a repo Tap tracks.
+ * A record created, updated or deleted in a repo Tap tracks, or in a
+ * member's repo in a space the spaces feature syncs.
  */
 final class RecordEvent
 {
@@ -11,6 +12,7 @@ final class RecordEvent
      * @param  array<string, mixed>|null  $record  The record body, null for a delete
      * @param  array<int, class-string>  $repairedBy  The repairs that changed the record, in order
      * @param  array<string, mixed>|null  $original  The record as it is in the repo, when a repair changed it
+     * @param  string|null  $space  The space URI, for a record in a space repo
      */
     public function __construct(
         public readonly int $id,
@@ -24,6 +26,7 @@ final class RecordEvent
         public readonly bool $live,
         public readonly array $repairedBy = [],
         public readonly ?array $original = null,
+        public readonly ?string $space = null,
     ) {
     }
 
@@ -48,11 +51,20 @@ final class RecordEvent
             $this->live,
             [...$this->repairedBy, $repair],
             $this->original ?? $this->record,
+            $this->space,
         );
     }
 
+    /**
+     * The record's AT-URI, or for a record in a space, its space record URI,
+     * {space}/{did}/{collection}/{rkey}.
+     */
     public function uri(): string
     {
+        if ($this->space !== null) {
+            return "{$this->space}/{$this->did}/{$this->collection}/{$this->rkey}";
+        }
+
         return "at://{$this->did}/{$this->collection}/{$this->rkey}";
     }
 
