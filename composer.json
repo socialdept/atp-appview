@@ -14,9 +14,9 @@
         "ext-json": "*",
         "co-infra/image": "^0.1",
         "guzzlehttp/guzzle": "^7.5|^8.0",
-        "illuminate/console": "^11.0|^12.0|^13.0",
-        "illuminate/http": "^11.0|^12.0|^13.0",
-        "illuminate/support": "^11.0|^12.0|^13.0",
+        "illuminate/console": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/support": "^13.0",
         "ratchet/pawl": "^0.4",
         "react/event-loop": "^1.5",
         "socialdept/atp-client": "^0.3.11",
@@ -25,7 +25,7 @@
         "socialdept/atp-support": "^0.3.2"
     },
     "require-dev": {
-        "orchestra/testbench": "^9.0|^10.0|^11.0",
+        "orchestra/testbench": "^11.0",
         "phpunit/phpunit": "^11.0|^12.0",
         "friendsofphp/php-cs-fixer": "^3.89",
         "socialdept/atp-cbor": "^0.2.3",
