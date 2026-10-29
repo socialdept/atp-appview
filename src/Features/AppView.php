@@ -30,6 +30,9 @@ class AppView
     /** @var array<int, Closure> */
     protected array $afterWrite = [];
 
+    /** @var array<int, Closure> */
+    protected array $afterPrune = [];
+
     /** @var array<int, array{collection: string, name: string, declared: string|array<string, mixed>}> */
     protected array $fields = [];
 
@@ -149,6 +152,17 @@ class AppView
     public function afterWrite(Closure $callback): static
     {
         $this->afterWrite[] = $callback;
+
+        return $this;
+    }
+
+    /**
+     * Forget what the feature keeps about records appview:prune deleted
+     * outright, in its transaction: fn (Connection $connection, array $uris).
+     */
+    public function afterPrune(Closure $callback): static
+    {
+        $this->afterPrune[] = $callback;
 
         return $this;
     }
@@ -348,6 +362,12 @@ class AppView
     public function afterWriteCallbacks(): array
     {
         return $this->afterWrite;
+    }
+
+    /** @return array<int, Closure> */
+    public function afterPruneCallbacks(): array
+    {
+        return $this->afterPrune;
     }
 
     /** @return array<int, array{collection: string, name: string, declared: string|array<string, mixed>}> */

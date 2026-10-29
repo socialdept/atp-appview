@@ -30,6 +30,7 @@ use SocialDept\AtpAppview\Console\LabelsStreamCommand;
 use SocialDept\AtpAppview\Console\LexiconsAcceptCommand;
 use SocialDept\AtpAppview\Console\LexiconsCommand;
 use SocialDept\AtpAppview\Console\LexiconsSyncCommand;
+use SocialDept\AtpAppview\Console\PruneCommand;
 use SocialDept\AtpAppview\Console\PurgeInactiveCommand;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Console\ResortCommand;
@@ -226,6 +227,7 @@ class AtpAppviewServiceProvider extends ServiceProvider
                 LexiconsAcceptCommand::class,
                 LexiconsCommand::class,
                 LexiconsSyncCommand::class,
+                PruneCommand::class,
                 PurgeInactiveCommand::class,
                 FieldsCommand::class,
                 HooksApplyCommand::class,
