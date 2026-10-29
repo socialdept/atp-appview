@@ -33,6 +33,6 @@ class GetNotificationPreferencesHandler
             $this->ensureChoosable($reasons);
         }
 
-        return ['preferences' => $this->preferences->for($did, $reasons ?? NotificationPreferences::reasons())];
+        return ['preferences' => $this->presentChoices($this->preferences->for($did, $reasons ?? NotificationPreferences::reasons()))];
     }
 }

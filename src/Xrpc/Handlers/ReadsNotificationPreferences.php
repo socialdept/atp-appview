@@ -22,4 +22,16 @@ trait ReadsNotificationPreferences
             throw XrpcException::invalidRequest('No such notification reason: '.implode(', ', $unknown).'.');
         }
     }
+
+    /**
+     * The choices as the response carries them. Channels are an object even
+     * when none are configured, so they never serialize as a JSON list.
+     *
+     * @param  array<string, array{inApp: bool, from: string, channels: array<string, bool>}>  $choices
+     * @return array<string, array{inApp: bool, from: string, channels: object}>
+     */
+    protected function presentChoices(array $choices): array
+    {
+        return array_map(fn (array $choice) => [...$choice, 'channels' => (object) $choice['channels']], $choices);
+    }
 }

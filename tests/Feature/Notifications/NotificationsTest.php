@@ -515,6 +515,16 @@ class NotificationsTest extends TestCase
             ]]);
     }
 
+    public function test_preferences_over_xrpc_carry_channels_as_an_object_when_none_are_configured(): void
+    {
+        config(['atp-appview.notifications.channels' => []]);
+        $alice = NotificationsUser::create(['did' => self::ALICE]);
+
+        $body = $this->actingAs($alice, 'web')->getJson('/xrpc/com.example.getPreferences?reasons=like')->assertOk()->getContent();
+
+        $this->assertStringContainsString('"channels":{}', $body);
+    }
+
     public function test_preferences_over_xrpc_belong_to_the_account_a_pds_signed_for(): void
     {
         $this->mock(ServiceAuth::class, function ($mock) {

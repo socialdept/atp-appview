@@ -39,7 +39,7 @@ class PutNotificationPreferencesHandler
             }
         });
 
-        return ['preferences' => $this->preferences->for($did, NotificationPreferences::reasons())];
+        return ['preferences' => $this->presentChoices($this->preferences->for($did, NotificationPreferences::reasons()))];
     }
 
     /**
