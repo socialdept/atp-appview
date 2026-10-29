@@ -43,7 +43,7 @@ Then run `php artisan migrate`. Postgres, MySQL, MariaDB and SQLite are supporte
 The [Features](docs/features.md) doc covers what an app turns on beyond the core. Each other doc covers one area:
 
 - **[Features](docs/features.md)**: Turning parts of the package on and off, scheduling, and writing a feature of your own.
-- **[Auth](docs/auth.md)**: Frontend and backend mode, sign-in from the browser, and the atp guard.
+- **[Auth](docs/auth.md)**: Frontend and backend mode, sign-in from the browser, signing out from the server, and the atp guard.
 - **[Ingest](docs/ingest.md)**: Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
 - **[Moderation](docs/moderation.md)**: Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 - **[Blocklist](docs/blocklist.md)**: Keeping repos, collections and hosts out of the index.

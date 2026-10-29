@@ -1,6 +1,6 @@
 # Auth
 
-Part of the [atp-appview docs](../README.md#documentation). Frontend and backend mode, sign-in from the browser, and the atp guard.
+Part of the [atp-appview docs](../README.md#documentation). Frontend and backend mode, sign-in from the browser, signing out from the server, and the atp guard.
 
 Where the user's OAuth tokens live decides how records get written.
 
@@ -34,7 +34,7 @@ ATP_SERVICE_AUTH_AUDIENCE=did:web:example.com
 | `POST /oauth/flow` | `atp.oauth.flow` | Hand the browser the held flow, once |
 | `GET /oauth/account` | `atp.oauth.account` | Resolve an account's PDS, issuer and verified handle |
 | `POST /session` | `atp.session.store` | Start a session from a service auth token |
-| `DELETE /session` | `atp.session.destroy` | End the session |
+| `DELETE /session` | `atp.session.destroy` | End the session, for the browser's `signOut()` |
 
 Two pages sit around sign-in: the login page and the page the callback finishes on, which runs `handleCallback()`. Give the package a callback for each and it serves them as `login` (guests only) and `login/complete`, returning whatever the callback returns. The package needs no view layer, so Inertia stays your dependency, not this package's:
 
@@ -74,7 +74,7 @@ resolve: {
 "paths": { "@socialdept/atp-appview": ["./vendor/socialdept/atp-appview/resources/js/index.ts"] }
 ```
 
-Configure it once with the package's routes, as Wayfinder helpers or anything with a `url()` method, then keep the two sessions in step on every page:
+Configure it with the package's routes, as Wayfinder helpers or anything with a `url()` method, and the page's `browserConfig()`, then keep the two sessions in step. Do both on every page, since `browserConfig()` can change from one page to the next:
 
 ```ts
 import { configureAtproto, reconcile, syncSessions } from '@socialdept/atp-appview';
@@ -118,7 +118,28 @@ The browser session is the source of truth. The server session can be rebuilt fr
 - **An action that hits a dead session** is not lost. `withSession()` raises a dialog, the user signs back in through a popup, and the action runs again. It only retries a request that never took effect.
 - **Signing back in** prepares with the account's DID, and the browser refuses a sign-in that lands on another account.
 
-## Session lifetime
+## Signing out
+
+From the browser, `signOut()` does it all. When the server signs the user out, as from a logout route or a form post, call `SignOut`, which works in both modes:
+
+```php
+use SocialDept\AtpAppview\Auth\SignOut;
+
+public function destroy(Request $request, SignOut $signOut)
+{
+    $signOut($request);
+
+    return redirect('/');
+}
+```
+
+It ends the Laravel session of `auth.session_guard`, or of the guard named as the second argument, such as an admin panel's, and then:
+
+- **Backend mode**: the server holds the atproto session, so it is revoked at the authorization server and forgotten, through atp-client's `Atp::oauth()->revoke($did)`. It returns that `RevocationResult`. Revocation that fails, from a network error, a refusal or a server without a revocation endpoint, still signs out and is reported on the result instead of thrown.
+- **Frontend mode**: the browser holds the atproto session, and `reconcile()` on the next page would vouch for it and start a new server session, undoing the sign-out. So the next page's `FrontendAuth::browserConfig()` carries `signOut`, and `reconcile()` signs the browser out instead: it revokes the refresh token, forgets the tokens and the key, and starts nothing. The server allows that browser one client assertion for the account's server, within ten minutes, so a confidential client can still revoke. It returns `null`.
+
+The flag is flashed, so it reaches the page right after the sign-out, such as the one a redirect lands on, and `reconcile()` acts on each sign-out once. It arrives as long as every page passes the whole of `browserConfig()` to `configureAtproto()`, as shown above.
+
 
 Laravel's session lifetime, `SESSION_LIFETIME` in minutes, defaults to 120, so an app left alone for two hours forgets the user while their atproto session is still good. Set it from the kind of OAuth client the app is, which its client metadata declares, not the mode:
 

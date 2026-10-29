@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use SocialDept\AtpAppview\Auth\AccountResolver;
+use SocialDept\AtpAppview\Auth\SignOut;
 use SocialDept\AtpAppview\Moderation\AccountActions;
 use SocialDept\AtpClient\Auth\ServiceAuth;
 use SocialDept\AtpClient\Exceptions\ServiceAuthException;
@@ -65,16 +66,18 @@ class SessionController extends Controller
 
         $guard->login($user, (bool) config('atp-appview.auth.frontend.remember', true));
         $request->session()->regenerate();
-        $request->session()->forget(OAuthController::EXCHANGE_KEY);
+        $request->session()->forget([OAuthController::EXCHANGE_KEY, SignOut::REVOKING_KEY]);
 
         return response()->json(['did' => $account['did'], 'handle' => $account['handle']]);
     }
 
-    public function destroy(Request $request): JsonResponse
+    /**
+     * The end of the browser's signOut(), which has already revoked and
+     * forgotten its tokens, so only the Laravel session is left.
+     */
+    public function destroy(Request $request, SignOut $signOut): JsonResponse
     {
-        $this->guard()->logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $signOut->endSession($request);
 
         return response()->json(['ok' => true]);
     }

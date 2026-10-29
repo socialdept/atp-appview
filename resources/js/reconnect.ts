@@ -1,4 +1,4 @@
-import { config } from './config';
+import { config, configured } from './config';
 import { getDpopKeyHandle } from './dpop-keys';
 import { appFetch } from './http';
 import {
@@ -77,6 +77,9 @@ function update(patch: Partial<ReconnectState>): void {
 
 let serverUser: ServerUser | null = null;
 const rebuilding = new Set<string>();
+// Server sign-outs already followed, so each is acted on once even when a
+// later reload hands the page the same config.
+const followedSignOuts = new Set<string>();
 
 /**
  * The account the server session is for, as the page last reported it to
@@ -95,6 +98,17 @@ export async function reconcile(
     user: ServerUser | null,
 ): Promise<'reload' | null> {
     serverUser = user;
+
+    const signedOut = configured()?.signOut;
+
+    if (signedOut && !user?.did && !followedSignOuts.has(signedOut)) {
+        // The server signed the user out. Follow it, rather than vouching
+        // for the browser session and undoing the sign-out.
+        followedSignOuts.add(signedOut);
+        await endBrowserSession();
+
+        return null;
+    }
 
     const browser = await usable(currentSession());
 
@@ -266,6 +280,14 @@ export function syncSessions(options: {
  * them and the key here, and end the server session.
  */
 export async function signOut(): Promise<void> {
+    await endBrowserSession();
+    await appFetch(config().routes.endSession.url(), { method: 'DELETE' });
+}
+
+/**
+ * Revoke and forget the browser's session, leaving the server's alone.
+ */
+async function endBrowserSession(): Promise<void> {
     // Nobody is signed in at the server from here on, so forgetting the
     // browser session must not read as a session that needs reconnecting.
     serverUser = null;
@@ -281,6 +303,4 @@ export async function signOut(): Promise<void> {
     if (did) {
         await forgetSession(did);
     }
-
-    await appFetch(config().routes.endSession.url(), { method: 'DELETE' });
 }
