@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Mockery;
 use Mockery\MockInterface;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Auth\ViewerSource;
@@ -31,6 +30,7 @@ use SocialDept\AtpAppview\Spaces\SpaceRecordIndexer;
 use SocialDept\AtpAppview\Spaces\SpaceRecordQuery;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
 use SocialDept\AtpAppview\Spaces\SyncSpace;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClient;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Auth\ServiceAuth;
@@ -78,7 +78,6 @@ class SpaceGrantsTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

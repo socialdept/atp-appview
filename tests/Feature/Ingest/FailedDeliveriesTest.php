@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 use Closure;
 use Illuminate\Support\Carbon;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -25,6 +24,7 @@ use SocialDept\AtpAppview\Ingest\Rejections;
 use SocialDept\AtpAppview\Ingest\Repairs;
 use SocialDept\AtpAppview\Models\FailedDelivery;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeResponse;
@@ -44,7 +44,6 @@ class FailedDeliveriesTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.ingest.handlers', [RecordIndexer::class, Picky::class]);
         $app['config']->set('atp-appview.ingest.password', 'secret');

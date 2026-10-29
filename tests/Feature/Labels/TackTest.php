@@ -6,13 +6,13 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Labels\SubjectSync;
 use SocialDept\AtpAppview\Labels\Tack;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class TackTest extends TestCase
 {
@@ -25,7 +25,6 @@ class TackTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.labels.tack.url', 'http://tack.test');
         $app['config']->set('atp-appview.labels.tack.password', 'tack-secret');

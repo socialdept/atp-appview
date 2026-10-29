@@ -5,13 +5,13 @@ namespace SocialDept\AtpAppview\Tests\Feature\Feeds;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Http;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Feeds\FeedInteractions;
 use SocialDept\AtpAppview\Feeds\FeedItem;
 use SocialDept\AtpAppview\Tests\Fixtures\Feeds\LatestThings;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeResponse;
@@ -36,7 +36,6 @@ class FeedsSetupTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

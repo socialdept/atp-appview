@@ -3,7 +3,6 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
 use Illuminate\Support\Facades\Log;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Index\RecordValidation;
@@ -11,6 +10,7 @@ use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
@@ -25,7 +25,6 @@ class RecordValidationTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-schema.cache.enabled', false);

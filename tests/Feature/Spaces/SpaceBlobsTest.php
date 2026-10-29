@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Mockery;
 use Mockery\MockInterface;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Spaces\Contracts\SpaceAccess;
@@ -16,6 +15,7 @@ use SocialDept\AtpAppview\Spaces\SpaceBlobs;
 use SocialDept\AtpAppview\Spaces\SpaceBlobUrls;
 use SocialDept\AtpAppview\Spaces\SpaceGrants;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSpaces\AtpSpacesServiceProvider;
@@ -61,7 +61,6 @@ class SpaceBlobsTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);

@@ -63,6 +63,14 @@ blocked.
 vendor/bin/phpunit --exclude-group integration
 ```
 
+The suite runs on in-memory SQLite. CI also runs it on MySQL. To do that
+locally, name the connection in the environment. Use a database of its own,
+since the tests drop every table in it:
+
+```bash
+DB_CONNECTION=mysql DB_DATABASE=testing DB_USERNAME=root vendor/bin/phpunit --exclude-group integration
+```
+
 The `integration` group reaches the GitHub API to check the vendored lexicons
 against upstream. It is excluded in CI and run deliberately:
 

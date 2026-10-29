@@ -5,8 +5,8 @@ namespace SocialDept\AtpAppview\Tests\Feature\Xrpc;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcRoutes;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -26,7 +26,6 @@ class FreshInstallTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'database');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);

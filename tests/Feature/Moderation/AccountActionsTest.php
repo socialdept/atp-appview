@@ -6,7 +6,6 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordQuery;
 use SocialDept\AtpAppview\Ingest\Batch;
@@ -25,6 +24,7 @@ use SocialDept\AtpAppview\Models\AccountAction;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Moderation\AccountActions;
 use SocialDept\AtpAppview\Moderation\Events\AccountActioned;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class AccountActionsTest extends TestCase
 {
@@ -42,7 +42,6 @@ class AccountActionsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.fields', [self::POST => ['tags' => 'string[]']]);
         $app['config']->set('atp-appview.ingest.admin_url', 'http://tap.test');

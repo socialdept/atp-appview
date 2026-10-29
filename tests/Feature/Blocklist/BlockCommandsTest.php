@@ -3,10 +3,10 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Blocklist;
 
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\BlockKind;
 use SocialDept\AtpAppview\Models\Block;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class BlockCommandsTest extends TestCase
 {
@@ -17,7 +17,6 @@ class BlockCommandsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.admin_url', 'http://tap.test');
     }
 

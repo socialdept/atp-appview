@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
 use SocialDept\AtpAppview\Ingest\Batch;
@@ -22,6 +21,7 @@ use SocialDept\AtpAppview\Standing\Verification;
 use SocialDept\AtpAppview\Standing\Verifiers\LabelVerifier;
 use SocialDept\AtpAppview\Standing\Verifiers\RecordVerifier;
 use SocialDept\AtpAppview\Tests\Fixtures\Standing\CommunityIssuers;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpCbor\Core\CBOR;
 use SocialDept\AtpCbor\Core\CID;
 use SocialDept\AtpCbor\Crypto\Secp256k1Keypair;
@@ -66,7 +66,6 @@ class StandingTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('queue.default', 'sync');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);

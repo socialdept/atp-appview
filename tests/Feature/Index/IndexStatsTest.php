@@ -5,11 +5,11 @@ namespace SocialDept\AtpAppview\Tests\Feature\Index;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Console\ReconcileCommand;
 use SocialDept\AtpAppview\Index\IndexStats;
 use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 class IndexStatsTest extends TestCase
@@ -24,7 +24,6 @@ class IndexStatsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS, self::LIKES]);
     }
 
@@ -122,6 +121,14 @@ class IndexStatsTest extends TestCase
     public function test_hidden_records_and_tombstones_have_their_own_indexes(): void
     {
         $indexes = collect(Schema::getIndexes('atp_records'))->pluck('name');
+
+        // MySQL and MariaDB have no partial indexes, so they go without.
+        if (! in_array(DB::connection()->getDriverName(), ['pgsql', 'sqlite'], true)) {
+            $this->assertNotContains('atp_records_hidden_in_sort_order', $indexes);
+            $this->assertNotContains('atp_records_tombstones_in_sort_order', $indexes);
+
+            return;
+        }
 
         $this->assertContains('atp_records_hidden_in_sort_order', $indexes);
         $this->assertContains('atp_records_tombstones_in_sort_order', $indexes);

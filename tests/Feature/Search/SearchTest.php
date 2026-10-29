@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Search;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use LogicException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Facades\Xrpc;
 use SocialDept\AtpAppview\Features;
@@ -21,6 +20,7 @@ use SocialDept\AtpAppview\Tests\Fixtures\Search\FollowedFirst;
 use SocialDept\AtpAppview\Tests\Fixtures\Search\RecordingRanker;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcException;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -54,7 +54,6 @@ class SearchTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);

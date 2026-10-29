@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Labels;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\AccountStatus;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -21,6 +20,7 @@ use SocialDept\AtpAppview\Labels\Target;
 use SocialDept\AtpAppview\Models\Label;
 use SocialDept\AtpAppview\Models\Labeler;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Views\Hydrator;
 use SocialDept\AtpAppview\Views\Parts\Labels as LabelsPart;
 use SocialDept\AtpAppview\Views\Parts\Moderation as ModerationPart;
@@ -41,7 +41,6 @@ class LabelsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.fields', [self::POST => ['tags' => 'string[]']]);
     }

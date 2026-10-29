@@ -2,11 +2,11 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class TapConsumerTest extends TestCase
 {

@@ -4,9 +4,9 @@ namespace SocialDept\AtpAppview\Tests\Feature;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Features;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
@@ -24,7 +24,6 @@ class MigrationsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', env('DB_CONNECTION', 'testing'));
         $app['config']->set('atp-appview.features', [
             Features::moderation(),
             Features::notifications(),

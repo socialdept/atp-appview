@@ -2,7 +2,6 @@
 
 namespace SocialDept\AtpAppview\Tests\Unit\Ingest;
 
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
@@ -11,6 +10,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Exceptions\BatchFailed;
 use SocialDept\AtpAppview\Ingest\IngestBuffer;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class IngestBufferTest extends TestCase
 {

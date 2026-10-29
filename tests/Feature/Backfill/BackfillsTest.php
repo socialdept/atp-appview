@@ -7,7 +7,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Backfill\Backfills;
@@ -21,6 +20,7 @@ use SocialDept\AtpAppview\Ingest\IngestStats;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\BackfillRepo;
 use SocialDept\AtpAppview\Models\Identity;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 class BackfillsTest extends TestCase
@@ -47,7 +47,6 @@ class BackfillsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.admin_url', self::TAP);
         $app['config']->set('atp-appview.ingest.discovery_url', self::RELAY);
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS, self::READS]);

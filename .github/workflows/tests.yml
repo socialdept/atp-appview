@@ -32,7 +32,7 @@ jobs:
   mysql:
     runs-on: ubuntu-latest
 
-    name: Migrations (PHP 8.4 - Laravel 13 - MySQL 8)
+    name: Tests (PHP 8.4 - Laravel 13 - MySQL 8)
 
     services:
       mysql:
@@ -42,7 +42,7 @@ jobs:
           MYSQL_DATABASE: testing
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+        options: --tmpfs /var/lib/mysql --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
 
     steps:
       - name: Checkout code
@@ -60,7 +60,7 @@ jobs:
           composer require "laravel/framework:^13.0" "orchestra/testbench:^11.0" --no-interaction --no-update
           composer update --prefer-stable --prefer-dist --no-interaction
 
-      - name: Run every migration against MySQL
+      - name: Execute tests against MySQL
         env:
           DB_CONNECTION: mysql
           DB_HOST: 127.0.0.1
@@ -68,4 +68,4 @@ jobs:
           DB_DATABASE: testing
           DB_USERNAME: root
           DB_PASSWORD: ''
-        run: vendor/bin/phpunit --filter MigrationsTest
+        run: vendor/bin/phpunit --exclude-group integration

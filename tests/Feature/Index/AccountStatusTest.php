@@ -2,7 +2,7 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
-use Orchestra\Testbench\TestCase;
+use Illuminate\Support\Facades\DB;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\Reconciler;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -12,6 +12,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Facades\Atp;
 use SocialDept\AtpClient\Testing\FakeAtpManager;
@@ -36,7 +37,6 @@ class AccountStatusTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-appview.ingest.collections', [self::POSTS]);
     }
 
@@ -213,10 +213,9 @@ class AccountStatusTest extends TestCase
     public function test_upgrading_applies_the_status_of_accounts_already_inactive(): void
     {
         // Back to before the account status migration, however many follow it.
-        // Features keep theirs in folders of their own, run alongside.
-        $migrations = array_map('basename', glob(__DIR__.'/../../../database/migrations/{,*/}*.php', GLOB_BRACE));
-        sort($migrations);
-        $step = count($migrations) - array_search('2026_10_17_000008_add_account_status_to_atp_records_and_identities.php', $migrations, true);
+        // Features keep theirs in folders of their own, run alongside, and
+        // only those of the features turned on have run.
+        $step = DB::table('migrations')->where('migration', '>=', '2026_10_17_000008_add_account_status_to_atp_records_and_identities')->count();
         $this->artisan('migrate:rollback', ['--step' => $step])->run();
         Identity::query()->insert([
             ['did' => 'did:plc:gone', 'handle' => null, 'active' => false, 'status' => 'deleted', 'updated_at' => '2026-01-01 00:00:00'],

@@ -4,13 +4,13 @@ namespace SocialDept\AtpAppview\Tests\Feature\Xrpc;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Events\IdentityEvent;
 use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\Handlers\DefaultQueryHandler;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpClient\AtpClientServiceProvider;
@@ -30,7 +30,6 @@ class DefaultQueryHandlerTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);
@@ -113,8 +112,9 @@ class DefaultQueryHandlerTest extends TestCase
 
         // Without a plain range on sort_at, the index matches only the
         // collection and a deep page scans every row before the cursor.
-        $this->assertStringContainsString('"sort_at" <= ?', $sql);
-        $this->assertStringContainsString('"sort_at" >= ?', $sql);
+        $sortAt = DB::getQueryGrammar()->wrap('sort_at');
+        $this->assertStringContainsString("{$sortAt} <= ?", $sql);
+        $this->assertStringContainsString("{$sortAt} >= ?", $sql);
     }
 
     public function test_the_last_page_carries_no_cursor(): void

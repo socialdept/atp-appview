@@ -6,11 +6,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema as DbSchema;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Tests\Fixtures\Xrpc\CreateThing;
 use SocialDept\AtpAppview\Tests\Fixtures\Xrpc\GetThing;
 use SocialDept\AtpAppview\Tests\Fixtures\Xrpc\WhoAmI;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Contracts\HasAtpSession;
@@ -27,7 +27,6 @@ class XrpcRouterTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', __DIR__.'/../../Fixtures/Xrpc');

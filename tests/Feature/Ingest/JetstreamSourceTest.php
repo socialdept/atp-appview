@@ -5,7 +5,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
-use Orchestra\Testbench\TestCase;
 use RuntimeException;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
@@ -17,6 +16,7 @@ use SocialDept\AtpAppview\Ingest\FailedDeliveries;
 use SocialDept\AtpAppview\Ingest\Jetstream\JetstreamSource;
 use SocialDept\AtpAppview\Ingest\Jetstream\ResolveIdentity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSignals\Events\SignalEvent;
@@ -45,7 +45,6 @@ class JetstreamSourceTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);
         $app['config']->set('atp-appview.ingest.collections', [self::POST]);

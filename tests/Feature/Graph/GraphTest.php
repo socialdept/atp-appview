@@ -3,7 +3,6 @@
 namespace SocialDept\AtpAppview\Tests\Feature\Graph;
 
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Facades\Xrpc;
 use SocialDept\AtpAppview\Graph\Graph;
@@ -14,6 +13,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\Pipeline;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Notifications\Notifications;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Views\Hydrator;
 use SocialDept\AtpAppview\Views\Parts\Relationship;
 use SocialDept\AtpAppview\Views\View;
@@ -44,7 +44,6 @@ class GraphTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);

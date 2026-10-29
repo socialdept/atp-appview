@@ -4,7 +4,6 @@ namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Index\RecordQuery;
@@ -15,6 +14,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordAction;
 use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Models\Record;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
@@ -32,7 +32,6 @@ class RecordFieldsTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('auth.guards.atp', ['driver' => 'atp', 'provider' => 'users', 'session_guard' => 'web']);
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
@@ -256,8 +255,9 @@ class RecordFieldsTest extends TestCase
         RecordQuery::in(self::THING)->where('tags', 'php')->where('tags', 'laravel')->orderBy('createdAt')->get();
         $queries = array_column(DB::getQueryLog(), 'query');
 
-        $records = array_values(array_filter($queries, fn (string $sql) => str_contains($sql, 'from "atp_records"')));
+        $grammar = DB::getQueryGrammar();
+        $records = array_values(array_filter($queries, fn (string $sql) => str_contains($sql, 'from '.$grammar->wrapTable('atp_records'))));
         $this->assertCount(1, $records, 'Records are fetched once, by id.');
-        $this->assertStringContainsString('"id" in', $records[0]);
+        $this->assertStringContainsString($grammar->wrap('id').' in', $records[0]);
     }
 }

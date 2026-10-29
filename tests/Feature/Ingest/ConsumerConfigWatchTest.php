@@ -2,12 +2,12 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Ingest;
 
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Ingest\Batch;
 use SocialDept\AtpAppview\Ingest\Contracts\BatchHandler;
 use SocialDept\AtpAppview\Ingest\DeployedConfig;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class ConsumerConfigWatchTest extends TestCase
 {
@@ -18,7 +18,6 @@ class ConsumerConfigWatchTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
     }
 
