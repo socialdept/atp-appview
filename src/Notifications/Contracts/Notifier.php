@@ -10,9 +10,10 @@ use SocialDept\AtpAppview\Notifications\Notify;
  * in a thread or everyone sharing a status. Listed in
  * atp-appview.notifications.notifiers.
  *
- * Offered only records as they arrive live, after they are indexed, so a
- * query sees them. A backfill or a replay keeps what a record gave before,
- * and deleting the record removes its notifications.
+ * Offered records as they arrive live, after they are indexed, so a query
+ * sees them. A backfill or a replay keeps what a record gave before, and
+ * deleting the record removes its notifications. Records already indexed
+ * are offered only when appview:notifications:build --notifier asks.
  */
 interface Notifier
 {
@@ -22,7 +23,7 @@ interface Notifier
     public function collections(): array;
 
     /**
-     * @param  array<int, Record>  $records  Newly indexed, live and not deleted
+     * @param  array<int, Record>  $records  Indexed and not deleted, live or replayed by appview:notifications:build
      * @return iterable<Notify>
      */
     public function notify(array $records): iterable;

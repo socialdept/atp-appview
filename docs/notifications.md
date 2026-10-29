@@ -14,7 +14,7 @@ Records that point at an account or a record notify that account. Notifications 
 'separate' => ['reply', 'mention'],
 ```
 
-A field holding a DID notifies that account, one holding an AT-URI the account in it. Nobody is notified about their own records. `NotificationIndexer` keeps `atp_notifications` as records are indexed: one row per recipient, removed with its record, untouched when the same record is delivered again. `php artisan appview:notifications:build` adds notifications for records indexed before their reasons were configured, without announcing them. Each takes its record's time, and lists are ordered by time, so they fall where they belong.
+A field holding a DID notifies that account, one holding an AT-URI the account in it. Nobody is notified about their own records. `NotificationIndexer` keeps `atp_notifications` as records are indexed: one row per recipient, removed with its record, untouched when the same record is delivered again. `php artisan appview:notifications:build` adds notifications for records indexed before their reasons were configured, without announcing them, and can [replay a notifier](#replaying-a-notifier) the same way. Each takes its record's time, and lists are ordered by time, so they fall where they belong.
 
 Every notification carries its `reason`, its `subject` (the record acted on, or the recipient for a follow) and a `groupKey` made of the two, so "Alice and 4 others liked your status" is one group, and a client showing them one at a time can still join them. Reasons in `separate` give each notification its own group, as replies usually want.
 
@@ -143,7 +143,20 @@ class ThreadNotifier implements Notifier
 
 A `Notify` names the record that notifies, the recipient, the reason and the subject it groups by, which defaults to the recipient. Nobody is notified about their own records, and one a configured reason already gives is kept once.
 
-Only records arriving live are offered. A backfill or a replay keeps what a record gave before, so a notifier can ask about the present ("who has this status now") without old records notifying again. A record changed live is offered again and its notifications brought to what the notifier says now. Deleting it removes them. `appview:notifications:build` does not run notifiers.
+Only records arriving live are offered. A backfill or a replay keeps what a record gave before, so a notifier can ask about the present ("who has this status now") without old records notifying again. A record changed live is offered again and its notifications brought to what the notifier says now. Deleting it removes them.
+
+### Replaying a notifier
+
+A notifier added or changed after its records arrived can be run over them, configured or not:
+
+```bash
+php artisan appview:notifications:build --notifier="App\Notifications\ThreadNotifier"
+php artisan appview:notifications:build xyz.statusphere.status --notifier="App\Notifications\ThreadNotifier" --since=2026-10-01 --until=2026-11-01
+```
+
+It is offered every record of its collections not deleted, or only the collection given, and only those indexed within `--since` and `--until` when given. A replay only adds: what a record already gave, from a reason, this notifier or another, stays as it is, so running it twice adds nothing. Each notification takes its record's time, so it falls where it belongs in lists. Nothing is announced unless `--announce` is passed, so old records do not reach push or email. With it, `NotificationCreated` is dispatched for each one added whose record shows. `--notifier` can be repeated.
+
+`--since` and `--until` narrow building configured reasons too.
 
 ## Sending one
 
