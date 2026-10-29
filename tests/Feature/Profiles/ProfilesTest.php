@@ -4,12 +4,12 @@ namespace SocialDept\AtpAppview\Tests\Feature\Profiles;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Images\BlobUrls;
 use SocialDept\AtpAppview\Models\Backfill;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Profiles\Profiles;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 class ProfilesTest extends TestCase
@@ -24,7 +24,6 @@ class ProfilesTest extends TestCase
 
     protected function defineEnvironment($app): void
     {
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
         $app['config']->set('atp-appview.ingest.companions', [self::OWN, self::BSKY]);
         $app['config']->set('atp-appview.profiles.sources', [['collection' => self::OWN, 'fields' => ['pronouns']], ['collection' => self::BSKY]]);
@@ -210,6 +209,6 @@ class ProfilesTest extends TestCase
 
         $profileQueries = array_values(array_filter($queries, fn (string $sql) => str_contains($sql, 'atp_records')));
         $this->assertCount(2, $profileQueries);
-        $this->assertStringContainsString('"uri" in', $profileQueries[0]);
+        $this->assertStringContainsString(DB::getQueryGrammar()->wrap('uri').' in', $profileQueries[0]);
     }
 }

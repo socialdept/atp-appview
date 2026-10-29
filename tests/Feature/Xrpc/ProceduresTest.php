@@ -6,11 +6,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Blocklist\Blocklist;
 use SocialDept\AtpAppview\Ingest\Contracts\IngestHook;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Xrpc\XrpcRegistry;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpClient\Contracts\CredentialProvider;
@@ -49,7 +49,6 @@ class ProceduresTest extends TestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
-        $app['config']->set('database.default', 'testing');
         $app['config']->set('atp-schema.sources', [__DIR__.'/../../Fixtures/lexicons']);
         $app['config']->set('atp-schema.dns_resolution.enabled', false);
         $app['config']->set('atp-appview.xrpc.discover.path', null);
@@ -97,7 +96,7 @@ class ProceduresTest extends TestCase
             ->assertExactJson(['uri' => 'at://did:plc:alice/com.example.thing/3m2aaaaaaaaab', 'cid' => 'bafynew']);
 
         $record = Record::find('at://did:plc:alice/com.example.thing/3m2aaaaaaaaab');
-        $this->assertSame(['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z', '$type' => self::COLLECTION], $record->record);
+        $this->assertSameRecord(['text' => 'hello', 'createdAt' => '2026-10-01T00:00:00Z', '$type' => self::COLLECTION], $record->record);
         $this->assertSame(self::REV, $record->rev);
         $this->assertSame('bafynew', $record->cid);
 

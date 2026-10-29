@@ -2,7 +2,6 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Index;
 
-use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Index\RecordIndexer;
 use SocialDept\AtpAppview\Index\RecordWriter;
@@ -13,6 +12,7 @@ use SocialDept\AtpAppview\Ingest\Events\RecordEvent;
 use SocialDept\AtpAppview\Ingest\TapConsumer;
 use SocialDept\AtpAppview\Models\Identity;
 use SocialDept\AtpAppview\Models\Record;
+use SocialDept\AtpAppview\Tests\TestCase;
 
 class RecordIndexerTest extends TestCase
 {
@@ -26,11 +26,6 @@ class RecordIndexerTest extends TestCase
     protected function getPackageProviders($app): array
     {
         return [AtpAppviewServiceProvider::class];
-    }
-
-    protected function defineEnvironment($app): void
-    {
-        $app['config']->set('database.default', 'testing');
     }
 
     protected function setUp(): void
@@ -243,7 +238,7 @@ class RecordIndexerTest extends TestCase
     {
         $this->index($this->event(RecordAction::Create, self::OLD, ['url' => "https://example.com/\0x", "k\0" => ['deep' => "a\0b"], 'n' => 1]));
 
-        $this->assertSame(['url' => "https://example.com/\u{FFFD}x", "k\u{FFFD}" => ['deep' => "a\u{FFFD}b"], 'n' => 1], $this->find()->record);
+        $this->assertSameRecord(['url' => "https://example.com/\u{FFFD}x", "k\u{FFFD}" => ['deep' => "a\u{FFFD}b"], 'n' => 1], $this->find()->record);
     }
 
     public function test_resort_recomputes_sort_at_after_the_fields_change(): void
