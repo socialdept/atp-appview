@@ -85,4 +85,35 @@ class MigrationsTest extends TestCase
         $this->assertTrue(Schema::hasTable('atp_ingest_repairs'));
         $this->assertTrue(Schema::hasColumn('atp_records', 'repair'));
     }
+
+    /**
+     * Repos indexed before created_at existed get the earliest time the
+     * index holds for them, and the column is indexed for "since" queries.
+     */
+    public function test_identities_already_indexed_get_when_they_were_first_seen(): void
+    {
+        $name = '2026_11_08_000001_add_created_at_to_atp_identities_table';
+
+        $this->artisan('migrate:fresh')->assertSuccessful();
+        $this->artisan('migrate:rollback', ['--step' => 1])->assertSuccessful();
+        $this->assertFalse(Schema::hasColumn('atp_identities', 'created_at'), "{$name} is no longer the last migration.");
+
+        DB::table('atp_identities')->insert([
+            ['did' => 'did:plc:alice', 'active' => true, 'updated_at' => '2026-11-05 12:00:00'],
+            ['did' => 'did:plc:bob', 'active' => true, 'updated_at' => '2026-11-03 09:00:00'],
+        ]);
+
+        foreach ([['a', '2026-11-04 08:00:00'], ['b', '2026-11-02 07:00:00']] as [$rkey, $at]) {
+            DB::table('atp_records')->insert(['uri' => "at://did:plc:alice/app.example.post/{$rkey}", 'did' => 'did:plc:alice', 'collection' => 'app.example.post', 'rkey' => $rkey, 'rev' => '3l2aaaaaaaaaa', 'indexed_at' => $at]);
+        }
+
+        DB::table('atp_records')->insert(['uri' => 'at://did:plc:bob/app.example.post/c', 'did' => 'did:plc:bob', 'collection' => 'app.example.post', 'rkey' => 'c', 'rev' => '3l2aaaaaaaaaa', 'indexed_at' => '2026-11-04 08:00:00']);
+
+        $this->artisan('migrate')->assertSuccessful();
+
+        $created = DB::table('atp_identities')->orderBy('did')->pluck('created_at', 'did')->map(fn ($at) => substr((string) $at, 0, 19))->all();
+
+        $this->assertSame(['did:plc:alice' => '2026-11-02 07:00:00', 'did:plc:bob' => '2026-11-03 09:00:00'], $created, 'The oldest record, or updated_at when that is earlier.');
+        $this->assertTrue(Schema::hasIndex('atp_identities', ['created_at']));
+    }
 }

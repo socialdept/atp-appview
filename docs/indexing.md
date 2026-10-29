@@ -112,6 +112,14 @@ Hidden records and tombstones are a sliver of each collection. Through the main 
 
 On `atp_identities`, `reconciled_at` serves `appview:reconcile` picking the repos due a check. Postgres builds it nulls first, since the run starts with repos never checked.
 
+`created_at` on `atp_identities` is when the index first saw the repo, by any route: an identity event, a Jetstream record from a new repo, or a PDS lookup for the blocklist. It is set when the row is added and never changed after, and its index serves questions like how many repos arrived this week.
+
+```php
+Identity::query()->where('created_at', '>=', now()->subWeek())->count();
+```
+
+Repos indexed before the column existed got the earliest time the index held for them: their oldest record's `indexed_at`, or the identity's `updated_at` when that is earlier. Both come after the repo was first seen, so for those repos the value can be late, never early.
+
 A cursor adds a plain `sort_at` range next to the tie-breaking comparison on `uri`, so the index seeks to the cursor rather than scanning every row before it. On 220,000 documents, a page 50,000 records deep takes 0.2 ms to execute.
 
 ## Counts
