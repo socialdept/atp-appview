@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use LogicException;
 use Orchestra\Testbench\TestCase;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
+use SocialDept\AtpAppview\Spaces\SpaceBlobUrls;
 use SocialDept\AtpAppview\Spaces\SpaceGrants;
 use SocialDept\AtpAppview\Spaces\SpaceRecordQuery;
 use SocialDept\AtpAppview\Spaces\SpaceSync;
@@ -22,8 +23,8 @@ use SocialDept\AtpSupport\AtpSupportServiceProvider;
 
 /**
  * Without Features::spaces(), no space tables, command, notification
- * routes or enter procedure exist, and following, entering or querying a
- * space refuses, naming the feature.
+ * routes, blob route or enter procedure exist, and following, entering,
+ * querying a space or signing a blob URL refuses, naming the feature.
  */
 class SpacesFeatureOffTest extends TestCase
 {
@@ -49,6 +50,8 @@ class SpacesFeatureOffTest extends TestCase
         $this->assertFalse(Schema::hasTable('atp_space_grants'));
         $this->assertArrayNotHasKey('appview:spaces:sync', Artisan::all());
         $this->assertFalse(Route::has('atp-spaces.com.atproto.space.notifyWrite'));
+        $this->assertFalse(Route::has(SpaceBlobUrls::ROUTE));
+        $this->get('/atp-appview/space-blobs/did:plc:alice/bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku')->assertNotFound();
         $this->postJson('/xrpc/com.example.space.enter', ['space' => 'at://did:plc:authority/space/com.example.forum/main', 'delegationToken' => 'a.b.c'])->assertStatus(501);
     }
 
@@ -66,6 +69,14 @@ class SpacesFeatureOffTest extends TestCase
         $this->expectExceptionMessage('Features::spaces()');
 
         SpaceRecordQuery::in(SpaceRef::make('did:plc:authority', 'com.example.forum', 'main'))->visibleTo('did:plc:alice')->get();
+    }
+
+    public function test_signing_a_blob_url_refuses(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Features::spaces()');
+
+        app(SpaceBlobUrls::class)->url(SpaceRef::make('did:plc:authority', 'com.example.forum', 'main'), 'did:plc:alice', 'bafkreihdwdcefgh4dqkjv67uzcmw7ojee6xedzdetojuzjevtenxquvyku', 'did:plc:alice');
     }
 
     public function test_following_a_space_refuses(): void

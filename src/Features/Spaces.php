@@ -7,8 +7,10 @@ use Illuminate\Routing\Router;
 use LogicException;
 use SocialDept\AtpAppview\Console\SpacesSyncCommand;
 use SocialDept\AtpAppview\Features;
+use SocialDept\AtpAppview\Http\Controllers\SpaceBlobController;
 use SocialDept\AtpAppview\Spaces\Listeners\DropDeletedSpace;
 use SocialDept\AtpAppview\Spaces\Listeners\SyncNotifiedWrite;
+use SocialDept\AtpAppview\Spaces\SpaceBlobUrls;
 use SocialDept\AtpAppview\Xrpc\Auth;
 use SocialDept\AtpAppview\Xrpc\Handlers\EnterSpaceHandler;
 use SocialDept\AtpSpaces\Enums\SpaceNsid;
@@ -22,11 +24,12 @@ use SocialDept\AtpSpaces\Http\Controllers\SyncerController;
  * from the public index and read only by viewers SpaceAccess allows.
  * Adds atp_spaces, atp_space_repos, atp_space_records and atp_space_grants,
  * appview:spaces:sync, listeners for the notifications a space's authority
- * sends, whose routes atp-spaces serves, and the procedure a browser enters
- * a space through, when one is named.
+ * sends, whose routes atp-spaces serves, the route space blobs are served
+ * from at signed URLs, and the procedure a browser enters a space through,
+ * when one is named.
  *
- * Off, nothing is synced, no notification routes or procedure are served
- * for it, and the public index is unchanged.
+ * Off, nothing is synced, no notification routes, blob route or procedure
+ * are served for it, and the public index is unchanged.
  */
 class Spaces implements Feature
 {
@@ -49,7 +52,10 @@ class Spaces implements Feature
         // while its syncer is on. It registers them as it boots, which may
         // be before or after this, so they are added here when missing.
         config()->set('atp-spaces.syncer.enabled', true);
-        $appview->routes(fn (Router $router) => self::syncerRoutes($router));
+        $appview->routes(function (Router $router) {
+            self::syncerRoutes($router);
+            self::blobRoute($router);
+        });
 
         if (is_string($nsid = config('atp-appview.spaces.xrpc.enter')) && $nsid !== '') {
             $appview->xrpc($nsid, EnterSpaceHandler::class, 'procedure', Auth::Required);
@@ -77,6 +83,19 @@ class Spaces implements Feature
                 ->middleware(array_merge(['atp.service-auth:'.$nsid->value], (array) ($config['middleware'] ?? [])))
                 ->name('atp-spaces.'.$nsid->value);
         }
+    }
+
+    /**
+     * The route space blobs are served from, at URLs SpaceBlobUrls signs.
+     */
+    public static function blobRoute(Router $router): void
+    {
+        $path = trim((string) config('atp-appview.spaces.blobs.path', 'atp-appview/space-blobs'), '/');
+
+        $router->get($path.'/{did}/{cid}', SpaceBlobController::class)
+            ->middleware((array) config('atp-appview.spaces.blobs.middleware', []))
+            ->where(['did' => 'did:[a-z]+:[^/]+', 'cid' => '[a-z2-7]+'])
+            ->name(SpaceBlobUrls::ROUTE);
     }
 
     public static function on(): bool

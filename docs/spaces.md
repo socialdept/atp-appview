@@ -117,6 +117,40 @@ class MySpaceAccess implements SpaceAccess
 
 The viewer is null for someone signed out, which the default never allows.
 
+## Blobs
+
+A member's PDS serves a space's blobs, its images and other files, only to a space credential, so the URLs the AppView builds for public blobs cannot reach them. The AppView serves them itself, at signed URLs:
+
+```php
+use SocialDept\AtpAppview\Spaces\SpaceBlobUrls;
+
+$urls = app(SpaceBlobUrls::class);
+
+// From a blob ref in a space record, with the type it gives.
+$url = $urls->blob($space, $record->record['image'], $record->did, $viewer);
+
+// Or from its parts.
+$url = $urls->url($space, $record->did, $cid, $viewer, 'image/png');
+```
+
+A URL is signed only for a viewer `SpaceAccess` allows, and is null for anyone else. It expires with the viewer's grant, and within `blobs.lifetime` seconds either way, so build URLs where space records are turned into views, for the viewer asking. An app that binds its own `SpaceAccess` can implement `Spaces\Contracts\ExpiringSpaceAccess` to say when a viewer's access ends. Without it, a URL lasts the full lifetime.
+
+Signing, not a session or a bearer token, because an `<img>` sends no header and, from another origin, no cookie. It works the same in both auth modes. A signed URL is a bearer link while it lasts: anyone it is shared with can load that one blob until it expires, which matches a credential's own lifetime.
+
+The route checks the signature, then serves the blob from the disk it is kept on, or fetches it from the member's PDS with the space's sync credential, checks the bytes hash to the CID, and keeps it. A blob is fetched once however many viewers load it, and is never listed ahead with `listBlobs`. A space's blobs are dropped from the disk when it is deleted or unfollowed.
+
+It is sent with `Cache-Control: private` and a `max-age` no longer than the URL has left, `X-Content-Type-Options: nosniff`, and a `Content-Security-Policy` that runs nothing. The `Content-Type` is the type the URL carries, from the blob ref, else `application/octet-stream`. Anything that is not an image, a video or audio, and any SVG, is sent as an attachment.
+
+| The route answers | When |
+| --- | --- |
+| `200` | The blob |
+| `400 InvalidRequest` | The URL does not name a space and a blob CID |
+| `403 InvalidSignature` | The URL is not signed, or was changed |
+| `403 ExpiredSignature` | The URL has expired |
+| `404 SpaceNotFound` | The space is not followed, or was deleted |
+| `502 UpstreamFailure` | The PDS could not be reached, refused, or sent bytes that do not hash to the CID, which are never kept |
+| `503 SpaceUnavailable` | The space is stale, with no usable credential to fetch with. It resumes once a viewer enters it |
+
 ## How a space syncs
 
 A sync pages through the space's repos with `listRepos` from the stored `spaceRev`, and syncs each repo whose revision moved:
@@ -173,6 +207,14 @@ They are never dispatched as `RecordIndexed` or `RecordRemoved`, so realtime's p
     'renew_before' => 21600,
 ],
 'page_size' => 100,
+'blobs' => [
+    'path' => 'atp-appview/space-blobs',   // the route blobs are served from
+    'middleware' => [],
+    'lifetime' => 600,          // the longest a signed URL lasts, in seconds
+    'absolute' => true,         // false when a proxy changes the scheme or host
+    'disk' => null,             // the app's default disk when null, keep it private
+    'prefix' => 'atp-appview/space-blobs',
+],
 'xrpc' => [
     'enter' => null,            // such as 'com.example.space.enter'
 ],

@@ -18,6 +18,10 @@
 | the AppView, with SpaceGrants::enter() in backend mode or the enter
 | procedure below in frontend mode, and it has not expired.
 |
+| Blobs in space records are served through the AppView, since a member's
+| PDS serves them only to a credential. SpaceBlobUrls signs a URL to one
+| for a viewer allowed to read the space, expiring with their grant.
+|
 */
 
 return [
@@ -36,6 +40,27 @@ return [
 
     // Entries per page when listing a space's repos and a repo's operations.
     'page_size' => 100,
+
+    // Where space blobs are served from, at URLs SpaceBlobUrls signs. A
+    // URL expires with the viewer's grant, and within lifetime seconds.
+    // Until then anyone holding it can load that one blob. Absolute signs
+    // the scheme and host too, so turn it off when the app is reached
+    // through a proxy that changes them.
+    //
+    // A blob is fetched from its member's PDS on first request, checked
+    // against its CID and kept on disk (the app's default disk when null)
+    // under prefix, so it is fetched once however many viewers load it.
+    // Use a private disk, never a public one, since a space's blobs are for
+    // its readers only. They are dropped when the space is deleted or
+    // unfollowed.
+    'blobs' => [
+        'path' => 'atp-appview/space-blobs',
+        'middleware' => [],
+        'lifetime' => 600,
+        'absolute' => true,
+        'disk' => null,
+        'prefix' => 'atp-appview/space-blobs',
+    ],
 
     // The procedure a browser enters a space through, in frontend mode,
     // under your own namespace. It takes {space, delegationToken}, the

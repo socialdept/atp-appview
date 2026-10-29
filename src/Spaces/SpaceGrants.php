@@ -12,7 +12,7 @@ use LogicException;
 use SocialDept\AtpAppview\Auth\Viewer;
 use SocialDept\AtpAppview\Auth\ViewerSource;
 use SocialDept\AtpAppview\Features\Spaces as SpacesFeature;
-use SocialDept\AtpAppview\Spaces\Contracts\SpaceAccess;
+use SocialDept\AtpAppview\Spaces\Contracts\ExpiringSpaceAccess;
 use SocialDept\AtpSpaces\Auth\SpaceCredential;
 use SocialDept\AtpSpaces\Auth\SpaceToken;
 use SocialDept\AtpSpaces\Auth\SpaceTokenType;
@@ -34,9 +34,10 @@ use SocialDept\AtpSpaces\Spaces;
  * syncs with the one entered last, so a space stays synced while anyone
  * uses it. A space gone stale for want of one catches up on the next entry.
  *
- * The default SpaceAccess: a viewer is allowed while their grant lasts.
+ * The default SpaceAccess: a viewer is allowed while their grant lasts,
+ * and blob URLs signed for them expire with it.
  */
-class SpaceGrants implements SpaceAccess
+class SpaceGrants implements ExpiringSpaceAccess
 {
     public const TABLE = 'atp_space_grants';
 
@@ -144,6 +145,29 @@ class SpaceGrants implements SpaceAccess
             ->where('did', $viewer)
             ->where('expires_at', '>', $this->now())
             ->exists();
+    }
+
+    /**
+     * When the viewer's grant for the space expires, or null when they hold
+     * none still good.
+     *
+     * @throws LogicException when the spaces feature is off
+     */
+    public function until(SpaceRef $space, ?string $viewer): ?CarbonImmutable
+    {
+        SpacesFeature::ensureOn();
+
+        if ($viewer === null) {
+            return null;
+        }
+
+        $expires = $this->connection()->table(self::TABLE)
+            ->where('space', (string) $space)
+            ->where('did', $viewer)
+            ->where('expires_at', '>', $this->now())
+            ->value('expires_at');
+
+        return $expires === null ? null : CarbonImmutable::parse($expires, 'UTC');
     }
 
     /**
