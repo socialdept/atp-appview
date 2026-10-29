@@ -14,9 +14,14 @@ return new class () extends Migration {
     {
         $schema = Schema::connection($this->getConnection());
 
+        // Each step is skipped when already done. Before hook and reason were
+        // shortened, this migration failed on MySQL after creating
+        // atp_failed_deliveries, and MySQL keeps a table made before a
+        // failure, so those installs must be able to run it again.
+
         // Events the handlers could not take, kept with what failed, so the
         // rest of their batch could be acknowledged and ingest moves on.
-        $schema->create('atp_failed_deliveries', function (Blueprint $table) {
+        $schema->hasTable('atp_failed_deliveries') || $schema->create('atp_failed_deliveries', function (Blueprint $table) {
             $table->id();
             $table->string('kind', 16);
             $table->unsignedBigInteger('event_id')->nullable();
@@ -36,11 +41,13 @@ return new class () extends Migration {
         });
 
         // What ingest hooks rejected, tallied by hook, collection and reason,
-        // with the latest record, so the table stays small.
-        $schema->create('atp_ingest_rejections', function (Blueprint $table) {
-            $table->string('hook', 255);
+        // with the latest record, so the table stays small. hook and reason
+        // are 191 characters so the primary key fits InnoDB's 3072 byte limit
+        // in utf8mb4: (191 + 317 + 191) * 4 = 2796 bytes.
+        $schema->hasTable('atp_ingest_rejections') || $schema->create('atp_ingest_rejections', function (Blueprint $table) {
+            $table->string('hook', 191);
             $table->string('collection', 317);
-            $table->string('reason', 255);
+            $table->string('reason', 191);
             $table->unsignedBigInteger('total')->default(0);
             $table->string('last_uri', 512)->nullable();
             $table->dateTime('last_rejected_at');
@@ -49,7 +56,7 @@ return new class () extends Migration {
         });
 
         // What ingest repairs rewrote, tallied the same way.
-        $schema->create('atp_ingest_repairs', function (Blueprint $table) {
+        $schema->hasTable('atp_ingest_repairs') || $schema->create('atp_ingest_repairs', function (Blueprint $table) {
             $table->string('repair', 255);
             $table->string('collection', 317);
             $table->unsignedBigInteger('total')->default(0);
@@ -62,7 +69,7 @@ return new class () extends Migration {
         // A repaired record keeps the repairs that changed it and the record
         // as it is in the repo. Null for every other record, so it costs
         // nothing on the rest of the table.
-        $schema->table('atp_records', function (Blueprint $table) {
+        $schema->hasColumn('atp_records', 'repair') || $schema->table('atp_records', function (Blueprint $table) {
             $table->json('repair')->nullable();
         });
     }

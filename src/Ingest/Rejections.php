@@ -22,9 +22,9 @@ class Rejections
         $mysql = in_array($connection->getDriverName(), ['mysql', 'mariadb'], true);
 
         $connection->table(self::TABLE)->upsert([[
-            'hook' => $hook,
+            'hook' => mb_substr($hook, 0, 191),
             'collection' => $event->collection,
-            'reason' => mb_substr($reason, 0, 255),
+            'reason' => mb_substr($reason, 0, 191),
             'total' => 1,
             'last_uri' => $event->uri(),
             'last_rejected_at' => Carbon::now('UTC'),

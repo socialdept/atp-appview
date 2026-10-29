@@ -33,9 +33,19 @@ return new class () extends Migration {
         // newest per labeler, subject and value. Self-labels a record carries
         // are here too, with the author as their source.
         if (! $schema->hasTable('atp_labels')) {
-            $schema->create('atp_labels', function (Blueprint $table) {
+            $mysql = in_array($schema->getConnection()->getDriverName(), ['mysql', 'mariadb'], true);
+
+            $schema->create('atp_labels', function (Blueprint $table) use ($mysql) {
                 $table->id();
-                $table->string('src', 255);
+                // The labeler's DID, ASCII by definition. One byte a character
+                // on MySQL keeps the unique index below within InnoDB's 3072
+                // byte key limit: 255 + (512 + 128) * 4 = 2815 bytes.
+                $src = $table->string('src', 255);
+
+                if ($mysql) {
+                    $src->charset('ascii')->collation('ascii_bin');
+                }
+
                 $table->string('uri', 512);
                 // The account the label is about: the uri for an account label,
                 // the repo of the record otherwise.
