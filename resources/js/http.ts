@@ -27,12 +27,18 @@ export async function appFetch(
 }
 
 /**
- * The message a JSON error response carries, or a fallback.
+ * The message a JSON error response carries, or a fallback. A server error's
+ * message is for developers, and with debug on it can be an exception or a
+ * query, so only a refusal's is shown to the user.
  */
 export async function errorMessage(
     response: Response,
     fallback: string,
 ): Promise<string> {
+    if (response.status >= 500) {
+        return fallback;
+    }
+
     const body = await response.json().catch(() => null);
 
     return typeof body?.message === 'string' ? body.message : fallback;
