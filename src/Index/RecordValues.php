@@ -130,7 +130,7 @@ class RecordValues
 
         foreach (array_chunk($rows, 500) as $chunk) {
             $stored = $connection->table('atp_records')->whereIn('uri', array_column($chunk, 'uri'))
-                ->get(['id', 'uri', 'did', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at'])
+                ->get(['id', 'uri', 'did', 'cid', 'indexed_at', 'deleted_at', 'hidden_at', 'moderated_at', 'limited_at', 'sort_at'])
                 ->keyBy('uri');
 
             $want = [];
@@ -139,7 +139,10 @@ class RecordValues
             foreach ($chunk as $row) {
                 $current = $stored[$row['uri']] ?? null;
 
-                if ($current === null || substr((string) $current->indexed_at, 0, 19) !== $now) {
+                // Written this second and with this row's CID, so an older
+                // revision that lost to a newer one in the same second never
+                // rewrites the newer record's values from its own body.
+                if ($current === null || substr((string) $current->indexed_at, 0, 19) !== $now || $current->cid !== $row['cid']) {
                     continue;
                 }
 
