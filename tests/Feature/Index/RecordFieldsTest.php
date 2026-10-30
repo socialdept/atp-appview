@@ -91,6 +91,20 @@ class RecordFieldsTest extends TestCase
         );
     }
 
+    public function test_an_older_revision_in_the_same_second_keeps_the_newer_values(): void
+    {
+        $this->travelTo('2026-10-29 12:00:00');
+        $older = new RecordEvent(1001, 'did:plc:alice', self::THING, 'a', RecordAction::Create, 'bafy-older', '3l2aaaaaaaaaa', ['tags' => ['php']], true);
+        $newer = new RecordEvent(1002, 'did:plc:alice', self::THING, 'a', RecordAction::Update, 'bafy-newer', '3l2aaaaaaaaab', ['tags' => ['rust']], true);
+
+        $this->index($newer);
+        $this->index($older);
+
+        $this->assertSame('bafy-newer', DB::table('atp_records')->where('rkey', 'a')->value('cid'));
+        $this->assertSame([], $this->rkeys(RecordQuery::in(self::THING)->where('tags', 'php')), 'The older body never reaches the values.');
+        $this->assertSame(['a'], $this->rkeys(RecordQuery::in(self::THING)->where('tags', 'rust')));
+    }
+
     public function test_records_filter_by_a_value_case_insensitively_newest_first(): void
     {
         $this->seedThings();
