@@ -355,10 +355,16 @@ class Claims
             // Kept verified, and checked again soon.
         } elseif ($definite || ($row->state === self::VERIFIED && $row->method === self::DIRECT)) {
             $values += ['state' => self::UNVERIFIED, 'method' => self::DIRECT, 'passes' => 0];
+
+            // Failures spent in grace are not held against it, so a record
+            // losing its verdict starts the unverified ladder at its first step.
+            if ($row->state === self::VERIFIED) {
+                $values['failures'] = 1;
+            }
         }
 
         if (($values['state'] ?? null) === self::UNVERIFIED && $definite) {
-            $values['next_check_at'] = $now->copy()->addSeconds((int) ($settings['recheck']['unverified'] ?? 21600));
+            $values['next_check_at'] = $now->copy()->addSeconds($this->step($settings['recheck']['unverified'] ?? 21600, $values['failures'], 21600));
         }
 
         $this->update($row->uri, $values);
@@ -378,9 +384,20 @@ class Claims
      */
     protected function backoff(array $settings, int $failures): int
     {
-        $steps = array_values((array) ($settings['backoff'] ?? [900]));
+        return $this->step($settings['backoff'] ?? 900, $failures, 900);
+    }
 
-        return (int) ($steps[min($failures, count($steps)) - 1] ?? 900);
+    /**
+     * The wait after this many failures in a row, from one number or a
+     * ladder whose last step repeats.
+     *
+     * @param  int|array<int, int>  $steps
+     */
+    protected function step(int|array $steps, int $failures, int $default): int
+    {
+        $steps = array_values((array) $steps);
+
+        return (int) ($steps[max(1, min($failures, count($steps))) - 1] ?? $default);
     }
 
     /**

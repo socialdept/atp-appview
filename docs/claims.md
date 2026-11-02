@@ -61,7 +61,7 @@ Every setting outside `collections` is a default, and a collection can set its o
 
 | Setting | Meaning |
 |---------|---------|
-| `recheck` | Seconds until a record is checked again after a verdict. |
+| `recheck` | Seconds until a record is checked again after a verdict. `unverified` also takes a ladder, such as `[21600, 86400, 604800, 2592000]`, stepped by failures in a row with the last step repeating. |
 | `backoff` | Seconds to wait after each failed check in a row. The last step repeats. |
 | `grace` | A record verified by its own check keeps its verdict through failed checks until both limits pass: this many failures in a row, over this many seconds. |
 | `per_host_per_minute` | Records checked per host each minute, or null for no limit. The rest stay due for the next run. |
@@ -78,6 +78,8 @@ Every setting outside `collections` is a default, and a collection can set its o
 A record is written as `pending` when its claim is new, or when any field `claim()` returns changes, and its parent too for an inheriting collection. Changing any other field keeps the verdict. A record that is deleted, or stops making a claim, loses its row.
 
 A record never verified fails at once on an `unverified` answer, and stays as it was on an `unknown` one. A record verified by its own check is demoted only once the failures pass the grace window, whatever their kind, and each failure moves it a step down the backoff ladder. A pass clears the failures.
+
+A record that keeps failing its claim is usually a site that never set up the proof, so a ladder for `recheck.unverified` spaces those checks out instead of repeating them every few hours. The step counts failures of either kind in a row. A record that loses its verdict starts at the first step, since the failures it spent in grace are not held against it. A pass, or a change to the claim, also starts it again, and an edit that fixes the claim is checked at once anyway.
 
 The method says how the verdict was reached: `direct` (its own check), `inherited` (its parent's verdict), or `sampled` (its own check while it could have inherited).
 
