@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use SocialDept\AtpAppview\Claims\Claims;
 use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\ColdRecords;
@@ -145,6 +146,17 @@ class Record extends Model
     public function scopeBy(Builder $query, string $did): void
     {
         $query->where('did', $did);
+    }
+
+    /**
+     * Records whose claim holds, by their own check or a trusted parent's.
+     * Needs the claims feature.
+     *
+     * @param  Builder<static>  $query
+     */
+    public function scopeVerified(Builder $query): void
+    {
+        app(Claims::class)->constrain($query, $query->getModel()->qualifyColumn('uri'));
     }
 
     /**
