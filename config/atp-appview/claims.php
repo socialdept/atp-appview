@@ -29,7 +29,10 @@ return [
     //     ],
     'collections' => [],
 
-    // Seconds until a record is checked again, by its verdict.
+    // Seconds until a record is checked again, by its verdict. unverified
+    // also takes a ladder, such as [21600, 86400, 604800, 2592000], stepped
+    // by failures in a row with the last step repeating, so records that
+    // keep failing are checked less often.
     'recheck' => [
         'verified' => 86400,
         'unverified' => 21600,

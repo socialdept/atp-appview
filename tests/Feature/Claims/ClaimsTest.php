@@ -190,6 +190,80 @@ class ClaimsTest extends TestCase
         $this->assertSame(Claims::UNVERIFIED, $this->claim($site)->state);
     }
 
+    public function test_a_single_unverified_recheck_repeats_however_often_it_fails(): void
+    {
+        $site = $this->index(self::ALICE, self::SITE, 'self', ['url' => 'https://alice.example']);
+        SiteChecker::$verdicts[$site] = Verdict::unverified('No proof');
+
+        $this->check($site);
+        $this->assertSame('2026-11-01 18:00:00', $this->claim($site)->next_check_at);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->check($site);
+        }
+
+        $this->assertSame(6, (int) $this->claim($site)->failures);
+        $this->assertSame('2026-11-01 18:00:00', $this->claim($site)->next_check_at);
+    }
+
+    public function test_an_unverified_recheck_ladder_grows_with_failures_and_settles_on_its_last_step(): void
+    {
+        config()->set('atp-appview.claims.recheck.unverified', [21600, 86400, 604800]);
+        $site = $this->index(self::ALICE, self::SITE, 'self', ['url' => 'https://alice.example']);
+        SiteChecker::$verdicts[$site] = Verdict::unverified('No proof');
+
+        $waits = [];
+
+        for ($i = 0; $i < 4; $i++) {
+            $this->check($site);
+            $waits[] = $this->claim($site)->next_check_at;
+        }
+
+        $this->assertSame(['2026-11-01 18:00:00', '2026-11-02 12:00:00', '2026-11-08 12:00:00', '2026-11-08 12:00:00'], $waits);
+    }
+
+    public function test_a_pass_or_a_claim_change_returns_the_ladder_to_its_first_step(): void
+    {
+        config()->set('atp-appview.claims.recheck.unverified', [21600, 86400, 604800]);
+        // No grace, so the first failure after a pass demotes at once.
+        config()->set('atp-appview.claims.grace', ['failures' => 1, 'seconds' => 0]);
+        $site = $this->index(self::ALICE, self::SITE, 'self', ['url' => 'https://alice.example']);
+        SiteChecker::$verdicts[$site] = Verdict::unverified('No proof');
+        $this->check($site);
+        $this->check($site);
+
+        SiteChecker::$verdicts[$site] = Verdict::verified();
+        $this->check($site);
+        SiteChecker::$verdicts[$site] = Verdict::unverified('No proof');
+        $this->check($site);
+        $this->assertSame('2026-11-01 18:00:00', $this->claim($site)->next_check_at, 'A pass starts it again.');
+
+        $this->check($site);
+        $this->index(self::ALICE, self::SITE, 'self', ['url' => 'https://elsewhere.example'], RecordAction::Update);
+        $this->check($site);
+        $this->assertSame('2026-11-01 18:00:00', $this->claim($site)->next_check_at, 'A claim change starts it again.');
+    }
+
+    public function test_a_record_losing_its_verdict_starts_the_ladder_at_its_first_step(): void
+    {
+        config()->set('atp-appview.claims.recheck.unverified', [21600, 86400, 604800]);
+        $site = $this->trustedSite(1);
+        SiteChecker::$verdicts[$site] = Verdict::unverified('No proof');
+
+        $this->check($site);
+        $this->travel(2)->days();
+        $this->check($site);
+        $this->travel(2)->days();
+        $this->check($site);
+
+        $this->assertSame(Claims::UNVERIFIED, $this->claim($site)->state);
+        $this->assertSame(1, (int) $this->claim($site)->failures);
+        $this->assertSame('2026-11-05 18:00:00', $this->claim($site)->next_check_at);
+
+        $this->check($site);
+        $this->assertSame('2026-11-06 12:00:00', $this->claim($site)->next_check_at);
+    }
+
     public function test_changing_a_claimed_field_resets_the_verdict_and_other_fields_keep_it(): void
     {
         $site = $this->trustedSite(1);
