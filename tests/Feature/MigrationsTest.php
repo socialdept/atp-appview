@@ -33,6 +33,7 @@ class MigrationsTest extends TestCase
             Features::standing(),
             Features::realtime(),
             Features::spaces(),
+            Features::claims(),
         ]);
     }
 

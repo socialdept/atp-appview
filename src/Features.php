@@ -4,6 +4,7 @@ namespace SocialDept\AtpAppview;
 
 use Illuminate\Console\Scheduling\Schedule;
 use SocialDept\AtpAppview\Features\AppView;
+use SocialDept\AtpAppview\Features\Claims;
 use SocialDept\AtpAppview\Features\Feeds;
 use SocialDept\AtpAppview\Features\Graph;
 use SocialDept\AtpAppview\Features\Moderation;
@@ -92,6 +93,17 @@ class Features
     public static function standing(array $options = []): string
     {
         return static::feature(Standing::class, $options);
+    }
+
+    /**
+     * Claims: verdicts on the claims records make, checked per collection
+     * and optionally inherited from a parent record.
+     *
+     * @param  array<string, mixed>  $options  Over atp-appview.claims
+     */
+    public static function claims(array $options = []): string
+    {
+        return static::feature(Claims::class, $options);
     }
 
     /**
