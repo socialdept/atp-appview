@@ -48,6 +48,8 @@ app(AppView::class)->hidden($alice, discovery: false);                      // b
 
 Blocks still apply. Cover a muted word on such a read with the `MutedWords` part, below, rather than showing it plainly.
 
+Each viewer's mutes, muted words and notification preferences are read once per request or job, however many reads filter by them. A mute or unmute made during the request is seen by the rest of it. With no `muted_words` sources configured, muted words are never read for filtering, since no entry has a field to match.
+
 ## Muted words
 
 A viewer can mute words, phrases, tags or emoji, in any collection. The app names where each collection's words are, grouped into sources a muted entry can be limited to:

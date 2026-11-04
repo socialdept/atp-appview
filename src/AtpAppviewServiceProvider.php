@@ -168,6 +168,13 @@ class AtpAppviewServiceProvider extends ServiceProvider
         // Each viewer's label preferences are read once per request or job.
         $this->app->scoped(\SocialDept\AtpAppview\Labels\LabelPreferences::class);
 
+        // Each viewer's mutes, muted words and notification preferences, and
+        // each account's profile, are read once per request or job. Every
+        // view build and read filter asks again.
+        $this->app->scoped(\SocialDept\AtpAppview\Graph\Graph::class);
+        $this->app->scoped(\SocialDept\AtpAppview\Notifications\NotificationPreferences::class);
+        $this->app->scoped(\SocialDept\AtpAppview\Profiles\ResolvedProfiles::class);
+
         $this->app->singleton(PdsLookup::class, fn () => new PdsLookup(
             plcDirectory: (string) config('atp-support.plc_directory', 'https://plc.directory'),
             ttl: (int) config('atp-appview.blocklist.pds_ttl', 86400),

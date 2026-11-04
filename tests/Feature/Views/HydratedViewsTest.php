@@ -18,6 +18,7 @@ use SocialDept\AtpAppview\Tests\Fixtures\Views\ShelfView;
 use SocialDept\AtpAppview\Tests\Fixtures\Views\ThingView;
 use SocialDept\AtpAppview\Tests\TestCase;
 use SocialDept\AtpAppview\Views\Hydrator;
+use SocialDept\AtpAppview\Views\UriViews;
 use SocialDept\AtpAppview\Views\ViewPage;
 use SocialDept\AtpClient\AtpClientServiceProvider;
 use SocialDept\AtpSchema\SchemaServiceProvider;
@@ -252,6 +253,26 @@ class HydratedViewsTest extends TestCase
         $refs = array_values(array_filter(array_column(DB::getQueryLog(), 'query'), fn (string $sql) => str_contains($sql, 'atp_record_values') || str_contains($sql, 'atp_value_counts')));
 
         $this->assertCount(2, $refs, 'Two counts and two viewer fields, two queries.');
+    }
+
+    public function test_uris_with_views_are_read_once_and_profiles_once_a_request(): void
+    {
+        $this->things(2);
+        $uris = [$this->thing(1), $this->thing(2)];
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(UriViews::class)->views($uris, 'did:plc:alice');
+        app(UriViews::class)->views($uris, 'did:plc:alice');
+        $log = array_column(DB::getQueryLog(), 'query');
+        DB::disableQueryLog();
+
+        $byUri = array_filter($log, fn (string $sql) => str_contains($sql, 'from "atp_records" where "uri" in') && ! str_contains($sql, 'hollowed_at'));
+        $identities = array_filter($log, fn (string $sql) => str_contains($sql, 'atp_identities'));
+
+        // Each URI here has a view, so nothing needs telling unindexed from hidden.
+        $this->assertCount(2, $byUri, 'One read of the records per call.');
+        $this->assertCount(1, $identities, 'The second call reuses the authors built by the first.');
     }
 
     public function test_a_page_costs_the_same_number_of_queries_whatever_its_size(): void

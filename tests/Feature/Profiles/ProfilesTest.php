@@ -94,6 +94,7 @@ class ProfilesTest extends TestCase
 
         config(['atp-appview.images.driver' => 'pds']);
         $this->app->forgetInstance(BlobUrls::class);
+        $this->app->forgetScopedInstances();
 
         $this->assertSame('https://pds.example/xrpc/com.atproto.sync.getBlob?did=did%3Aplc%3Abob&cid=bafyavatar', $this->profiles()->basic(['did:plc:bob'])['did:plc:bob']['avatar']);
     }
@@ -137,6 +138,9 @@ class ProfilesTest extends TestCase
             ->push(['uri' => 'x', 'cid' => 'y', 'value' => ['displayName' => 'Erin']]);
 
         $this->assertNull($this->profiles()->for(['did:plc:erin'])['did:plc:erin']['displayName']);
+
+        // A request keeps what it built, so the retry belongs to the next one.
+        $this->app->forgetScopedInstances();
         $this->assertSame('Erin', $this->profiles()->for(['did:plc:erin'])['did:plc:erin']['displayName']);
     }
 

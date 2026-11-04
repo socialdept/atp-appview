@@ -86,6 +86,8 @@ class Profiles
         foreach ($this->sources as $source) {
             Cache::forget($this->cacheKey($did, $source));
         }
+
+        app(ResolvedProfiles::class)->forget($did);
     }
 
     /**
@@ -127,6 +129,27 @@ class Profiles
             return [];
         }
 
+        $resolved = app(ResolvedProfiles::class);
+        $key = json_encode($images);
+        $known = $resolved->get($key, $dids);
+        $missing = array_values(array_diff($dids, array_keys($known)));
+
+        if ($missing !== []) {
+            $resolved->put($key, $this->fresh($missing, $images));
+        }
+
+        $profiles = [...$known, ...$resolved->get($key, $missing)];
+
+        return array_combine($dids, array_map(fn (string $did) => $profiles[$did], $dids));
+    }
+
+    /**
+     * @param  array<int, string>  $dids
+     * @param  array<string, string>  $images
+     * @return array<string, array<string, mixed>>
+     */
+    protected function fresh(array $dids, array $images): array
+    {
         $identities = Identity::query()->whereIn('did', $dids)->get(['did', 'handle', 'pds', 'active'])->keyBy('did');
         $records = $this->records($dids, $identities->keys()->all());
         $profiles = [];
@@ -200,7 +223,7 @@ class Profiles
             $unanswered = array_filter($indexed, fn (string $did) => ! isset($records[$did][$collection]));
 
             if ($unanswered !== []) {
-                $backfilling ??= array_column(app(Backfills::class)->active(), 'collection');
+                $backfilling ??= array_keys(app(Backfills::class)->running());
             }
 
             $trusted = $unanswered !== [] && in_array($collection, $backfilling ?? [], true) ? [] : array_diff($indexed, $cold);

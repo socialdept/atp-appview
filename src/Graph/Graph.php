@@ -38,6 +38,9 @@ class Graph
     /** @var array<string, array<int, string>> */
     protected array $hidden = [];
 
+    /** @var array<string, array<int, string>> */
+    protected array $muted = [];
+
     /**
      * Muted words read this request, by DID, since a page asks for each
      * viewer's more than once.
@@ -137,7 +140,7 @@ class Graph
             return [];
         }
 
-        return $this->connection()->table('atp_mutes')->where('did', $did)->pluck('subject')->all();
+        return $this->muted[$did] ??= $this->connection()->table('atp_mutes')->where('did', $did)->pluck('subject')->all();
     }
 
     public function mute(string $did, string $subject): void
@@ -154,7 +157,7 @@ class Graph
             'created_at' => Carbon::now('UTC')->format('Y-m-d H:i:s'),
         ]);
 
-        unset($this->hidden[$did]);
+        unset($this->hidden[$did], $this->muted[$did]);
     }
 
     public function unmute(string $did, string $subject): void
@@ -165,7 +168,7 @@ class Graph
 
         $this->connection()->table('atp_mutes')->where('did', $did)->where('subject', $subject)->delete();
 
-        unset($this->hidden[$did]);
+        unset($this->hidden[$did], $this->muted[$did]);
     }
 
     /**
@@ -275,6 +278,11 @@ class Graph
      */
     public function applyMutedWords(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null): void
     {
+        // Without a text source, no entry has a field to match.
+        if (self::mutedWordSources() === []) {
+            return;
+        }
+
         $tables ??= RecordTables::index();
         $muted = $this->mutedWords($viewer);
 

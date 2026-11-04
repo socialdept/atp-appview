@@ -2,6 +2,7 @@
 
 namespace SocialDept\AtpAppview\Tests\Feature\Graph;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Facades\Xrpc;
@@ -141,6 +142,26 @@ class GraphTest extends TestCase
         $this->assertSame([self::BOB], app(AppView::class)->hidden(self::ALICE, discovery: false));
         $this->assertSame([], Record::query()->collection(self::THING)->visibleTo(self::ALICE)->pluck('did')->all());
         $this->assertSame([self::CAROL], Record::query()->collection(self::THING)->visibleTo(self::ALICE, discovery: false)->pluck('did')->all());
+    }
+
+    public function test_a_viewers_mutes_are_read_once_a_request_and_muted_words_not_at_all_without_a_source(): void
+    {
+        $this->graph()->mute(self::ALICE, self::CAROL);
+        $this->index(self::CAROL, self::THING, 't1', ['text' => 'hi', 'kind' => 'note', 'createdAt' => '2026-10-01T00:00:00Z']);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        Record::query()->collection(self::THING)->visibleTo(self::ALICE)->get();
+        Record::query()->collection(self::THING)->visibleTo(self::ALICE)->get();
+        $log = array_column(DB::getQueryLog(), 'query');
+        DB::disableQueryLog();
+
+        $this->assertCount(1, array_filter($log, fn (string $sql) => str_contains($sql, 'atp_mutes')));
+        $this->assertCount(0, array_filter($log, fn (string $sql) => str_contains($sql, 'atp_muted_words')));
+
+        // A change made in the request is seen by the rest of it.
+        $this->graph()->unmute(self::ALICE, self::CAROL);
+        $this->assertSame([self::CAROL], Record::query()->collection(self::THING)->visibleTo(self::ALICE)->pluck('did')->all());
     }
 
     public function test_records_listed_for_a_viewer_leave_out_who_they_cannot_see(): void
