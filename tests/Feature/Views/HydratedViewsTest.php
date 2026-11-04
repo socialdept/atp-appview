@@ -264,10 +264,10 @@ class HydratedViewsTest extends TestCase
         DB::enableQueryLog();
         app(UriViews::class)->views($uris, 'did:plc:alice');
         app(UriViews::class)->views($uris, 'did:plc:alice');
-        $log = array_column(DB::getQueryLog(), 'query');
+        $log = array_map(fn (string $sql) => str_replace(['"', '`'], '', $sql), array_column(DB::getQueryLog(), 'query'));
         DB::disableQueryLog();
 
-        $byUri = array_filter($log, fn (string $sql) => str_contains($sql, 'from "atp_records" where "uri" in') && ! str_contains($sql, 'hollowed_at'));
+        $byUri = array_filter($log, fn (string $sql) => str_contains($sql, 'from atp_records where uri in') && ! str_contains($sql, 'hollowed_at'));
         $identities = array_filter($log, fn (string $sql) => str_contains($sql, 'atp_identities'));
 
         // Each URI here has a view, so nothing needs telling unindexed from hidden.
