@@ -149,16 +149,45 @@ class AppviewStatus
      */
     public function writes(): array
     {
-        return $this->cache->remember(self::CACHE.'writes', 5, fn () => [
-            'minute' => Record::withTrashed()->withHidden()->where('indexed_at', '>=', Carbon::now()->subMinute())->count(),
-            'fiveMinutes' => Record::withTrashed()->withHidden()->where('indexed_at', '>=', Carbon::now()->subMinutes(5))->count(),
-            // The latest per collection, each an index lookup. A plain max()
-            // reads the whole table, since indexed_at leads no index.
-            'lastIndexedAt' => collect($this->collectionNames())
-                ->map(fn (string $nsid) => Record::withTrashed()->withHidden()->where('collection', $nsid)->max('indexed_at'))
-                ->filter()
-                ->max(),
-        ]);
+        return $this->cache->remember(self::CACHE.'writes', 5, function () {
+            $minute = Carbon::now()->subMinute();
+            $counts = Record::withTrashed()->withHidden()
+                ->where('indexed_at', '>=', Carbon::now()->subMinutes(5))
+                ->selectRaw('count(*) as five_minutes, sum(case when indexed_at >= ? then 1 else 0 end) as minute', [$minute])
+                ->toBase()
+                ->first();
+
+            return [
+                'minute' => (int) ($counts->minute ?? 0),
+                'fiveMinutes' => (int) ($counts->five_minutes ?? 0),
+                'lastIndexedAt' => $this->lastIndexedAt(),
+            ];
+        });
+    }
+
+    /**
+     * The latest write across the ingested collections, in one statement of
+     * per-collection lookups. A plain max() reads the whole table, since
+     * indexed_at leads no index, while each branch here is an index lookup.
+     */
+    protected function lastIndexedAt(): mixed
+    {
+        $branches = array_map(
+            fn (string $nsid) => Record::withTrashed()->withHidden()->where('collection', $nsid)->selectRaw('max(indexed_at) as latest')->toBase(),
+            $this->collectionNames(),
+        );
+
+        if ($branches === []) {
+            return null;
+        }
+
+        $union = array_shift($branches);
+
+        foreach ($branches as $branch) {
+            $union->unionAll($branch);
+        }
+
+        return $this->connection()->query()->fromSub($union, 'latest')->max('latest');
     }
 
     /**
@@ -222,8 +251,7 @@ class AppviewStatus
         }
 
         return $this->cache->remember(self::CACHE.'storage', 60, fn () => [
-            'records' => (int) $connection->scalar('select pg_total_relation_size(?)', ['atp_records']),
-            'identities' => (int) $connection->scalar('select pg_total_relation_size(?)', ['atp_identities']),
+            ...array_map('intval', (array) $connection->selectOne('select pg_total_relation_size(?) as records, pg_total_relation_size(?) as identities', ['atp_records', 'atp_identities'])),
         ]);
     }
 
@@ -318,11 +346,12 @@ class AppviewStatus
      */
     public function blocklist(): array
     {
-        $last = Block::query()->max('last_blocked_at');
+        $rules = Block::query()->toBase()->selectRaw('count(*) as rules, sum(blocked_count) as dropped, max(last_blocked_at) as last')->first();
+        $last = $rules->last ?? null;
 
         return [
-            'rules' => Block::query()->count(),
-            'dropped' => (int) Block::query()->sum('blocked_count'),
+            'rules' => (int) ($rules->rules ?? 0),
+            'dropped' => (int) ($rules->dropped ?? 0),
             'lastDroppedAt' => $last === null ? null : Carbon::parse($last, 'UTC')->toIso8601ZuluString(),
         ];
     }

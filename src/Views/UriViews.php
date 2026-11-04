@@ -41,7 +41,9 @@ class UriViews
             }
         }
 
-        $indexed = Record::query()->whereIn('uri', $uris)->pluck('uri')->all();
+        // Only a URI with no view needs telling apart unindexed from hidden.
+        $viewless = array_values(array_filter($uris, fn (string $uri) => ! isset($byCollection[explode('/', $uri)[3] ?? ''])));
+        $indexed = $viewless === [] ? [] : Record::query()->whereIn('uri', $viewless)->pluck('uri')->all();
         $visible = Record::query()->whereIn('uri', $uris)->visibleTo($viewer, $discovery)->get()->keyBy('uri');
         $views = [];
 
