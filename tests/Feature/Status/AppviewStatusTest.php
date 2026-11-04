@@ -109,6 +109,28 @@ class AppviewStatusTest extends TestCase
         $this->assertNull($this->appview()->storage(), 'Only measured on Postgres.');
     }
 
+    public function test_the_dashboard_counts_take_one_query_each(): void
+    {
+        $this->record('did:plc:alice', self::POSTS, 'new');
+        $this->record('did:plc:alice', self::POSTS, 'older', ['indexed_at' => now()->subMinutes(3)]);
+        $status = $this->appview();
+        $status->collections();
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $writes = $status->writes();
+        $status->blocklist();
+        $status->collections();
+        $status->totals();
+        $status->countedAt();
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertSame(['minute' => 1, 'fiveMinutes' => 2], array_intersect_key($writes, ['minute' => 0, 'fiveMinutes' => 0]));
+        $this->assertNotNull($writes['lastIndexedAt']);
+        $this->assertSame(3, $count, 'The write counts, the latest write and the blocklist, with the index stats already read.');
+    }
+
     public function test_it_reports_accounts_and_reconciliation_errors_by_kind(): void
     {
         $now = now();

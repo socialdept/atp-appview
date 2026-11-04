@@ -20,6 +20,9 @@ class IndexStats
 {
     public const TOTAL = '*';
 
+    /** @var array<string, object>|null */
+    protected ?array $rows = null;
+
     /**
      * Count the index again, in one pass over atp_records.
      *
@@ -65,6 +68,8 @@ class IndexStats
             $connection->table('atp_index_stats')->delete();
             $connection->table('atp_index_stats')->insert($stats);
         });
+
+        $this->rows = null;
     }
 
     /**
@@ -74,11 +79,10 @@ class IndexStats
      */
     public function collections(): array
     {
-        return $this->connection()->table('atp_index_stats')
-            ->where('collection', '!=', self::TOTAL)
-            ->orderBy('collection')
-            ->get()
-            ->mapWithKeys(fn (object $row) => [$row->collection => $this->shape($row)])
+        return collect($this->rows())
+            ->except(self::TOTAL)
+            ->sortKeys()
+            ->map(fn (object $row) => $this->shape($row))
             ->all();
     }
 
@@ -90,7 +94,7 @@ class IndexStats
      */
     public function totals(): array
     {
-        $row = $this->connection()->table('atp_index_stats')->where('collection', self::TOTAL)->first();
+        $row = $this->rows()[self::TOTAL] ?? null;
 
         return $row === null ? ['records' => 0, 'hidden' => 0, 'tombstones' => 0, 'repos' => 0] : $this->shape($row);
     }
@@ -100,7 +104,7 @@ class IndexStats
      */
     public function countedAt(): ?Carbon
     {
-        $at = $this->connection()->table('atp_index_stats')->where('collection', self::TOTAL)->value('counted_at');
+        $at = ($this->rows()[self::TOTAL] ?? null)?->counted_at;
 
         return $at === null ? null : Carbon::parse($at, 'UTC');
     }
@@ -116,6 +120,17 @@ class IndexStats
             'tombstones' => (int) $row->tombstones,
             'repos' => (int) $row->repos,
         ];
+    }
+
+    /**
+     * The table, a row per collection and one for the total, read once: a
+     * status page asks for the totals, each collection and the time apart.
+     *
+     * @return array<string, object>
+     */
+    protected function rows(): array
+    {
+        return $this->rows ??= $this->connection()->table('atp_index_stats')->get()->keyBy('collection')->all();
     }
 
     protected function connection(): Connection
