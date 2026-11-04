@@ -45,10 +45,10 @@ class AppView
     /** @var array<int, class-string> */
     protected array $commands = [];
 
-    /** @var array<int, Closure> */
+    /** @var array<int, array{0: Closure, 1: bool}> Each filter, and whether it applies to discovery alone */
     protected array $readFilters = [];
 
-    /** @var array<int, array{0: Closure, 1: bool}> Each filter, and whether it reads space records too */
+    /** @var array<int, array{0: Closure, 1: bool, 2: bool}> Each filter, whether it reads space records too, and whether it applies to discovery alone */
     protected array $recordFilters = [];
 
     /** @var array<string, string> Service id => type, for the DID document */
@@ -220,10 +220,15 @@ class AppView
      * Accounts a viewer should not see records from: fn (string $viewer):
      * array of DIDs. Applied by Record::visibleTo(), RecordQuery::visibleTo(),
      * the built-in XRPC lists and notifications.
+     *
+     * With $discoveryOnly, it applies only to discovery reads, such as feeds,
+     * lists and search, and not to a read of an account or record the viewer
+     * asked for by name. A mute is the case: muting someone keeps them out of
+     * what the viewer is shown, not out of their own profile.
      */
-    public function readFilter(Closure $callback): static
+    public function readFilter(Closure $callback, bool $discoveryOnly = false): static
     {
-        $this->readFilters[] = $callback;
+        $this->readFilters[] = [$callback, $discoveryOnly];
 
         return $this;
     }
@@ -237,10 +242,13 @@ class AppView
      * With $spaces, it also narrows SpaceRecordQuery, and must then read the
      * tables it is given rather than atp_records and atp_record_values. A
      * filter without it never sees a space query.
+     *
+     * With $discoveryOnly, it applies only to discovery reads, as with a read
+     * filter.
      */
-    public function recordFilter(Closure $callback, bool $spaces = false): static
+    public function recordFilter(Closure $callback, bool $spaces = false, bool $discoveryOnly = false): static
     {
-        $this->recordFilters[] = [$callback, $spaces];
+        $this->recordFilters[] = [$callback, $spaces, $discoveryOnly];
 
         return $this;
     }
@@ -293,14 +301,15 @@ class AppView
 
     /**
      * Narrow a query for a viewer with every record filter, or for space
-     * records, with those that read them.
+     * records, with those that read them. Without $discovery, the filters
+     * for discovery alone are skipped.
      */
-    public function applyRecordFilters(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null): void
+    public function applyRecordFilters(\Illuminate\Contracts\Database\Query\Builder $query, string $viewer, string $idColumn, ?RecordTables $tables = null, bool $discovery = true): void
     {
         $tables ??= RecordTables::index();
 
-        foreach ($this->recordFilters as [$filter, $spaces]) {
-            if ($spaces || $tables->isIndex()) {
+        foreach ($this->recordFilters as [$filter, $spaces, $discoveryOnly]) {
+            if (($spaces || $tables->isIndex()) && ($discovery || ! $discoveryOnly)) {
                 $filter($query, $viewer, $idColumn, $tables);
             }
         }
@@ -329,17 +338,23 @@ class AppView
 
     /**
      * Everyone whose records the viewer should not see, from every read
-     * filter, such as the graph's blocks and mutes.
+     * filter, such as the graph's blocks and mutes. Without $discovery, for
+     * a read the viewer asked for by name, the filters for discovery alone,
+     * such as mutes, are skipped.
      *
      * @return array<int, string>
      */
-    public function hidden(string $viewer): array
+    public function hidden(string $viewer, bool $discovery = true): array
     {
         // Not kept between calls: this registrar lives as long as the app,
         // and a block or mute can change between requests.
         $hidden = [];
 
-        foreach ($this->readFilters as $filter) {
+        foreach ($this->readFilters as [$filter, $discoveryOnly]) {
+            if ($discoveryOnly && ! $discovery) {
+                continue;
+            }
+
             array_push($hidden, ...array_values(array_filter((array) $filter($viewer), 'is_string')));
         }
 

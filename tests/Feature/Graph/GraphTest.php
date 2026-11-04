@@ -5,6 +5,7 @@ namespace SocialDept\AtpAppview\Tests\Feature\Graph;
 use Illuminate\Support\Facades\Http;
 use SocialDept\AtpAppview\AtpAppviewServiceProvider;
 use SocialDept\AtpAppview\Facades\Xrpc;
+use SocialDept\AtpAppview\Features\AppView;
 use SocialDept\AtpAppview\Graph\Graph;
 use SocialDept\AtpAppview\Index\RecordQuery;
 use SocialDept\AtpAppview\Ingest\Batch;
@@ -120,6 +121,26 @@ class GraphTest extends TestCase
         $graph = app(Graph::class);
         $graph->unmute(self::ALICE, self::CAROL);
         $this->assertSame([self::BOB], $graph->hidden(self::ALICE));
+    }
+
+    /**
+     * A mute keeps an account out of what the viewer is shown. Hiding it from
+     * a read the viewer asked for by name, such as the account's own profile,
+     * would leave them unable to look at someone they chose to visit.
+     */
+    public function test_a_mute_applies_to_discovery_alone_and_a_block_everywhere(): void
+    {
+        $this->block(self::ALICE, self::BOB, 'b1');
+        $this->graph()->mute(self::ALICE, self::CAROL);
+
+        foreach ([self::BOB, self::CAROL] as $i => $did) {
+            $this->index($did, self::THING, "t{$i}", ['text' => (string) $i, 'kind' => 'note', 'createdAt' => '2026-10-01T00:00:00Z']);
+        }
+
+        $this->assertEqualsCanonicalizing([self::BOB, self::CAROL], app(AppView::class)->hidden(self::ALICE));
+        $this->assertSame([self::BOB], app(AppView::class)->hidden(self::ALICE, discovery: false));
+        $this->assertSame([], Record::query()->collection(self::THING)->visibleTo(self::ALICE)->pluck('did')->all());
+        $this->assertSame([self::CAROL], Record::query()->collection(self::THING)->visibleTo(self::ALICE, discovery: false)->pluck('did')->all());
     }
 
     public function test_records_listed_for_a_viewer_leave_out_who_they_cannot_see(): void

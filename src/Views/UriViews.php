@@ -17,12 +17,13 @@ class UriViews
     /**
      * Each URI's view, as the viewer may see it. A URI missing from the
      * result is one the viewer should not see, or one the index does not
-     * hold for a collection with a view.
+     * hold for a collection with a view. Without $discovery, for URIs the
+     * viewer asked for by name, mutes are not applied.
      *
      * @param  array<int, string>  $uris
      * @return array<string, array<string, mixed>>
      */
-    public function views(array $uris, ?string $viewer): array
+    public function views(array $uris, ?string $viewer, bool $discovery = true): array
     {
         $uris = array_values(array_unique($uris));
 
@@ -41,7 +42,7 @@ class UriViews
         }
 
         $indexed = Record::query()->whereIn('uri', $uris)->pluck('uri')->all();
-        $visible = Record::query()->whereIn('uri', $uris)->visibleTo($viewer)->get()->keyBy('uri');
+        $visible = Record::query()->whereIn('uri', $uris)->visibleTo($viewer, $discovery)->get()->keyBy('uri');
         $views = [];
 
         foreach ($visible->groupBy('collection') as $collection => $records) {

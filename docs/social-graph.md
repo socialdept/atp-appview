@@ -32,8 +32,21 @@ Blocks apply both ways and mutes only to the muter, wherever records are listed 
 | --- | --- |
 | Your own queries | `Record::query()->visibleTo($viewer)`, and `->followedBy($viewer)` for a following feed |
 | Filtered queries | `RecordQuery::in($collection)->visibleTo($viewer)` |
+| Records by URI | `app(UriViews::class)->views($uris, $viewer)` |
 | Built-in XRPC lists | The signed-in viewer, automatically |
 | Notifications | Nothing from hidden accounts or about records holding a muted word. Unblocking or unmuting brings them back |
+
+### Discovery and addressed reads
+
+A block hides an account everywhere. A mute only keeps it out of what the viewer is shown: feeds, lists, search. When the viewer asks for something by name, such as an account's profile or a record opened by its URI, pass `discovery: false` and muted accounts and records holding a muted word are kept:
+
+```php
+Record::query()->where('did', $bob)->visibleTo($alice, discovery: false);   // Bob's profile, though Alice muted him
+app(UriViews::class)->views([$uri], $alice, discovery: false);              // a record Alice opened
+app(AppView::class)->hidden($alice, discovery: false);                      // blocked either way, never muted
+```
+
+Blocks still apply. Cover a muted word on such a read with the `MutedWords` part, below, rather than showing it plainly.
 
 ## Muted words
 
@@ -60,7 +73,7 @@ $graph->mutedWords($alice);                                    // entries still 
 $graph->unmuteWord($alice, $id);
 ```
 
-An entry hides a record holding every one of its words, in any order and any of its sources, so `violent protest` hides "the protest got violent" but not "a violent storm". Matching whole words keeps it an index lookup rather than a scan of every record's text. An expired entry stops applying on its own and is left out of `mutedWords()`. Muted records are left out everywhere hidden accounts are, in the table above. Where the viewer asked for something deliberately, such as a profile, cover a muted record instead of dropping it:
+An entry hides a record holding every one of its words, in any order and any of its sources, so `violent protest` hides "the protest got violent" but not "a violent storm". Matching whole words keeps it an index lookup rather than a scan of every record's text. An expired entry stops applying on its own and is left out of `mutedWords()`. Muted records are left out of discovery reads, in the table above. Where the viewer asked for something deliberately, such as a profile, the read passes `discovery: false` and keeps them, so cover a muted record instead:
 
 ```php
 'muted' => new MutedWords(),   // ['spoilers'], or null when it holds none

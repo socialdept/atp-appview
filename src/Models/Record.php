@@ -101,21 +101,22 @@ class Record extends Model
     /**
      * Records the viewer may see: none by accounts blocked either way or
      * muted, and none a record filter leaves out, such as muted words. A
-     * null viewer sees everything.
+     * null viewer sees everything. Without $discovery, for records the
+     * viewer asked for by name, mutes are not applied.
      *
      * @param  Builder<static>  $query
      */
-    public function scopeVisibleTo(Builder $query, ?string $viewer): void
+    public function scopeVisibleTo(Builder $query, ?string $viewer, bool $discovery = true): void
     {
         if ($viewer === null) {
             return;
         }
 
-        if (($hidden = app(AppView::class)->hidden($viewer)) !== []) {
+        if (($hidden = app(AppView::class)->hidden($viewer, $discovery)) !== []) {
             $query->whereNotIn($query->getModel()->qualifyColumn('did'), $hidden);
         }
 
-        app(AppView::class)->applyRecordFilters($query, $viewer, $query->getModel()->qualifyColumn('id'));
+        app(AppView::class)->applyRecordFilters($query, $viewer, $query->getModel()->qualifyColumn('id'), discovery: $discovery);
     }
 
     /**
