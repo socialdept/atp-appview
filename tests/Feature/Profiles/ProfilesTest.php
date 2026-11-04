@@ -119,6 +119,22 @@ class ProfilesTest extends TestCase
         $this->assertSame('Another bio', $profile['description']);
     }
 
+    public function test_merging_per_field_fills_extra_fields_from_later_sources_too(): void
+    {
+        config([
+            'atp-appview.profiles.merge' => 'field',
+            'atp-appview.profiles.sources' => [['collection' => self::OWN, 'fields' => ['pronouns', 'website']], ['collection' => self::BSKY, 'fields' => ['pronouns', 'website']]],
+        ]);
+        $this->account('did:plc:alice');
+        $this->profile('did:plc:alice', self::OWN, ['website' => 'https://alice.example']);
+        $this->profile('did:plc:alice', self::BSKY, ['pronouns' => 'she/her', 'website' => 'https://elsewhere.example']);
+
+        $profile = $this->profiles()->for(['did:plc:alice'])['did:plc:alice'];
+
+        $this->assertSame('https://alice.example', $profile['website']);
+        $this->assertSame('she/her', $profile['pronouns']);
+    }
+
     public function test_an_account_the_index_does_not_know_is_fetched_in_order_and_cached_its_absence_too(): void
     {
         Http::fake([

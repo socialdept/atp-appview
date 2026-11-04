@@ -9,7 +9,8 @@ use Closure;
  *
  * Its record supplies the standard fields under the same names unless
  * `aliases` says otherwise, plus any extra fields it declares and computed
- * ones, which appear only when this source is the one used.
+ * ones, which appear only when this source is the one used, or, when merging
+ * per field, when no earlier source sets them.
  */
 class ProfileSource
 {

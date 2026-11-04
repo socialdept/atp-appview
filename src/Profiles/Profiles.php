@@ -18,9 +18,10 @@ use Throwable;
  *
  * By default the first source holding a record for the account is its
  * profile, empty fields and all: nothing falls through from a later source.
- * With merge set to `field`, each standard field takes the first source that
- * has it instead. An account no source has a record for is its DID and
- * handle, with displayName left null for clients to fall back to the handle.
+ * With merge set to `field`, each field, standard or extra, takes the first
+ * source that has it instead. An account no source has a record for is its
+ * DID and handle, with displayName left null for clients to fall back to the
+ * handle.
  *
  * Records come from the index when it ingests the collection and knows the
  * account. Otherwise they are fetched from Slingshot, in parallel, and cached,
@@ -347,7 +348,22 @@ class Profiles
             }
         }
 
-        return [...$profile, ...$chosen->extra($records[$chosen->collection])];
+        if (config('atp-appview.profiles.merge') !== 'field') {
+            return [...$profile, ...$chosen->extra($records[$chosen->collection])];
+        }
+
+        // Per field: each extra field also takes the first source that sets it.
+        $extra = [];
+
+        foreach ($this->sources as $collection => $source) {
+            foreach (isset($records[$collection]) ? $source->extra($records[$collection]) : [] as $field => $value) {
+                if (($extra[$field] ?? null) === null) {
+                    $extra[$field] = $value;
+                }
+            }
+        }
+
+        return [...$profile, ...$extra];
     }
 
     protected function cacheKey(string $did, ProfileSource $source): string
