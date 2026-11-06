@@ -1,6 +1,6 @@
 # XRPC
 
-Part of the [atp-appview docs](../README.md#documentation). Default queries and procedures, custom handlers, calling methods, and writing records.
+Part of the [atp-appview docs](../../README.md#documentation). Default queries and procedures, custom handlers, calling methods, and writing records.
 
 Every class carrying the `#[Xrpc]` attribute becomes a route at `/xrpc/{nsid}`. Whether it is a query (GET) or a procedure (POST) comes from its lexicon, loaded through atp-schema from `resources/lexicons`.
 

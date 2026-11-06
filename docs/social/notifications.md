@@ -1,8 +1,8 @@
 # Notifications
 
-Part of the [atp-appview docs](../README.md#documentation). Reasons, notifiers, grouping, seen state, preferences and delivery.
+Part of the [atp-appview docs](../../README.md#documentation). Reasons, notifiers, grouping, seen state, preferences and delivery.
 
-Records that point at an account or a record notify that account. Notifications are a [feature](features.md#features), `Features::notifications()`, on by default. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
+Records that point at an account or a record notify that account. Notifications are a [feature](../getting-started/features.md#features), `Features::notifications()`, on by default. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
 
 ```php
 // config/atp-appview/notifications.php
@@ -107,7 +107,7 @@ Event::listen(function (NotificationCreated $event) use ($preferences) {
 
 "Only the accounts they follow" reads follows from the [social graph](social-graph.md#social-graph). Without follows configured there, every notification counts as from everyone. (`notifications.follows`, where this lived before the graph, is still read when `graph.follows` is not set.)
 
-The follows must be indexed. A [companion collection](ingest.md#companion-collections) indexes them for every followed repo. To keep only your own users' follows, reconcile that collection for them, on sign-in and on a schedule: `app(Reconciler::class)->reconcile($did, collections: ['app.bsky.graph.follow'])`. A collection the index does not ingest is never followed by Tap, so only those repos are read.
+The follows must be indexed. A [companion collection](../data/ingest.md#companion-collections) indexes them for every followed repo. To keep only your own users' follows, reconcile that collection for them, on sign-in and on a schedule: `app(Reconciler::class)->reconcile($did, collections: ['app.bsky.graph.follow'])`. A collection the index does not ingest is never followed by Tap, so only those repos are read.
 
 To show only some reasons, such as a tab of mentions, pass them to `groups()`, `list()` or `unreadCount()`, or as `reasons` to the XRPC methods (repeated for several):
 

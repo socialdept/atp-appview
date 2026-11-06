@@ -1,8 +1,8 @@
 # Search
 
-Part of the [atp-appview docs](../README.md#documentation). Records by the words in them, Latest and Top, and the accounts the index holds.
+Part of the [atp-appview docs](../../README.md#documentation). Records by the words in them, Latest and Top, and the accounts the index holds.
 
-Search is a [feature](features.md), `Features::search()`, off unless listed. It searches what the index holds: the collections you name, and accounts in `atp_identities`. Results come back as views and profiles, filtered for the viewer. The methods take Bluesky's search shapes under names you choose.
+Search is a [feature](../getting-started/features.md), `Features::search()`, off unless listed. It searches what the index holds: the collections you name, and accounts in `atp_identities`. Results come back as views and profiles, filtered for the viewer. The methods take Bluesky's search shapes under names you choose.
 
 ## Sources
 
@@ -18,7 +18,7 @@ Search is a [feature](features.md), `Features::search()`, off unless listed. It 
 ],
 ```
 
-Each source is a list of paths into the record, kept in the index as words, the way [muted words](social-graph.md#muted-words) are: lowercased, emoji whole, a leading `#` dropped. Run `php artisan appview:fields` after changing them, which builds the words of records already indexed. A query matches a record holding every one of its words, in any of the collection's sources. Whole words only, so "run" does not find "running".
+Each source is a list of paths into the record, kept in the index as words, the way [muted words](../social/social-graph.md#muted-words) are: lowercased, emoji whole, a leading `#` dropped. Run `php artisan appview:fields` after changing them, which builds the words of records already indexed. A query matches a record holding every one of its words, in any of the collection's sources. Whole words only, so "run" does not find "running".
 
 A source can derive its text instead, for a collection whose content is not words. List a class implementing `Search\Contracts\SearchText` in place of a path:
 
@@ -95,7 +95,7 @@ class FollowedFirst implements TopRanker
 }
 ```
 
-Each `TopCandidate` has the match's `uri`, `did`, `collection` and `sortAt`, the sources it `matched`, its `counts` keyed `collection:path`, and `hours()` since it was written. A ranker reads anything else it weighs itself, in one query for all the candidates: follows from the [graph](social-graph.md), scores from [standing](standing.md). Top pages through the ranked list, a page at a time.
+Each `TopCandidate` has the match's `uri`, `did`, `collection` and `sortAt`, the sources it `matched`, its `counts` keyed `collection:path`, and `hours()` since it was written. A ranker reads anything else it weighs itself, in one query for all the candidates: follows from the [graph](../social/social-graph.md), scores from [standing](../trust/standing.md). Top pages through the ranked list, a page at a time.
 
 ## Accounts
 
@@ -104,4 +104,4 @@ Account search reads only what the index holds: handles in `atp_identities`, and
 - **Typeahead** matches the start of a handle or of a word in the display name, for completing while typing.
 - **Search** needs every word somewhere in the handle, display name or description.
 
-Accounts the viewer follows come first, then, with [Standing](standing.md) on, those with the higher score. Those blocked either way are left out, and muted ones stay, marked. Typeahead answers basic profiles, search full ones, each with `viewer`, the [Relationship](social-graph.md) part, when there is a viewer.
+Accounts the viewer follows come first, then, with [Standing](../trust/standing.md) on, those with the higher score. Those blocked either way are left out, and muted ones stay, marked. Typeahead answers basic profiles, search full ones, each with `viewer`, the [Relationship](../social/social-graph.md) part, when there is a viewer.

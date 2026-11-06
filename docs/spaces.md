@@ -2,7 +2,7 @@
 
 Part of the [atp-appview docs](../README.md#documentation). A copy of the permissioned spaces the app follows, synced from each member's own PDS and read only by viewers the space's authority lets in.
 
-Spaces is a [feature](features.md), `Features::spaces()`, off unless listed. It builds on [atp-spaces](https://github.com/socialdept/atp-spaces), which reads spaces, checks what it reads, and receives the notifications a space's authority sends.
+Spaces is a [feature](getting-started/features.md), `Features::spaces()`, off unless listed. It builds on [atp-spaces](https://github.com/socialdept/atp-spaces), which reads spaces, checks what it reads, and receives the notifications a space's authority sends.
 
 A space is permissioned data. Its records live in a repo per member on each member's own PDS, nothing relays them, and reading them takes a space credential from the space's authority. The AppView keeps its own copy of the spaces the app follows, in tables of their own:
 
@@ -12,7 +12,7 @@ A space is permissioned data. Its records live in a repo per member on each memb
 | `atp_space_repos` | One row per member repo: the revision synced to and the running set hash at that revision |
 | `atp_space_records` | The records, with the same columns as `atp_records` plus `space`. The `uri` is the space record URI, `at://{authority}/space/{type}/{skey}/{did}/{collection}/{rkey}` |
 | `atp_space_grants` | Who may read each space, and until when |
-| `atp_space_record_values` | The values of [indexed fields](views.md#fields) in space records, as `atp_record_values` holds them for public records |
+| `atp_space_record_values` | The values of [indexed fields](serving/views.md#fields) in space records, as `atp_record_values` holds them for public records |
 
 Space records are never written to `atp_records`, and their field values never to `atp_record_values`. Nothing that reads the public index (queries, views, search, notifications, the graph, feeds, standing) can see them, and a feature added later cannot either.
 
@@ -121,7 +121,7 @@ The values are kept as records sync: written when a record is created or updated
 
 Moderation applies as it does to public records: nothing by accounts the viewer blocks, is blocked by or muted, or by accounts that are deactivated, taken down or suspended. With the moderation feature, nothing by banned accounts or that a label hides, on the record or its account, and what needs review only when the query is for one repo.
 
-Record filters apply too, with or without a filter or sort: muted words, from the graph feature, read the space's own values, and the viewer's [label preferences](moderation.md#viewer-preferences) read labels on the space record or its author. Muted words reach a space collection once it is named in `atp-appview.graph.muted_words`, like any other. A record filter a feature or app registers applies to space records only when registered with `spaces: true`, and it must then read the tables it is handed rather than the public ones. See [features](features.md).
+Record filters apply too, with or without a filter or sort: muted words, from the graph feature, read the space's own values, and the viewer's [label preferences](trust/moderation.md#viewer-preferences) read labels on the space record or its author. Muted words reach a space collection once it is named in `atp-appview.graph.muted_words`, like any other. A record filter a feature or app registers applies to space records only when registered with `spaces: true`, and it must then read the tables it is handed rather than the public ones. See [features](getting-started/features.md).
 
 `RecordQuery`, `Record` and everything else that reads `atp_records` never see a space record.
 

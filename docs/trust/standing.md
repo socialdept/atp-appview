@@ -1,8 +1,8 @@
 # Standing
 
-Part of the [atp-appview docs](../README.md#documentation). Facts about accounts and records the index does not hold, whether an account is verified and by whom, and scores built from them.
+Part of the [atp-appview docs](../../README.md#documentation). Facts about accounts and records the index does not hold, whether an account is verified and by whom, and scores built from them.
 
-Standing is a [feature](features.md), `Features::standing()`, off unless listed. It keeps three kinds of fact in `atp_standing`: metrics (how many follow an account, how many link to a record), verification, and a score per subject. A subject is an account (a DID) or a record (an AT-URI) of any collection. Where each fact comes from, what counts as verification, and how much each fact weighs are yours to choose.
+Standing is a [feature](../getting-started/features.md), `Features::standing()`, off unless listed. It keeps three kinds of fact in `atp_standing`: metrics (how many follow an account, how many link to a record), verification, and a score per subject. A subject is an account (a DID) or a record (an AT-URI) of any collection. Where each fact comes from, what counts as verification, and how much each fact weighs are yours to choose.
 
 ## Metrics
 
@@ -94,7 +94,7 @@ Candidates come from the index when you ingest the collection, current to the se
 
 Proof needs `socialdept/atp-cbor` and the `gmp` extension, which atp-appview suggests rather than requires. With `prove` on and atp-cbor missing, the verifier refuses to run rather than quietly trust what it found. Set `prove` to `false` only for records you already trust, such as ones your own app ingests from a source you control.
 
-The handle compared is the one the index holds for the account, or the one in its DID document when that handle resolves back to the same DID. The display name is the profile's, through [profiles](views.md#profiles).
+The handle compared is the one the index holds for the account, or the one in its DID document when that handle resolves back to the same DID. The display name is the profile's, through [profiles](../serving/views.md#profiles).
 
 **Trusted issuers from elsewhere.** Bluesky does not publish its list of trusted verifiers, and a community may keep its own. An issuer can be a class implementing `Standing\Contracts\TrustedIssuers`, which gives DIDs from wherever the app keeps them: a table its operators edit, a list a community publishes as a record, one refreshed from elsewhere. Its answer is cached for `issuers_cache` seconds, 300 by default:
 
@@ -166,7 +166,7 @@ Pages never wait on the network. Reading a fact reads what is stored, and asks t
 'batch' => 25,
 ```
 
-Refreshes run in `RefreshStanding` jobs of `batch` subjects. `php artisan appview:standing:refresh did:plc:...` refreshes subjects now, and `--stale` refreshes up to `--limit` stale ones, which [`Features::schedule()`](features.md#scheduling) runs every fifteen minutes.
+Refreshes run in `RefreshStanding` jobs of `batch` subjects. `php artisan appview:standing:refresh did:plc:...` refreshes subjects now, and `--stale` refreshes up to `--limit` stale ones, which [`Features::schedule()`](../getting-started/features.md#scheduling) runs every fifteen minutes.
 
 ## Reading it
 
@@ -181,11 +181,11 @@ $standing->trusted($did);              // whether a verifier trusts it as an iss
 $standing->scores([$did, $uri]);       // subject => float
 ```
 
-With the feature on, [profiles](views.md#profiles) gain:
+With the feature on, [profiles](../serving/views.md#profiles) gain:
 
 - `verification`, in Bluesky's `verificationState` shape: `verifiedStatus`, `trustedVerifierStatus` and each verification's `issuer`, `uri`, `isValid` and `createdAt`. Only when a verifier is configured, and, as on Bluesky, never for an account without a valid handle.
 - `stats`, the account metrics. Full profiles only, not basic ones.
 
-[Search](search.md) uses scores too: account search orders by score after the accounts the viewer follows, and an app's [Top ranker](search.md#latest-and-top) can weigh the author's score.
+[Search](../serving/search.md) uses scores too: account search orders by score after the accounts the viewer follows, and an app's [Top ranker](../serving/search.md#latest-and-top) can weigh the author's score.
 
 Off, nothing is kept or fetched, profiles are unchanged, and the `Standing` API refuses, naming the feature to add.

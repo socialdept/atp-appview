@@ -1,10 +1,10 @@
 # Moderation
 
-Part of the [atp-appview docs](../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
+Part of the [atp-appview docs](../../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 
 ## Labels
 
-Labels and account actions are the moderation [feature](features.md#features), `Features::moderation()`, on by default. Labels come from labelers, such as Bluesky's moderation service, through [Tack](https://github.com/socialdept/tack). Tack follows the labelers, verifies every label's signature, fetches the labels an account already has when the app starts tracking it, and delivers labels about the accounts the index knows, the same ways Tap delivers records.
+Labels and account actions are the moderation [feature](../getting-started/features.md#features), `Features::moderation()`, on by default. Labels come from labelers, such as Bluesky's moderation service, through [Tack](https://github.com/socialdept/tack). Tack follows the labelers, verifies every label's signature, fetches the labels an account already has when the app starts tracking it, and delivers labels about the accounts the index knows, the same ways Tap delivers records.
 
 ```dotenv
 ATP_APPVIEW_TACK_URL=http://localhost:2490
@@ -30,7 +30,7 @@ ATP_APPVIEW_LABELS_SOURCE=streams
 - **Following.** `Labels::follow()` looks up the labeler's service and declaration and adds it to `atp_labelers`. `unfollow()` removes it with its labels. The command opens a stream for each labeler there and closes one when it goes, rereading the list every `labels.streams.refresh` seconds (60).
 - **Which labels count.** Only labels about accounts the index knows, held in memory and reread on the same schedule. They are picked out before their signatures are checked, which is most of the work saved, since a labeler's stream is mostly about other accounts.
 - **Signatures.** A kept label must name the labeler whose stream carried it, and verify against its `#atproto_label` key. When one fails, the key is looked up again in case it was rotated, at most every ten minutes. Labels that still fail are dropped and logged.
-- **Batches and failures** go through the same buffer as records: retries, then failing labels parked as [failed deliveries](ingest.md#failed-deliveries).
+- **Batches and failures** go through the same buffer as records: retries, then failing labels parked as [failed deliveries](../data/ingest.md#failed-deliveries).
 - **The cursor** is kept per labeler in `atp_ingest_cursors` (`labels:<did>`), saved in the same transaction as the batch it ends. A new labeler starts at its current label. `--from-live` forgets every labeler's cursor.
 - **Labels already made.** The live stream only carries new labels, so `appview:labels:sync` (scheduled as above) queues `BackfillLabels` jobs for accounts the index has not synced yet, from every labeler, and following a labeler queues one for the accounts already synced. Each job asks the labeler's `queryLabels` for 50 accounts at a time: account labels by DID and profile record, and record labels by `at://did/*`. Ozone refuses wildcards by default, which is found out on the first try and kept in `atp_labelers.wildcards`, and such a labeler is asked for each record the index holds instead. Records indexed after their account was synced, such as a late backfill, are queued for those labelers too. The newest label per URI and value decides, and every label is checked like a streamed one. Requests are paced at `labels.streams.query_rate` a second per labeler (4). Run a queue worker.
 - **Declarations.** `appview:labels:sync` also looks each labeler's service and declaration up again every six hours, as Tack does, and drops expired labels.
@@ -145,7 +145,7 @@ A viewer changes only what the operator left to viewers:
 
 System labels, those starting with `!`, are never the viewer's to change, and `set()` refuses them. A choice for one labeler wins over one for any. With adult content off, adult-only labels hide what they are on, whatever was chosen for them: Bluesky's `porn` and `sexual`, and any value a labeler declares `adultOnly`. A viewer who has not chosen takes `labels.adult_content` (on), which keeps the policies as they are.
 
-Choices apply to what others wrote, never to the viewer's own records, in the same places as [mutes](social-graph.md):
+Choices apply to what others wrote, never to the viewer's own records, in the same places as [mutes](../social/social-graph.md):
 
 - **Hidden** records leave the viewer's queries: `visibleTo()`, `RecordQuery`, the built-in XRPC lists and notifications. Hiding an account label leaves out everything the account wrote. A record asked for by its uri gets `hide` in its `Moderation` part instead.
 - **Warnings and blurs** reach the client in the `Moderation` view part, and in `decide($record, $viewer)` and `account($did, $viewer)`.

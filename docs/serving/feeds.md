@@ -1,8 +1,8 @@
 # Feeds
 
-Part of the [atp-appview docs](../README.md#documentation). Custom feeds in the shapes of Bluesky's feed generators, under Bluesky's names or your own.
+Part of the [atp-appview docs](../../README.md#documentation). Custom feeds in the shapes of Bluesky's feed generators, under Bluesky's names or your own.
 
-Feeds are a [feature](features.md), `Features::feeds()`, off unless listed. A feed is a class that returns a page of AT-URIs, the skeleton. The package serves it, keeps what viewers do with its items, and for your own clients turns the skeleton into views.
+Feeds are a [feature](../getting-started/features.md), `Features::feeds()`, off unless listed. A feed is a class that returns a page of AT-URIs, the skeleton. The package serves it, keeps what viewers do with its items, and for your own clients turns the skeleton into views.
 
 ## Names
 

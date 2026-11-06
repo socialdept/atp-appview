@@ -1,8 +1,8 @@
 # Realtime
 
-Part of the [atp-appview docs](../README.md#documentation). Pings to the browser when records, the records pointing at them, and notifications change.
+Part of the [atp-appview docs](../../README.md#documentation). Pings to the browser when records, the records pointing at them, and notifications change.
 
-Realtime is a [feature](features.md), `Features::realtime()`, off unless listed. It sends pings over Laravel broadcasting, so set up broadcasting first: [Reverb](https://laravel.com/docs/reverb), or Pusher. Private channels need a Pusher-protocol server, which both are.
+Realtime is a [feature](../getting-started/features.md), `Features::realtime()`, off unless listed. It sends pings over Laravel broadcasting, so set up broadcasting first: [Reverb](https://laravel.com/docs/reverb), or Pusher. Private channels need a Pusher-protocol server, which both are.
 
 A ping says what changed, never what it holds: the record's URI, its collection, the action, and how many changes it stands for. The browser fetches what changed through the app's own methods and pages, which apply blocks, mutes, labels and moderation for that viewer. Sending records over a channel everyone on it hears would show some of them what they should not see.
 
