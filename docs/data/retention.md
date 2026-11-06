@@ -1,6 +1,6 @@
 # Retention
 
-Part of the [atp-appview docs](../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, keeping some collections only while recent, and fetching old bodies again instead of storing them.
+Part of the [atp-appview docs](../../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, keeping some collections only while recent, and fetching old bodies again instead of storing them.
 
 Everything here is off until set in `config/atp-appview/retention.php`, so an app that sets nothing keeps every record as it is.
 
@@ -18,11 +18,11 @@ php artisan appview:prune --dry-run   # count what would go, per collection
 
 It reads a chunk of rows at a time (`--chunk`, 1,000 by default) through an index on their collection and age, deletes them by primary key in a transaction of their own, and stops after `--seconds` (50 by default), so no run holds a lock for long and the next one carries on. With nothing configured it reads nothing and deletes nothing. It works on `atp-appview.index.connection`.
 
-A deleted row takes with it what references it: its [field values](views.md#fields), moving the kept counts, and its notifications. Features keep their own tables in step through `afterPrune()`, as [writing a feature](features.md#writing-a-feature) describes. Labels about a record are the labeler's, so they stay. Pruning dispatches no record events, since nothing changed on the network, and the counts from `appview:stats` catch up on its next run.
+A deleted row takes with it what references it: its [field values](../serving/views.md#fields), moving the kept counts, and its notifications. Features keep their own tables in step through `afterPrune()`, as [writing a feature](../getting-started/features.md#writing-a-feature) describes. Labels about a record are the labeler's, so they stay. Pruning dispatches no record events, since nothing changed on the network, and the counts from `appview:stats` catch up on its next run.
 
 ## Compression
 
-Postgres compresses a large value before storing it, with pglz unless the column says otherwise. LZ4 compresses and decompresses faster, at a similar size for JSON. Set it for the columns holding record bodies, `record` and `repair` on `atp_records`, and on `atp_space_records` when [spaces](spaces.md) are on:
+Postgres compresses a large value before storing it, with pglz unless the column says otherwise. LZ4 compresses and decompresses faster, at a similar size for JSON. Set it for the columns holding record bodies, `record` and `repair` on `atp_records`, and on `atp_space_records` when [spaces](../spaces.md) are on:
 
 ```dotenv
 ATP_APPVIEW_RECORD_COMPRESSION=lz4
@@ -140,7 +140,7 @@ Most of a record row is its body, and old records are read far less than new one
 ],
 ```
 
-Or `ATP_APPVIEW_COLD_AFTER_DAYS=365` for the default alone. `appview:prune` clears the body of each live record whose `sort_at` is older than the window, the same age [max age](#max-age) reads, and marks the row with `hollowed_at`. Everything else stays: the uri, CID and dates, its [field values](views.md#fields) and the counts they keep, the [graph](social-graph.md) edges, labels and notifications. Lists, filters, counts and joins answer as before, since none of them read the body.
+Or `ATP_APPVIEW_COLD_AFTER_DAYS=365` for the default alone. `appview:prune` clears the body of each live record whose `sort_at` is older than the window, the same age [max age](#max-age) reads, and marks the row with `hollowed_at`. Everything else stays: the uri, CID and dates, its [field values](../serving/views.md#fields) and the counts they keep, the [graph](../social/social-graph.md) edges, labels and notifications. Lists, filters, counts and joins answer as before, since none of them read the body.
 
 A record an ingest [repair](ingest.md#ingest-repairs) rewrote keeps its body, since a fetch would return the unrepaired one. Each collection's pass keeps its place in the cache and starts over once a day, so a run reads only rows that aged since, and a record a backfill indexes with an older date is picked up the next day.
 
@@ -160,10 +160,10 @@ A record whose body cannot be fetched, because its PDS is down or it was deleted
 
 | Reader | A cold record |
 | --- | --- |
-| XRPC lists, default and [view](views.md) queries | Fetched with the page. One that cannot be fetched is left out, and the cursor still moves past it |
+| XRPC lists, default and [view](../serving/views.md) queries | Fetched with the page. One that cannot be fetched is left out, and the cursor still moves past it |
 | XRPC get by `uri` | Fetched, or `502 UpstreamFailure` |
 | `Hydrator`, embeds, `ReplyTree::parents()` | Fetched with the page. One that cannot be fetched keeps its place with a null `record` |
-| [Profiles](views.md#profiles) | Fetched. One that cannot be fetched is asked of Slingshot like any profile the index lacks |
+| [Profiles](../serving/views.md#profiles) | Fetched. One that cannot be fetched is asked of Slingshot like any profile the index lacks |
 | Field values rebuild, graph subjects, standing verifiers | Fetched a chunk at a time, and given no values when it cannot be |
 | Notifications as records arrive | Kept as they are. A cold record's notifications were built from its body |
 | Notification rebuilds and replays, self-label rebuild, `appview:hooks:apply` | Skipped. They would fetch the whole collection, and what they built before stays |
@@ -172,7 +172,7 @@ A record whose body cannot be fetched, because its PDS is down or it was deleted
 
 Code of the app's own that reads `$record->record` gets null for a cold record. `$record->isCold()` says so, and `app(ColdRecords::class)->thaw($records)` fills in a page of them at once, models or query rows selected with `uri`, `cid`, `record` and `hollowed_at`.
 
-A query on the body itself, a `where('record->...')`, cannot match a cold record. Read through [field values](views.md#fields) instead, or keep that collection whole. A newer version of the record stores its body again.
+A query on the body itself, a `where('record->...')`, cannot match a cold record. Read through [field values](../serving/views.md#fields) instead, or keep that collection whole. A newer version of the record stores its body again.
 
 ### Space reclaimed
 
@@ -182,5 +182,5 @@ A query on the body itself, a `where('record->...')`, cannot match a cold record
 | MySQL, MariaDB | InnoDB reuses it for new rows. `OPTIMIZE TABLE atp_records` rebuilds the table to shrink the file |
 | SQLite | Reused by new rows. `VACUUM`, or `auto_vacuum`, shrinks the file |
 
-Clearing a body is an update, so it writes a row version and write-ahead log like any other. [Spaces](spaces.md) records are never hollowed.
+Clearing a body is an update, so it writes a row version and write-ahead log like any other. [Spaces](../spaces.md) records are never hollowed.
 

@@ -41,24 +41,13 @@ Then run `php artisan migrate`. Postgres, MySQL, MariaDB and SQLite are supporte
 
 ## Documentation
 
-The [Features](docs/features.md) doc covers what an app turns on beyond the core. Each other doc covers one area:
+The [Features](docs/getting-started/features.md) doc covers what an app turns on beyond the core. The other docs are grouped by area, and each group has an index of its own:
 
-- **[Features](docs/features.md)**: Turning parts of the package on and off, scheduling, and writing a feature of your own.
-- **[Auth](docs/auth.md)**: Frontend and backend mode, sign-in from the browser, signing out from the server, and the atp guard.
-- **[Ingest](docs/ingest.md)**: Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
-- **[Moderation](docs/moderation.md)**: Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
-- **[Blocklist](docs/blocklist.md)**: Keeping repos, collections and hosts out of the index.
-- **[Index](docs/indexing.md)**: How records are stored, sorted, validated and reconciled, account status, and index stats.
-- **[Retention](docs/retention.md)**: Keeping the index small: LZ4 compression on Postgres, pruning old tombstones, a max age per collection, and cold records.
-- **[XRPC](docs/xrpc.md)**: Default queries and procedures, custom handlers, calling methods, and writing records.
-- **[Hydrated views](docs/views.md)**: Views with authors, embeds, counts and viewer state, reply trees, fields kept in the index, profiles and images.
-- **[Social graph](docs/social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.
-- **[Notifications](docs/notifications.md)**: Reasons, notifiers, grouping, seen state, preferences and delivery.
-- **[Search](docs/search.md)**: Records by their words, Latest and Top, and the accounts the index holds.
-- **[Feeds](docs/feeds.md)**: Custom feeds in the shapes of Bluesky's feed generators, under Bluesky's names or your own.
-- **[Standing](docs/standing.md)**: Follower and link counts, proven verification by pluggable verifiers, and weighted scores.
-- **[Claims](docs/claims.md)**: A verdict per record on a claim it makes, such as owning a website, checked by your own checker and inherited from a trusted parent record.
-- **[Realtime](docs/realtime.md)**: Pings over Laravel broadcasting when records and notifications change, and the record events behind them.
+- **[Getting started](docs/getting-started/README.md)**: [Features](docs/getting-started/features.md), [Auth](docs/getting-started/auth.md)
+- **[Ingest and index](docs/data/README.md)**: [Ingest](docs/data/ingest.md), [Blocklist](docs/data/blocklist.md), [Index](docs/data/indexing.md), [Retention](docs/data/retention.md)
+- **[Serving](docs/serving/README.md)**: [XRPC](docs/serving/xrpc.md), [Hydrated views](docs/serving/views.md), [Feeds](docs/serving/feeds.md), [Search](docs/serving/search.md)
+- **[Social](docs/social/README.md)**: [Social graph](docs/social/social-graph.md), [Notifications](docs/social/notifications.md), [Realtime](docs/social/realtime.md)
+- **[Trust](docs/trust/README.md)**: [Moderation](docs/trust/moderation.md), [Standing](docs/trust/standing.md), [Claims](docs/trust/claims.md)
 - **[Spaces](docs/spaces.md)**: A copy of the permissioned spaces the app follows, synced from each member's PDS, kept apart from the public index, and read only by viewers the space lets in.
 
 ## License

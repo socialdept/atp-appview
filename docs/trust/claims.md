@@ -1,8 +1,8 @@
 # Claims
 
-Part of the [atp-appview docs](../README.md#documentation). A verdict per record on a claim the record makes, such as owning the website it names, checked by a checker you write and optionally inherited from a parent record in the same repo.
+Part of the [atp-appview docs](../../README.md#documentation). A verdict per record on a claim the record makes, such as owning the website it names, checked by a checker you write and optionally inherited from a parent record in the same repo.
 
-Claims is a [feature](features.md), `Features::claims()`, off unless listed. It keeps one row per claiming record in `atp_record_claims`, checks it in the queue, and narrows queries with `Record::verified()`. Reads only look at stored verdicts, so a page never waits on the network. Left out, nothing is kept or fetched, and `verified()` refuses, naming the feature to add.
+Claims is a [feature](../getting-started/features.md), `Features::claims()`, off unless listed. It keeps one row per claiming record in `atp_record_claims`, checks it in the queue, and narrows queries with `Record::verified()`. Reads only look at stored verdicts, so a page never waits on the network. Left out, nothing is kept or fetched, and `verified()` refuses, naming the feature to add.
 
 "Verification" in this package means accounts (see [Standing](standing.md)). Claims are about records.
 
@@ -102,7 +102,7 @@ php artisan appview:claims:refresh --stale            # queue what is due
 php artisan appview:claims:refresh at://did:plc:…/…   # queue these now
 ```
 
-The feature schedules `appview:claims:refresh --stale` every fifteen minutes (see [Scheduling](features.md#scheduling)). It queues one `RefreshClaims` job per host, and a job is unique by host, so only one runs per host at a time. `app(Claims::class)->refresh($uris)` checks records now, without the queue.
+The feature schedules `appview:claims:refresh --stale` every fifteen minutes (see [Scheduling](../getting-started/features.md#scheduling)). It queues one `RefreshClaims` job per host, and a job is unique by host, so only one runs per host at a time. `app(Claims::class)->refresh($uris)` checks records now, without the queue.
 
 ## Reading it
 

@@ -1,6 +1,6 @@
 # Auth
 
-Part of the [atp-appview docs](../README.md#documentation). Frontend and backend mode, sign-in from the browser, signing out from the server, and the atp guard.
+Part of the [atp-appview docs](../../README.md#documentation). Frontend and backend mode, sign-in from the browser, signing out from the server, and the atp guard.
 
 Where the user's OAuth tokens live decides how records get written.
 

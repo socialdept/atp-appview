@@ -1,8 +1,8 @@
 # Social graph
 
-Part of the [atp-appview docs](../README.md#documentation). Follows and blocks from the collections you name, private mutes of accounts and words, and where they apply.
+Part of the [atp-appview docs](../../README.md#documentation). Follows and blocks from the collections you name, private mutes of accounts and words, and where they apply.
 
-Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself. It is a [feature](features.md#features), `Features::graph()`, on by default. Left out, nobody follows, blocks or mutes anyone, and `mute()` refuses.
+Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself. It is a [feature](../getting-started/features.md#features), `Features::graph()`, on by default. Left out, nobody follows, blocks or mutes anyone, and `mute()` refuses.
 
 ```php
 // config/atp-appview/graph.php
@@ -10,7 +10,7 @@ Who follows and blocks whom comes from records, in collections the app names: us
 'blocks' => ['collection' => 'com.example.graph.block', 'path' => 'subject'],
 ```
 
-The fields are kept in the index like references, so run `appview:fields` after setting them. An app with no graph of its own can name Bluesky's, `app.bsky.graph.follow` and `app.bsky.graph.block`. Either way the records must be indexed: ingested, a [companion collection](ingest.md#companion-collections), or reconciled for your own users with `Reconciler::reconcile($did, collections: [...])`.
+The fields are kept in the index like references, so run `appview:fields` after setting them. An app with no graph of its own can name Bluesky's, `app.bsky.graph.follow` and `app.bsky.graph.block`. Either way the records must be indexed: ingested, a [companion collection](../data/ingest.md#companion-collections), or reconciled for your own users with `Reconciler::reconcile($did, collections: [...])`.
 
 ```php
 use SocialDept\AtpAppview\Graph\Graph;

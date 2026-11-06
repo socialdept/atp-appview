@@ -1,6 +1,6 @@
 # Hydrated views
 
-Part of the [atp-appview docs](../README.md#documentation). Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
+Part of the [atp-appview docs](../../README.md#documentation). Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
 
 Default queries answer with records as stored. A view answers with what an app actually shows: the record, who wrote it, the records it points at, how many records point back at it, and what the viewer has done with it.
 
@@ -187,7 +187,7 @@ Profiles::source('com.example.actor.profile')
 
 An account with no profile anywhere is its `did` and `handle`, with `displayName` null for clients to fall back to the handle. A deactivated account shows only those two.
 
-Profiles come from the index for collections it ingests. List them as [companion collections](ingest.md#companion-collections), so the profiles of followed repos are indexed without following every account that has one. An account the index does not know, or whose profile collection is still being backfilled, is fetched from Slingshot instead, every account on a page at once, and cached for an hour, a missing profile included. Within one request or job, a profile is built once: a page that shows an account as both an author and a notification's actor reads it a single time.
+Profiles come from the index for collections it ingests. List them as [companion collections](../data/ingest.md#companion-collections), so the profiles of followed repos are indexed without following every account that has one. An account the index does not know, or whose profile collection is still being backfilled, is fetched from Slingshot instead, every account on a page at once, and cached for an hour, a missing profile included. Within one request or job, a profile is built once: a page that shows an account as both an author and a notification's actor reads it a single time.
 
 `Profiles::forget($did)` drops an account's fetched profiles, so the next read fetches them again. `IdentityRefresh::refresh($did)` goes further: it reads the account's DID document again, past every cache, stores its PDS, and its handle when the handle resolves back to the DID, then forgets the fetched profile. It returns what changed. Use it when an account shows an old handle, PDS or profile, which otherwise wait for Tap's next identity event or a lookup's TTL.
 
