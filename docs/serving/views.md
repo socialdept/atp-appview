@@ -64,7 +64,7 @@ Inertia::scroll(fn () => ViewPage::of(
 )->present(fn (array $view) => ['uri' => $view['uri'], 'author' => $view['author'], 'text' => $view['record']['text'] ?? '']));
 ```
 
-`Record::$sort_at` keeps its microseconds as a string, so cursors over it never skip records that share a second.
+`Record::$sort_at` keeps its microseconds when turned into a string, so cursors over it never skip records that share a second.
 
 ## Threads
 
@@ -168,12 +168,10 @@ On Postgres with 290,000 records, 1.28 million values take 300 MB with their ind
 `Profiles` turns accounts into profiles for `Author` and anything else that shows people. Sources are tried in order, and the first with a record for the account is its profile, empty fields and all, so one app's profile never borrows another's bio. Set `profiles.merge` to `field` to fill each standard field from the first source that has it instead.
 
 ```php
-// config/atp-appview.php
-'profiles' => [
-    'sources' => [
-        ['collection' => 'com.example.actor.profile', 'fields' => ['pronouns']],
-        ['collection' => 'app.bsky.actor.profile'],
-    ],
+// config/atp-appview/profiles.php
+'sources' => [
+    ['collection' => 'com.example.actor.profile', 'fields' => ['pronouns']],
+    ['collection' => 'app.bsky.actor.profile'],
 ],
 ```
 

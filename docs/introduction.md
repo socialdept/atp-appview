@@ -2,7 +2,7 @@
 
 **ATP AppView** turns a Laravel application into an AT Protocol AppView:
 
-- **Ingest:** sync any set of collections from the network through Tap or Tab, in batches, without flooding the app during backfill.
+- **Ingest:** sync any set of collections from the network through Tap, Tab or Jetstream, in batches, without flooding the app during backfill.
 - **Index:** keep every ingested record in the application's own database, queryable through Eloquent.
 - **Retention:** opt in to keeping the index small: LZ4 compression for stored records on Postgres, pruning old tombstones, collections kept only while recent, and cold records whose bodies are fetched again when read.
 - **XRPC:** serve queries and procedures generated from lexicons, with custom handlers where the default is not enough.

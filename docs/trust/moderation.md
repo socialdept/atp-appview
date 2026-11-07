@@ -11,7 +11,7 @@ ATP_APPVIEW_TACK_URL=http://localhost:2490
 ATP_APPVIEW_TACK_PASSWORD=...                # Tack's TACK_ADMIN_PASSWORD
 ```
 
-Point Tack's `TACK_WEBHOOK_URL` at `/atp-appview/tack` (`labels.webhook.path`), or leave it unset and run `appview:labels:consume`, which reads Tack's websocket the way `appview:consume` reads Tap's. Labels go through the same ingest as records, failed deliveries included, written by `LabelIndexer`, which is in the default `ingest.handlers`.
+Point Tack's `TACK_WEBHOOK_URL` at `/atp-appview/tack` (`labels.webhook.path`), or leave it unset and run `appview:labels:consume`, which reads Tack's websocket the way `appview:consume` reads Tap's. Labels go through the same ingest as records, failed deliveries included, written by `LabelIndexer`, which the moderation feature adds after the `ingest.handlers`.
 
 Schedule the sync. It registers the accounts the index knows with Tack, with the URIs of their records for labelers that only answer for exact URIs, and drops expired labels:
 
@@ -57,7 +57,7 @@ The first of these decides:
 2. `labels.policies` in config, the same way.
 3. The global values every labeler may use: `!hide`, `!takedown` and `!suspend` hide, `!warn` warns, `!no-promote` needs review.
 4. The labeler's declaration of the value: its `defaultSetting`, what it blurs, its severity.
-5. Defaults for the values Bluesky uses without labelers defining them. On content, `porn` hides, and `sexual`, `nudity`, `graphic-media` and `gore` blur media. On an account they blur its avatar and banner and leave what it wrote alone, as Bluesky does. `needs-review`, Bluesky's label for an account awaiting review, needs review.
+5. Defaults for the values Bluesky uses without labelers defining them. On content, `porn` hides, and `sexual`, `sexual-figurative`, `nudity`, `graphic-media` and `gore` blur media. On an account they blur its avatar and banner and leave what it wrote alone, as Bluesky does. `needs-review`, Bluesky's label for an account awaiting review, needs review.
 
 Anything else is ignored: still listed on what it labels, doing nothing.
 
