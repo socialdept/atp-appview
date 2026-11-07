@@ -16,7 +16,7 @@
 > [!WARNING]
 > **In early development.** Nothing here is ready to use yet. Expect breaking changes until the first tagged release.
 
-This package turns a Laravel application into an AT Protocol AppView. It syncs the collections you name from the network, keeps every record in your own database, and serves them through XRPC methods built from your lexicons. To learn all about it, head over to [the documentation](docs/introduction.md).
+This package turns a Laravel application into an AT Protocol AppView. It syncs the collections you name from the network, keeps every record in your own database, and serves them through XRPC methods built from your lexicons. To learn all about it, head over to [the documentation](https://socialde.pt/docs/atp-appview).
 
 Here are a few short examples of what you can do. Name the collections to sync from the network:
 
@@ -69,9 +69,9 @@ It builds on [atp-client](https://github.com/socialdept/atp-client) for OAuth, s
 
 ## Documentation
 
-You'll find the documentation in the [docs folder](docs/introduction.md). Start with the [installation](docs/getting-started/installation.md).
+You'll find the documentation on [https://socialde.pt/docs/atp-appview](https://socialde.pt/docs/atp-appview).
 
-Stuck using the package, found a bug, or have an idea for it? Feel free to [open an issue](https://github.com/socialdept/atp-appview/issues).
+Find yourself stuck using the package? Found a bug? Do you have general questions or suggestions for improving it? Feel free to [create an issue on GitHub](https://github.com/socialdept/atp-appview/issues).
 
 ## Testing
 
