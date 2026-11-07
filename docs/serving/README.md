@@ -1,6 +1,6 @@
 # Serving
 
-Part of the [atp-appview docs](../../README.md#documentation).
+Part of the [atp-appview docs](../introduction.md#documentation).
 
 - **[XRPC](xrpc.md)**: Default queries and procedures, custom handlers, calling methods, and writing records.
 - **[Hydrated views](views.md)**: Views with authors, embeds, counts and viewer state, reply trees, fields kept in the index, profiles and images.

@@ -1,6 +1,6 @@
 # Search
 
-Part of the [atp-appview docs](../../README.md#documentation). Records by the words in them, Latest and Top, and the accounts the index holds.
+Part of the [atp-appview docs](../introduction.md#documentation). Records by the words in them, Latest and Top, and the accounts the index holds.
 
 Search is a [feature](../getting-started/features.md), `Features::search()`, off unless listed. It searches what the index holds: the collections you name, and accounts in `atp_identities`. Results come back as views and profiles, filtered for the viewer. The methods take Bluesky's search shapes under names you choose.
 

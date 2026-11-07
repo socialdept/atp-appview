@@ -1,6 +1,6 @@
 # Hydrated views
 
-Part of the [atp-appview docs](../../README.md#documentation). Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
+Part of the [atp-appview docs](../introduction.md#documentation). Views with authors, embeds, counts and viewer state, fields kept in the index, profiles and images.
 
 Default queries answer with records as stored. A view answers with what an app actually shows: the record, who wrote it, the records it points at, how many records point back at it, and what the viewer has done with it.
 

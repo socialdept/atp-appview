@@ -1,6 +1,6 @@
 # Standing
 
-Part of the [atp-appview docs](../../README.md#documentation). Facts about accounts and records the index does not hold, whether an account is verified and by whom, and scores built from them.
+Part of the [atp-appview docs](../introduction.md#documentation). Facts about accounts and records the index does not hold, whether an account is verified and by whom, and scores built from them.
 
 Standing is a [feature](../getting-started/features.md), `Features::standing()`, off unless listed. It keeps three kinds of fact in `atp_standing`: metrics (how many follow an account, how many link to a record), verification, and a score per subject. A subject is an account (a DID) or a record (an AT-URI) of any collection. Where each fact comes from, what counts as verification, and how much each fact weighs are yours to choose.
 

@@ -1,6 +1,6 @@
 # Moderation
 
-Part of the [atp-appview docs](../../README.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
+Part of the [atp-appview docs](../introduction.md#documentation). Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 
 ## Labels
 

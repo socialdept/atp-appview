@@ -1,6 +1,6 @@
 # Claims
 
-Part of the [atp-appview docs](../../README.md#documentation). A verdict per record on a claim the record makes, such as owning the website it names, checked by a checker you write and optionally inherited from a parent record in the same repo.
+Part of the [atp-appview docs](../introduction.md#documentation). A verdict per record on a claim the record makes, such as owning the website it names, checked by a checker you write and optionally inherited from a parent record in the same repo.
 
 Claims is a [feature](../getting-started/features.md), `Features::claims()`, off unless listed. It keeps one row per claiming record in `atp_record_claims`, checks it in the queue, and narrows queries with `Record::verified()`. Reads only look at stored verdicts, so a page never waits on the network. Left out, nothing is kept or fetched, and `verified()` refuses, naming the feature to add.
 

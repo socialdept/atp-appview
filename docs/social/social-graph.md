@@ -1,6 +1,6 @@
 # Social graph
 
-Part of the [atp-appview docs](../../README.md#documentation). Follows and blocks from the collections you name, private mutes of accounts and words, and where they apply.
+Part of the [atp-appview docs](../introduction.md#documentation). Follows and blocks from the collections you name, private mutes of accounts and words, and where they apply.
 
 Who follows and blocks whom comes from records, in collections the app names: usually its own lexicon, or another app's. Mutes are private, so the app keeps them itself. It is a [feature](../getting-started/features.md#features), `Features::graph()`, on by default. Left out, nobody follows, blocks or mutes anyone, and `mute()` refuses.
 
