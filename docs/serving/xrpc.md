@@ -133,7 +133,7 @@ await deleteRecord(uri);
 
 They read `syncRecord` and `proxy` from `FrontendAuth::browserConfig()`, passed to `configureAtproto()`. `proxy` is whether a PDS can reach this AppView, which needs a published service DID. Without one, calls stay same origin.
 
-It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in `ingest.collections`, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. The record passes through the same pipeline as Tap's deliveries, repairs and hooks included, so a record a block rule or a hook keeps out answers `indexed: false`.
+It fetches the record from the caller's own PDS and indexes it, or tombstones it if it is gone, so deletes show up as quickly. It takes only the caller's own records, only in collections the index ingests, followed or companion, and never the record body from the request. The revision is read before the record, so Tap's later delivery can only replace it. The record passes through the same pipeline as Tap's deliveries, repairs and hooks included, so a record a block rule or a hook keeps out answers `indexed: false`.
 
 **Backend mode.** Default procedures write one collection to the viewer's repo through the session the server holds, then index the record before answering:
 

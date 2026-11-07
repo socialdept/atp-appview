@@ -55,7 +55,7 @@ Users are found or created by DID like the `atp` guard does, and `handle_column`
 'atproto' => FrontendAuth::browserConfig(),
 ```
 
-A published config file replaces the package's `auth` block as a whole, so copy the `frontend` block into it when upgrading.
+A published config keeps the package's defaults for `auth` settings it leaves out, but a `frontend` block it has replaces the package's as a whole, so copy settings added to `frontend` into it when upgrading.
 
 ## Browser
 

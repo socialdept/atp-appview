@@ -23,7 +23,7 @@ TAB_ADMIN_PASSWORD: ${ATP_APPVIEW_TAP_PASSWORD}
 Tap posts each batch as `{"events": [...]}` and signs it with its admin password, which the route checks against `ingest.password`, so it refuses everything until one is set.
 
 1. The events go through the blocklist, then every handler, in order.
-2. A failing batch is retried `max_attempts` times (3) with backoff.
+2. A failing batch is tried `max_attempts` times (3) in all, with backoff.
 3. The request succeeds only once every handler has committed the batch. Anything else gets an error response, and Tap keeps the batch and sends it again.
 
 Tap sends one batch at a time unless `TAB_WEBHOOK_BATCH_PARALLELISM` says otherwise, so the application sets the pace, and events wait in Tap while the application is down. Delivery is at least once and Tap keeps events for one repo in order, so handlers must apply a batch idempotently.
@@ -44,7 +44,7 @@ Tap stops sending once its outbox of unacknowledged events is full, and the work
 1. Events are buffered until `batch_size` arrive (200) or `flush_ms` passes (500).
 2. Every handler receives the batch, in order.
 3. Each event is acknowledged.
-4. A failing batch is retried `max_attempts` times (3) with backoff. After that the worker reconnects without acknowledging it, and Tap redelivers it.
+4. A failing batch is tried `max_attempts` times (3) in all, with backoff. After that the worker reconnects without acknowledging it, and Tap redelivers it.
 
 Running several workers is fine: Tap shards events across connected clients.
 
@@ -317,7 +317,7 @@ To add a collection, append it to `ATP_APPVIEW_COLLECTIONS`, restart Tap (and `a
 - **On a Tap with resync routes**, such as [Tab](https://tangled.org/pds.dad/tab), repos Tap follows are resynced, which keeps what Tap already sent, so only the new collection's records go out. Repos it does not follow are added.
 - **On any other Tap**, repos are removed and added again. That works, but Tap re-sends every collection of every repo, and each repo's live events wait until its backfill runs.
 
-Handing repos over survives a busy Tap: each request is retried three times, and a repo Tap still does not take keeps the error, counts as unreachable, and leaves the rest of the backfill running. Only a backfill Tap takes none of fails. Starting again after a failed attempt skips the repos that attempt already handed over, and the failed attempt leaves the dashboard once its retry starts.
+Handing repos over survives a busy Tap: each request is tried three times, and a repo Tap still does not take keeps the error, counts as unreachable, and leaves the rest of the backfill running. Only a backfill Tap takes none of fails. Starting again after a failed attempt skips the repos that attempt already handed over, and the failed attempt leaves the dashboard once its retry starts.
 
 A repo counts as delivered once its first backfilled record arrives, or straight away if the index already holds its records in the collection, so running a backfill again finishes promptly instead of waiting on records Tap already sent. The backfill finishes once Tap has stopped sending: when every repo has delivered and no record has arrived for `backfill.settle_seconds` (60), or, with repos that never delivered, after `backfill.quiet_minutes` (10) without a record, and in both cases only with Tap's outbox empty. A repo counts as delivered at its first record, so the settle period waits out the rest. The repos left either had nothing in the collection or could not be fetched, and Tap's reason is kept on `atp_backfill_repos.error`. If nothing at all arrived, the backfill fails instead, since Tap most likely backfilled the repos before the collection was in its filters. Fix the filters and start it again.
 

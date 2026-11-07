@@ -14,7 +14,7 @@
 ---
 
 > [!WARNING]
-> **In early development.** Nothing here is ready to use yet. Expect breaking changes until the first tagged release.
+> **In early development.** Nothing here is ready to use yet. Expect breaking changes in minor releases until 1.0.
 
 This package turns a Laravel application into an AT Protocol AppView. It syncs the collections you name from the network, keeps every record in your own database, and serves them through XRPC methods built from your lexicons. To learn all about it, head over to [the documentation](https://socialde.pt/docs/atp-appview).
 

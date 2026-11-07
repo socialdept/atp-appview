@@ -107,4 +107,4 @@ php artisan appview:feeds:publish           # write each configured feed's gener
 php artisan appview:feeds:publish --prune   # and delete records for feeds no longer configured
 ```
 
-A record names this AppView's DID as the feed service and keeps its `createdAt` across publishes. An `avatar` in `describe()` is a local image path, uploaded when published. The feature adds the feed service to the DID document, so the AppView's DID must be a `did:web` with an endpoint set (see [XRPC](xrpc.md)). `describeFeedGenerator` lists the published feeds, with the policy `links` you configure.
+A record names this AppView's DID as the feed service and keeps its `createdAt` across publishes. An `avatar` in `describe()` is a local image path, uploaded when published. The feature adds the feed service to the DID document, so the AppView's DID must be a `did:web` with an endpoint set (see [XRPC](xrpc.md)). `describeFeedGenerator` lists the configured feeds, with the policy `links` you configure.

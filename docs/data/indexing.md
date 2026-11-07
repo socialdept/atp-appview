@@ -2,7 +2,7 @@
 
 Part of the [atp-appview docs](../introduction.md#documentation). How records are stored, sorted, validated and reconciled, account status, and index stats.
 
-`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own. On MySQL and MariaDB, the connection's session timezone must be UTC, as the [installation](../../README.md#installation) notes.
+`RecordIndexer`, the default ingest handler, keeps every ingested record in your own database, in `atp_records` and `atp_identities`. Run `php artisan migrate` to create them. Postgres, MySQL, MariaDB and SQLite are supported, and `ATP_APPVIEW_INDEX_CONNECTION` puts the index on a connection of its own. On MySQL and MariaDB, the connection's session timezone must be UTC, as the [installation](../getting-started/installation.md#database) notes.
 
 ```php
 use SocialDept\AtpAppview\Models\Identity;
@@ -65,10 +65,8 @@ Only collections with a lexicon atp-schema can load are checked, and deletes alw
 An AppView that indexes other people's records can follow their lexicons instead of copying the files in by hand. List the NSIDs and schedule the sync:
 
 ```php
-// config/atp-appview.php
-'lexicons' => [
-    'follow' => ['com.example.thing', 'com.example.feed.post'],
-],
+// config/atp-appview/lexicons.php
+'follow' => ['com.example.thing', 'com.example.feed.post'],
 ```
 
 ```php
@@ -107,6 +105,7 @@ Each index on `atp_records` serves a specific read:
 | `collection, indexed_at` | What arrived recently |
 | `collection, sort_at, uri` where hidden | A collection's hidden records, newest first (Postgres and SQLite) |
 | `collection, sort_at, uri` where tombstoned | A collection's tombstones, newest first (Postgres and SQLite) |
+| `collection, deleted_at` where tombstoned | A collection's tombstones past their [retention](retention.md#tombstones) window (Postgres and SQLite) |
 
 Hidden records and tombstones are a sliver of each collection. Through the main sort index, listing them walks the whole collection to find them: 406 ms for 19 hidden records among 229,000 documents. The partial indexes hold only that sliver, and the same list takes 0.1 ms. MySQL and MariaDB have no partial indexes, so they get plain indexes on the collection and `hidden_at` or `deleted_at` instead, and the same lists take about a millisecond.
 
@@ -160,7 +159,7 @@ Backfilled events all carry the repo's revision at the time Tap exported it, not
 
 When Tap resyncs a repo after losing track of it, it sends only the records whose CID it has not seen, and never a delete. A record removed while Tap was not following the repo would stay indexed, and a resync that only found deletions sends nothing at all, so the index cannot tell one happened.
 
-`appview:reconcile` compares each repo with its own PDS instead. It reads the repo's latest revision, lists every collection in `ingest.collections` that the repo has, and then:
+`appview:reconcile` compares each repo with its own PDS instead. It reads the repo's latest revision, lists every collection in `ingest.collections` and `ingest.companions` that the repo has, and then:
 
 - tombstones an indexed record the PDS no longer has
 - indexes a record the PDS has but the index lacks, or holds at another CID

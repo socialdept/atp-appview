@@ -10,7 +10,7 @@ A space is permissioned data. Its records live in a repo per member on each memb
 | --- | --- |
 | `atp_spaces` | One row per followed space: the authority's `spaceRev` cursor, whose stored credential syncs it, when its notification registration lapses, when it last synced, when it went stale, and its last error |
 | `atp_space_repos` | One row per member repo: the revision synced to and the running set hash at that revision |
-| `atp_space_records` | The records, with the same columns as `atp_records` plus `space`. The `uri` is the space record URI, `at://{authority}/space/{type}/{skey}/{did}/{collection}/{rkey}` |
+| `atp_space_records` | The records, with the columns of `atp_records` plus `space`, except `hidden_at` and `hollowed_at`. The `uri` is the space record URI, `at://{authority}/space/{type}/{skey}/{did}/{collection}/{rkey}` |
 | `atp_space_grants` | Who may read each space, and until when |
 | `atp_space_record_values` | The values of [indexed fields](serving/views.md#fields) in space records, as `atp_record_values` holds them for public records |
 
