@@ -1,6 +1,6 @@
 # Spaces
 
-Part of the [atp-appview docs](../README.md#documentation). A copy of the permissioned spaces the app follows, synced from each member's own PDS and read only by viewers the space's authority lets in.
+Part of the [atp-appview docs](introduction.md#documentation). A copy of the permissioned spaces the app follows, synced from each member's own PDS and read only by viewers the space's authority lets in.
 
 Spaces is a [feature](getting-started/features.md), `Features::spaces()`, off unless listed. It builds on [atp-spaces](https://github.com/socialdept/atp-spaces), which reads spaces, checks what it reads, and receives the notifications a space's authority sends.
 

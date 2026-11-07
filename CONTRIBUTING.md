@@ -19,7 +19,7 @@ When requesting or submitting new features, first consider whether it might be u
 ### Before Filing an Issue
 
 - Search existing issues to avoid duplicates
-- Check the [documentation](README.md) to ensure it's not a usage question
+- Check the [documentation](docs/introduction.md) to ensure it's not a usage question
 - Provide a clear title and description
 - Include steps to reproduce the issue
 - Specify your environment (PHP version, Laravel version, package version)

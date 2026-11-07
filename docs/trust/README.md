@@ -1,6 +1,6 @@
 # Trust
 
-Part of the [atp-appview docs](../../README.md#documentation).
+Part of the [atp-appview docs](../introduction.md#documentation).
 
 - **[Moderation](moderation.md)**: Labels from labelers through Tack or their own streams, policies, self-labels, viewer label preferences and account actions.
 - **[Standing](standing.md)**: Follower and link counts, proven verification by pluggable verifiers, and weighted scores.

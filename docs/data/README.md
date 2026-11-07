@@ -1,6 +1,6 @@
 # Ingest and index
 
-Part of the [atp-appview docs](../../README.md#documentation).
+Part of the [atp-appview docs](../introduction.md#documentation).
 
 - **[Ingest](ingest.md)**: Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
 - **[Blocklist](blocklist.md)**: Keeping repos, collections and hosts out of the index.

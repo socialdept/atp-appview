@@ -1,6 +1,6 @@
 # Ingest
 
-Part of the [atp-appview docs](../../README.md#documentation). Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
+Part of the [atp-appview docs](../introduction.md#documentation). Tap and Tab delivery, Jetstream, handlers, hooks, repairs, failed deliveries, backfills, discovery and companion collections.
 
 [Tap](https://github.com/bluesky-social/indigo/tree/main/cmd/tap) does the network work: crawling, fetching repos, verifying commits and ordering events per repo. It delivers what it finds to your application in batches, and each batch goes to your handlers. The application only writes what arrives.
 

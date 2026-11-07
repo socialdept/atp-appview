@@ -1,6 +1,6 @@
 # Retention
 
-Part of the [atp-appview docs](../../README.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, keeping some collections only while recent, and fetching old bodies again instead of storing them.
+Part of the [atp-appview docs](../introduction.md#documentation). Keeping the index small: compressing stored records, pruning old tombstones, keeping some collections only while recent, and fetching old bodies again instead of storing them.
 
 Everything here is off until set in `config/atp-appview/retention.php`, so an app that sets nothing keeps every record as it is.
 

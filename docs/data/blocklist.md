@@ -1,6 +1,6 @@
 # Blocklist
 
-Part of the [atp-appview docs](../../README.md#documentation). Keeping repos, collections and hosts out of the index.
+Part of the [atp-appview docs](../introduction.md#documentation). Keeping repos, collections and hosts out of the index.
 
 Some repos are spam, and some hosts bridge in content an AppView does not want. Block rules keep their records out of the index before any handler sees them:
 

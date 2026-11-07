@@ -1,6 +1,6 @@
 # Features
 
-Part of the [atp-appview docs](../../README.md#documentation). Turning parts of the package on and off, scheduling, and writing a feature of your own.
+Part of the [atp-appview docs](../introduction.md#documentation). Turning parts of the package on and off, scheduling, and writing a feature of your own.
 
 Beyond the core (ingest, the index, XRPC, auth, views and profiles), an AppView turns on features, listed the way Laravel Fortify lists its own:
 

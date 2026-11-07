@@ -1,6 +1,6 @@
 # Social
 
-Part of the [atp-appview docs](../../README.md#documentation).
+Part of the [atp-appview docs](../introduction.md#documentation).
 
 - **[Social graph](social-graph.md)**: Follows and blocks from the collections you name, private mutes, and where they apply.
 - **[Notifications](notifications.md)**: Reasons, notifiers, grouping, seen state, preferences and delivery.

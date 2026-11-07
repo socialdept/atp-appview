@@ -1,6 +1,6 @@
 # Notifications
 
-Part of the [atp-appview docs](../../README.md#documentation). Reasons, notifiers, grouping, seen state, preferences and delivery.
+Part of the [atp-appview docs](../introduction.md#documentation). Reasons, notifiers, grouping, seen state, preferences and delivery.
 
 Records that point at an account or a record notify that account. Notifications are a [feature](../getting-started/features.md#features), `Features::notifications()`, on by default. Which ones is configured per collection and field, with the reason each gives, so a like in the app's own lexicon notifies and a Bluesky like never does:
 
