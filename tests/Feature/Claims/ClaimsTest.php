@@ -371,6 +371,37 @@ class ClaimsTest extends TestCase
         $this->assertSame([$post], $this->verified());
     }
 
+    /**
+     * The claim is written in the indexer's transaction, so a value the table
+     * cannot store would roll back every record in the batch, not just this
+     * one. A parent no indexed record can have is no parent.
+     */
+    public function test_a_parent_the_table_cannot_store_is_no_parent_and_the_batch_still_lands(): void
+    {
+        $long = 'at://'.self::ALICE.'/'.self::SITE.'/'.str_repeat('a', 600);
+        $unicode = 'at://'.self::ALICE.'/'.self::SITE."/s\u{e9}lf";
+        $fine = 'at://'.self::ALICE.'/'.self::SITE.'/self';
+
+        Pipeline::fromConfig(app())->run(new Batch([
+            new RecordEvent(1, self::ALICE, self::POST, 'long', RecordAction::Create, 'bafy-long', '3l2aaaaaaaaaa', ['url' => 'https://alice.example/long', 'site' => $long, 'createdAt' => '2026-10-20T00:00:00Z'], true),
+            new RecordEvent(2, self::ALICE, self::POST, 'unicode', RecordAction::Create, 'bafy-unicode', '3l2aaaaaaaaaa', ['url' => 'https://alice.example/unicode', 'site' => $unicode, 'createdAt' => '2026-10-20T00:00:00Z'], true),
+            new RecordEvent(3, self::ALICE, self::POST, 'fine', RecordAction::Create, 'bafy-fine', '3l2aaaaaaaaaa', ['url' => 'https://alice.example/fine', 'site' => $fine, 'createdAt' => '2026-10-20T00:00:00Z'], true),
+        ]));
+
+        $this->assertNull($this->claim('at://'.self::ALICE.'/'.self::POST.'/long')->parent);
+        $this->assertNull($this->claim('at://'.self::ALICE.'/'.self::POST.'/unicode')->parent);
+        $this->assertSame($fine, $this->claim('at://'.self::ALICE.'/'.self::POST.'/fine')->parent);
+    }
+
+    public function test_a_host_longer_than_the_table_holds_is_cut_to_fit(): void
+    {
+        $label = str_repeat('a', 60);
+        $site = $this->index(self::ALICE, self::SITE, 'self', ['url' => 'https://'.implode('.', array_fill(0, 6, $label)).'.example']);
+
+        $this->assertSame(255, mb_strlen($this->claim($site)->host));
+        $this->assertSame(Claims::PENDING, $this->claim($site)->state);
+    }
+
     public function test_a_refresh_writes_in_a_constant_number_of_queries(): void
     {
         $site = $this->trustedSite();
