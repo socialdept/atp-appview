@@ -39,6 +39,8 @@ class SiteChecker implements ClaimChecker
 
 `unverified` means the claim does not hold. `unknown` means the check could not tell, such as when the host is down or times out.
 
+A host longer than 255 characters is cut to fit its column. It only groups checks, so a cut host still rate limits together.
+
 ## Configuration
 
 ```php
@@ -88,6 +90,7 @@ The method says how the verdict was reached: `direct` (its own check), `inherite
 A collection with `inherit` takes its verdict from the record its `via` path names, such as a post taking its site's. The parent:
 
 - must be in the same repo. A `via` naming another account's record is ignored.
+- must be a URI the index can hold: ASCII, and at most 512 characters. Any other value is ignored, so the record is checked directly.
 - must be verified by its own check, for its current claim.
 - must have passed `trust_after` checks in a row.
 

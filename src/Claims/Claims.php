@@ -38,6 +38,12 @@ class Claims
 
     public const SAMPLED = 'sampled';
 
+    // The widths of the parent and host columns. A claim is written in the
+    // indexer's transaction, so a value too long for them rolls back the batch.
+    protected const PARENT_LENGTH = 512;
+
+    protected const HOST_LENGTH = 255;
+
     /**
      * Changes a refresh has decided on, by URI, written together at its end.
      *
@@ -123,7 +129,7 @@ class Claims
                 'did' => $row['did'],
                 'collection' => $row['collection'],
                 'parent' => $parent,
-                'host' => $checker->host($record, $claim),
+                'host' => mb_substr($checker->host($record, $claim), 0, self::HOST_LENGTH),
                 'claim_hash' => $hash,
                 'state' => self::PENDING,
                 'method' => self::DIRECT,
@@ -147,14 +153,18 @@ class Claims
 
     /**
      * The record its collection inherits from, only when it is in the same
-     * repo.
+     * repo. A URI longer than the column, or outside ASCII, names no record the
+     * index could hold, so it is no parent.
      */
     protected function parentOf(Record $record): ?string
     {
         $via = self::settings($record->collection)['inherit']['via'] ?? null;
         $parent = $via === null ? null : data_get($record->record, $via);
 
-        return is_string($parent) && str_starts_with($parent, "at://{$record->did}/") ? $parent : null;
+        return is_string($parent)
+            && str_starts_with($parent, "at://{$record->did}/")
+            && strlen($parent) <= self::PARENT_LENGTH
+            && mb_check_encoding($parent, 'ASCII') ? $parent : null;
     }
 
     /**
