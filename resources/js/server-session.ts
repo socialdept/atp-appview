@@ -26,8 +26,11 @@ export async function vouchFor(
         );
     }
 
+    // The full service reference, fragment included. A PDS checks a granular
+    // rpc scope's audience against this exactly, and those always name the
+    // service (did:web:example.com#atproto_appview), never the bare DID.
     const query = new URLSearchParams({
-        aud: audience.split('#')[0],
+        aud: audience,
         lxm: sessionMethod,
         exp: String(Math.floor(Date.now() / 1000) + 60),
     });
